@@ -383,6 +383,13 @@ const THEMES = [
       { triggerDistance: 590, y1Frac: 0.75, y2Frac: 0.3, spanPx: 260, onFrames: 65, offFrames: 95, phaseFrac: 0.6 },
       { triggerDistance: 860, y1Frac: 0.3, y2Frac: 0.72, spanPx: 300, onFrames: 75, offFrames: 85, phaseFrac: 0.1 }
     ],
+    // core-laser style strike: fixed height a little above center, then a
+    // sideways lightning bolt across the playfield. not aimed at the ship
+    lightningStrikeEvents: [
+      { triggerDistance: 300, yFrac: 0.62, telegraphFrames: 84, fireFrames: 42, thickness: 12 },
+      { triggerDistance: 550, yFrac: 0.38, telegraphFrames: 84, fireFrames: 42, thickness: 12 },
+      { triggerDistance: 820, yFrac: 0.26, telegraphFrames: 84, fireFrames: 42, thickness: 12 }
+    ],
     // each entry is one or more floating bolts. heightFrac is a fraction of the
     // play height (huge bolts anchor near the top or bottom edge so there's
     // always clear space on the other side). shape picks one of the hand-designed
@@ -523,7 +530,7 @@ const THEMES = [
     // through the zone -- stationary, fully sealed until you collect the
     // matching key that spawns a bit before each one
     specialDoorEvents: [
-      { triggerDistance: 220, keyLeadDistance: 90, keyYFrac: 0.3 },
+      { triggerDistance: 220, keyLeadDistance: 90, keyYFrac: 0.3, doorGapPx: 820 },
       { triggerDistance: 520, keyLeadDistance: 86, keyYFrac: 0.45 },
       { triggerDistance: 800, keyLeadDistance: 90, keyYFrac: 0.75 }
     ],
@@ -832,7 +839,7 @@ let settingsReturnState = 'options';
 // Select). Migrates from the older, separate localStorage keys this game
 // used before, so existing players don't lose their progress.
 const PROFILE_STORAGE_KEY = 'synthFlightProfile';
-const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV7';
+const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV12';
 const PREVIEW_STILL_W = 640;
 const PREVIEW_STILL_ASPECT = 860 / 412;
 let zoneScreenshots = {};
@@ -958,10 +965,12 @@ function maybeCaptureZoneScreenshot() {
 }
 
 function zonePreviewCameraWorldX(themeIdx) {
-  // Inferno and Storm Skies look empty/generic at the spawn funnel; a few
-  // seconds in is where the cave fork and bolt clusters actually show.
+  // Inferno's spawn funnel is empty; a few seconds in is the cave fork.
+  // Storm Skies: sit the ship in the gap between the small-bolt cluster
+  // and a tall bolt so the still shows floating bolts without covering
+  // the dart.
   if (themeIdx === 3) return 1550;
-  if (themeIdx === 5) return 1250;
+  if (themeIdx === 5) return 1100;
   return 300;
 }
 
@@ -1054,6 +1063,29 @@ function placePreviewShipClearOfHazards() {
     }
   }
   if (bestGate) ship.y = clampY(liveGateCenter(bestGate));
+
+  const nearbyBolts = gates.filter((g) => {
+    if (!g || g.type !== 'lbolt') return false;
+    const halfW = (g.swingWidth || 40) / 2 + 28;
+    return Math.abs(g.x - ship.x) < halfW + 36;
+  });
+  if (nearbyBolts.length) {
+    const playTop = PLAY_TOP + pad;
+    const playBot = PLAY_BOTTOM - pad;
+    const blocked = nearbyBolts
+      .map((g) => [g.y - g.height / 2, g.y + g.height / 2])
+      .sort((a, b) => a[0] - b[0]);
+    let best = { size: 0, y: (playTop + playBot) / 2 };
+    let cursor = playTop;
+    for (let i = 0; i < blocked.length; i++) {
+      const gap = Math.min(playBot, blocked[i][0]) - cursor;
+      if (gap > best.size) best = { size: gap, y: cursor + gap / 2 };
+      cursor = Math.max(cursor, blocked[i][1]);
+    }
+    const tail = playBot - cursor;
+    if (tail > best.size) best = { size: tail, y: cursor + tail / 2 };
+    if (best.size > pad) ship.y = clampY(best.y);
+  }
 }
 
 function generateAndStoreZoneStill(themeIdx) {
@@ -1070,6 +1102,7 @@ function generateAndStoreZoneStill(themeIdx) {
   const savedPortal = portalObject;
   const savedState = state;
   const savedLayout = { W, H, BAR_HEIGHT, PLAY_TOP, PLAY_BOTTOM, renderScale };
+  const savedCosmetics = { skin: shipSkinStyle, trail: shipTrailStyle };
   const savedCombat = {
     boss, miniBoss, bossSpawnFrame, bossPhase, bossFullyDefeated, bossDefeated,
     bossTransitioning, bossExplosionActive, bossFinalChargeActive,
@@ -1111,6 +1144,8 @@ function generateAndStoreZoneStill(themeIdx) {
     ship.y = (PLAY_TOP + PLAY_BOTTOM) / 2;
     ship.vy = 0;
     ship.rotation = 0;
+    shipSkinStyle = 'classic';
+    shipTrailStyle = 'classic';
     const toScreenX = (worldX) => ship.x + (worldX - cam);
     if (data.terrainSegments) {
       terrainSegments = data.terrainSegments.map((s) => ({ ...s, x: toScreenX(s.x) }));
@@ -1120,6 +1155,21 @@ function generateAndStoreZoneStill(themeIdx) {
       return { ...g, x: toScreenX(worldX), x2: g.x2 != null ? toScreenX(g.x2) : g.x2 };
     });
     const theme = THEMES[themeIdx];
+    if (themeIdx === 5) {
+      const visBolts = gates.filter((g) => g.type === 'lbolt' && g.x > 40 && g.x < W - 40);
+      visBolts.forEach((g) => {
+        g.phaseOffset = 0;
+        g.onFrames = g.cycleLength;
+      });
+      frame = 6;
+      zoneStartFrame = 0;
+    } else {
+      const poseOn = gates.find((g) => g.type === 'cloudarc') || gates.find((g) => g.type === 'lbolt');
+      if (poseOn && poseOn.cycleLength && poseOn.onFrames) {
+        const want = Math.max(0, Math.floor(poseOn.onFrames * 0.4));
+        frame = ((want - (poseOn.phaseOffset || 0)) % poseOn.cycleLength + poseOn.cycleLength) % poseOn.cycleLength;
+      }
+    }
     poseZonePreviewCombatants(theme);
     placePreviewShipClearOfHazards();
     initBackgroundParticles(theme);
@@ -1160,6 +1210,8 @@ function generateAndStoreZoneStill(themeIdx) {
     bgParticles = savedBg;
     portalObject = savedPortal;
     state = savedState;
+    shipSkinStyle = savedCosmetics.skin;
+    shipTrailStyle = savedCosmetics.trail;
     boss = savedCombat.boss;
     miniBoss = savedCombat.miniBoss;
     bossSpawnFrame = savedCombat.bossSpawnFrame;
@@ -1823,6 +1875,7 @@ let specialEventsSpawned = [false, false, false];
 let blackHoleEventsSpawned = [false, false, false, false];
 let windVortexEventsSpawned = [false, false, false];
 let cloudArcEventsSpawned = [false, false, false];
+let lightningStrikeEventsSpawned = [false, false, false];
 let lasergridEventsSpawned = [false, false];
 let droneSwarmEventsSpawned = [false, false, false, false];
 let billboardEventsSpawned = [false, false];
@@ -2103,85 +2156,5 @@ function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
   const d4 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
   return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
     ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
-}
-
-function rectIntersectsPolygon(left, top, right, bottom, poly) {
-  const corners = [[left, top], [right, top], [right, bottom], [left, bottom]];
-  for (const [cx, cy] of corners) {
-    if (pointInPolygon(cx, cy, poly)) return true;
-  }
-  for (const [vx, vy] of poly) {
-    if (vx >= left && vx <= right && vy >= top && vy <= bottom) return true;
-  }
-  for (let i = 0; i < poly.length; i++) {
-    const [ax, ay] = poly[i];
-    const [bx, by] = poly[(i + 1) % poly.length];
-    for (let j = 0; j < 4; j++) {
-      const [cx, cy] = corners[j];
-      const [dx, dy] = corners[(j + 1) % 4];
-      if (segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy)) return true;
-    }
-  }
-  return false;
-}
-
-function spawnPendulumCluster(x) {
-  const th = currentTheme();
-  const playHeight = PLAY_BOTTOM - PLAY_TOP;
-
-  const entry = th.pattern[patternIndex % th.pattern.length];
-  patternIndex++;
-
-  entry.pendulums.forEach((p) => {
-    const pivotY = p.pivotSide === 'top' ? PLAY_TOP : PLAY_BOTTOM;
-    const chainLength = p.chainLengthFrac * playHeight;
-    const amplitude = p.ampFrac * playHeight;
-    gates.push({
-      type: 'pendulum',
-      x: x + p.xJitter,
-      pivotY: pivotY,
-      pivotSide: p.pivotSide,
-      chainLength: chainLength,
-      amplitude: amplitude,
-      freq: p.freq,
-      phase: p.phase,
-      r: p.radiusPx,
-      passed: false
-    });
-  });
-  return entry.spacing;
-}
-
-function livePendulumBobY(g) {
-  const dir = g.pivotSide === 'top' ? 1 : -1;
-  return g.pivotY + dir * (g.chainLength + g.amplitude * Math.sin((frame - zoneStartFrame) * g.freq + g.phase));
-}
-
-function spawnFloatingBoltCluster(x) {
-  const th = currentTheme();
-  const playHeight = PLAY_BOTTOM - PLAY_TOP;
-  const margin = 28;
-
-  const entry = th.pattern[patternIndex % th.pattern.length];
-  patternIndex++;
-
-  entry.bolts.forEach((b) => {
-    const heightPx = b.heightFrac * playHeight;
-    const cycleLength = b.onFrames + b.offFrames;
-    gates.push({
-      type: 'lbolt',
-      x: x + b.xJitter,
-      y: PLAY_TOP + margin + b.yFrac * Math.max(1, playHeight - margin * 2),
-      height: heightPx,
-      swingWidth: b.swingWidthPx,
-      shape: BOLT_SHAPES[b.shape],
-      onFrames: b.onFrames,
-      offFrames: b.offFrames,
-      cycleLength: cycleLength,
-      phaseOffset: Math.round(b.phaseFrac * cycleLength),
-      passed: false
-    });
-  });
-  return entry.spacing;
 }
 

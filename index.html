@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-store">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Synth Flight snes233</title>
+<title>Synth Flight snes267</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -114,6 +114,48 @@
     letter-spacing: 0.12em;
     color: #d8f6ff;
     text-shadow: 0 0 8px rgba(120, 220, 255, 0.45);
+  }
+  .ach-tally {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    margin: 12px 0 4px;
+  }
+  .ach-tally-item {
+    min-width: 0;
+    padding: 8px 4px 7px;
+    border: 1px solid rgba(15, 240, 252, 0.28);
+    border-radius: 6px;
+    background: rgba(8, 4, 22, 0.72);
+    text-align: center;
+  }
+  .ach-tally-n {
+    display: block;
+    font-family: 'Orbitron', 'Courier New', monospace;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    line-height: 1.15;
+    color: #7af8ff;
+    text-shadow: 0 0 10px rgba(15, 240, 252, 0.7);
+  }
+  .ach-tally-label {
+    display: block;
+    margin-top: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: rgba(255, 255, 255, 0.62);
+    text-shadow: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  @media (max-width: 720px) {
+    .ach-tally {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
   }
   #options-menu {
     display: flex;
@@ -235,6 +277,9 @@
   }
   .continue-panel .btn-start-game {
     height: 48px;
+  }
+  .continue-panel .menu-stack {
+    width: 100%;
   }
   .btn-continue-secondary {
     width: 100%;
@@ -1219,6 +1264,10 @@
       drop-shadow(0 2px 0 rgba(8, 2, 20, 0.7))
       drop-shadow(0 0 8px rgba(255, 94, 200, 0.5));
   }
+  .game-logo.options-title {
+    font-size: clamp(28px, 5vw, 48px);
+    margin: 0 0 16px;
+  }
   #overlay.home-layout #menu-start-prompt {
     position: absolute;
     top: 82%;
@@ -1983,14 +2032,15 @@
 })();
 </script>
 <!-- GAME_PARTS -->
-<script src="game-part1.js?v=snes233"></script>
-<script src="game-part2.js?v=snes233"></script>
-<script src="game-part3.js?v=snes233"></script>
-<script src="game-part4.js?v=snes233"></script>
-<script src="game-part5.js?v=snes233"></script>
-<script src="game-part6.js?v=snes233"></script>
-<script src="game-part7.js?v=snes233"></script>
-<script src="game-part8.js?v=snes233"></script>
+<script src="game-part1.js?v=snes267"></script>
+<script src="game-part2.js?v=snes267"></script>
+<script src="game-part3.js?v=snes267"></script>
+<script src="game-part4.js?v=snes267"></script>
+<script src="game-part5.js?v=snes267"></script>
+<script src="game-part6.js?v=snes267"></script>
+<script src="game-part7.js?v=snes267"></script>
+<script src="game-part8.js?v=snes267"></script>
+<script src="game-part9.js?v=snes267"></script>
 <!-- /GAME_PARTS -->
 </body>
 </html>

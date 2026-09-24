@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent
 HOST = "127.0.0.1"
 PORT = 8777
 GAME_PART_MAX_BYTES = 120000
-GAME_CACHE = "snes233"
+GAME_CACHE = "snes267"
 
 
 def split_game_js():
@@ -138,28 +138,60 @@ class Handler(BaseHTTPRequestHandler):
             ctype = "text/javascript; charset=utf-8"
         elif suffix == ".html":
             ctype = "text/html; charset=utf-8"
+        elif suffix == ".ogg":
+            ctype = "audio/ogg"
+        elif suffix == ".mp3":
+            ctype = "audio/mpeg"
+        elif suffix == ".wav":
+            ctype = "audio/wav"
         else:
             ctype = mimetypes.guess_type(str(fs))[0] or "application/octet-stream"
+        is_audio = suffix in {".ogg", ".mp3", ".wav"}
+        total = len(data)
+        start = 0
+        end = total - 1
+        status = 200
+        range_hdr = self.headers.get("Range") or ""
+        if is_audio and range_hdr.startswith("bytes=") and total > 0:
+            spec = range_hdr[6:].split(",")[0].strip()
+            left, _, right = spec.partition("-")
+            try:
+                if left == "":
+                    suffix_len = int(right)
+                    start = max(0, total - suffix_len)
+                else:
+                    start = int(left)
+                    end = int(right) if right else total - 1
+                start = max(0, min(start, total - 1))
+                end = max(start, min(end, total - 1))
+                status = 206
+            except ValueError:
+                start, end, status = 0, total - 1, 200
+        payload = data[start:end + 1] if total else b""
         accept_enc = (self.headers.get("Accept-Encoding") or "").lower()
-        # Only gzip the remaining large single-file fallback; small parts
-        # load more reliably uncompressed through Chrome/Edge.
         use_gzip = False
-        if "gzip" in accept_enc and suffix in {".js", ".html", ".json", ".css"}:
-            use_gzip = len(data) > 500000
+        if not is_audio and "gzip" in accept_enc and suffix in {".js", ".html", ".json", ".css"}:
+            use_gzip = len(payload) > 500000
         if use_gzip:
-            data = gzip.compress(data, 6)
-        self.send_response(200)
+            payload = gzip.compress(payload, 6)
+        self.send_response(status)
         self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(data)))
-        if use_gzip:
-            self.send_header("Content-Encoding", "gzip")
-            self.send_header("Vary", "Accept-Encoding")
-        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
-        self.send_header("Pragma", "no-cache")
+        self.send_header("Content-Length", str(len(payload)))
+        if is_audio:
+            self.send_header("Accept-Ranges", "bytes")
+            if status == 206:
+                self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, total))
+            self.send_header("Cache-Control", "public, max-age=86400")
+        else:
+            if use_gzip:
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Vary", "Accept-Encoding")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("Pragma", "no-cache")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Connection", "close")
         self.end_headers()
-        view = memoryview(data)
+        view = memoryview(payload)
         offset = 0
         chunk = 32 * 1024
         while offset < len(view):

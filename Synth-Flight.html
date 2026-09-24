@@ -1,3 +1,2667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-store">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Synth Flight</title>
+<style>
+  :root {
+    --neon-cyan: #0ff0fc;
+    --neon-pink: #ff2079;
+    --neon-yellow: #ffd23f;
+    --neon-gold: #ffd700;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #0d0221;
+    overflow: hidden;
+    touch-action: manipulation;
+    font-family: 'Courier New', monospace;
+  }
+  #game-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100vw;
+  }
+  canvas {
+    display: block;
+    background: #0d0221;
+  }
+  #overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+    color: #0ff0fc;
+    text-shadow: 0 0 10px rgba(15,240,252,0.8), 0 0 22px rgba(255,32,121,0.4);
+  }
+  #overlay .clickable {
+    cursor: pointer;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .menu-panel {
+    background: rgba(13,2,33,0.85);
+    border: 1px solid #0ff0fc;
+    box-shadow: 0 0 18px rgba(15,240,252,0.5), inset 0 0 20px rgba(15,240,252,0.12);
+    border-radius: 8px;
+    padding: 28px 40px 34px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: auto;
+  }
+  #title {
+    font-size: 32px;
+    font-weight: bold;
+    letter-spacing: 4px;
+  }
+  .game-logo {
+    font-family: 'Monoton', Impact, 'Courier New', cursive;
+    font-weight: normal;
+    letter-spacing: 6px;
+    display: inline-block;
+    transform: skewX(-8deg);
+    color: #0ff0fc;
+    background: linear-gradient(180deg, #ffffff 0%, #0ff0fc 45%, #b48aff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter:
+      drop-shadow(0 3px 0 #1a0a2e)
+      drop-shadow(0 0 18px rgba(255, 32, 121, 0.65))
+      drop-shadow(0 0 36px rgba(15, 240, 252, 0.35));
+  }
+  .game-logo-plate {
+    background: rgba(8, 3, 18, 0.55);
+    border-radius: 10px;
+    padding: 10px 28px;
+    display: inline-block;
+  }
+  #subtitle {
+    font-size: 15px;
+    margin-top: 18px;
+    line-height: 1.8;
+    letter-spacing: 1px;
+    text-align: center;
+    color: #ff2079;
+    text-shadow: 0 0 8px rgba(255,32,121,0.7);
+  }
+  #subtitle.overlay-recap,
+  .zone-select-subtitle {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.7;
+    letter-spacing: 0.12em;
+    color: #d8f6ff;
+    text-shadow: 0 0 8px rgba(120, 220, 255, 0.45);
+  }
+  .ach-tally {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    margin: 12px 0 4px;
+  }
+  .ach-tally-item {
+    min-width: 0;
+    padding: 8px 4px 7px;
+    border: 1px solid rgba(15, 240, 252, 0.28);
+    border-radius: 6px;
+    background: rgba(8, 4, 22, 0.72);
+    text-align: center;
+  }
+  .ach-tally-n {
+    display: block;
+    font-family: 'Orbitron', 'Courier New', monospace;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    line-height: 1.15;
+    color: #7af8ff;
+    text-shadow: 0 0 10px rgba(15, 240, 252, 0.7);
+  }
+  .ach-tally-label {
+    display: block;
+    margin-top: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: rgba(255, 255, 255, 0.62);
+    text-shadow: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  @media (max-width: 720px) {
+    .ach-tally {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  #options-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 34px;
+    pointer-events: auto;
+    min-width: 380px;
+  }
+  .options-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 22px;
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: #0ff0fc;
+    text-shadow: 0 0 8px rgba(15,240,252,0.6);
+  }
+  .options-row-label {
+    cursor: default;
+  }
+  .options-row.clickable {
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.12s ease;
+  }
+  .options-row.clickable:hover {
+    background: rgba(15,240,252,0.1);
+  }
+  .options-row-value {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    user-select: none;
+  }
+  .options-arrow {
+    cursor: pointer;
+    display: inline-block;
+    padding: 14px 16px;
+    margin: -14px -4px;
+    font-size: 22px;
+    line-height: 1;
+    color: #0ff0fc;
+    transition: transform 0.1s ease, opacity 0.1s ease;
+  }
+  .options-arrow:hover {
+    transform: scale(1.3);
+  }
+  .options-arrow.disabled {
+    opacity: 0.2;
+    cursor: default;
+  }
+  .options-arrow.disabled:hover {
+    transform: none;
+  }
+  .options-difficulty-value {
+    min-width: 130px;
+    text-align: center;
+  }
+  .options-difficulty-value.difficulty-easy, .stepper-value.difficulty-easy, .settings-diff-name.difficulty-easy { color: #0ff0fc; text-shadow: 0 0 10px rgba(15,240,252,0.8); }
+  .options-difficulty-value.difficulty-normal, .stepper-value.difficulty-normal, .settings-diff-name.difficulty-normal { color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,0.8); }
+  .options-difficulty-value.difficulty-hard, .stepper-value.difficulty-hard, .settings-diff-name.difficulty-hard { color: #ff2079; text-shadow: 0 0 10px rgba(255,32,121,0.8); }
+  .options-difficulty-value.difficulty-extra, .stepper-value.difficulty-extra, .settings-diff-card.difficulty-extra:not(.locked) .settings-diff-name { color: #ff0000; text-shadow: 0 0 10px rgba(255,0,0,0.9); }
+
+  /* Options panel v2 (uploaded design) */
+  .options-panel-v2 {
+    background: rgba(10, 2, 26, 0.92);
+    border: 2px solid var(--neon-cyan);
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.4), inset 0 0 15px rgba(0, 240, 255, 0.1);
+    border-radius: 8px;
+    padding: 24px;
+    width: 460px;
+    max-width: 90vw;
+    box-sizing: border-box;
+    pointer-events: auto;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .panel-header {
+    text-align: center;
+    font-size: 20px;
+    letter-spacing: 4px;
+    color: #fff;
+    text-shadow: 0 0 8px var(--neon-cyan);
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0, 240, 255, 0.25);
+  }
+  .menu-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 300px;
+  }
+  .continue-panel {
+    min-width: 380px;
+    padding-top: 24px;
+    transform: translateX(12%);
+  }
+  .continue-credit {
+    font-size: 64px;
+    font-weight: 900;
+    letter-spacing: 8px;
+    line-height: 1;
+    color: #ffd23f;
+    text-shadow:
+      0 0 12px rgba(255, 210, 63, 0.95),
+      0 0 28px rgba(255, 32, 121, 0.45);
+    margin: 4px 0 6px;
+  }
+  .continue-credit-label {
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: #efe6f8;
+    margin-bottom: 18px;
+  }
+  .continue-panel .btn-start-game {
+    height: 48px;
+  }
+  .continue-panel .menu-stack {
+    width: 100%;
+  }
+  .btn-continue-secondary {
+    width: 100%;
+    height: 44px;
+    margin: 0;
+    padding: 0 16px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 4px;
+    color: #f6fdff;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-align: center;
+    cursor: pointer;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .btn-continue-secondary:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: #ffffff;
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(255, 255, 255, 0.28);
+  }
+  .menu-btn-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 44px;
+    flex-shrink: 0;
+    padding: 0 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+  }
+  .menu-btn-row:hover {
+    background: rgba(255, 0, 127, 0.15);
+    border-color: var(--neon-pink);
+    box-shadow: 0 0 12px rgba(255, 0, 127, 0.5);
+    transform: translateX(4px);
+  }
+  .menu-btn-row.danger-row {
+    border-color: rgba(255, 60, 60, 0.35);
+  }
+  .menu-btn-row.danger-row .menu-btn-label,
+  .menu-btn-row.danger-row .row-action-indicator {
+    color: #ff5c5c;
+  }
+  .menu-btn-row.danger-row:hover {
+    background: rgba(255, 40, 40, 0.15);
+    border-color: #ff3c3c;
+    box-shadow: 0 0 12px rgba(255, 40, 40, 0.6);
+  }
+  .menu-btn-label {
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: #ffffff;
+  }
+  .stepper-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .stepper-arrow {
+    background: rgba(0, 240, 255, 0.1);
+    border: 1px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.1s;
+    font-family: inherit;
+    padding: 0;
+  }
+  .stepper-arrow:hover {
+    background: var(--neon-cyan);
+    color: #000;
+    box-shadow: 0 0 8px var(--neon-cyan);
+  }
+  .stepper-value {
+    min-width: 148px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--neon-yellow);
+    text-shadow: 0 0 6px rgba(255, 230, 0, 0.6);
+  }
+  .settings-trail-hint {
+    margin: -4px 0 4px;
+    padding: 0 6px;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    line-height: 1.45;
+    color: rgba(205, 184, 232, 0.88);
+    text-align: left;
+  }
+  .row-action-indicator {
+    font-size: 11px;
+    color: var(--neon-cyan);
+    letter-spacing: 1px;
+    opacity: 0.7;
+  }
+  .menu-btn-row:hover .row-action-indicator {
+    opacity: 1;
+    color: #fff;
+    text-shadow: 0 0 6px var(--neon-pink);
+  }
+  .start-action-container {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+  }
+  .btn-start-game {
+    width: 100%;
+    height: 46px;
+    background: linear-gradient(90deg, #ff007f 0%, #00f0ff 100%);
+    border: none;
+    border-radius: 4px;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    cursor: pointer;
+    box-shadow: 0 0 16px rgba(255, 0, 127, 0.4);
+    transition: filter 0.2s, box-shadow 0.2s;
+  }
+  .btn-start-game:hover {
+    filter: brightness(1.2);
+    box-shadow: 0 0 24px rgba(0, 240, 255, 0.8);
+  }
+  .confirm-panel {
+    width: 420px;
+    border-color: rgba(255, 60, 60, 0.6);
+    box-shadow: 0 0 20px rgba(255, 40, 40, 0.35), inset 0 0 15px rgba(255, 40, 40, 0.08);
+  }
+  .confirm-danger-header {
+    color: #ff5c5c;
+  }
+  .confirm-warning-text {
+    margin-top: 18px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: rgba(255, 255, 255, 0.85);
+    letter-spacing: 0.5px;
+  }
+  .confirm-warning-text strong {
+    color: #ff5c5c;
+  }
+  .confirm-btn-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 26px;
+  }
+  .btn-confirm-cancel {
+    flex: 1.3;
+    height: 44px;
+    background: rgba(15, 240, 252, 0.1);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 4px;
+    color: var(--neon-cyan);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .btn-confirm-cancel:hover {
+    background: rgba(15, 240, 252, 0.2);
+    box-shadow: 0 0 14px rgba(15, 240, 252, 0.5);
+  }
+  .btn-confirm-danger {
+    flex: 1;
+    height: 44px;
+    background: rgba(255, 40, 40, 0.08);
+    border: 1px solid rgba(255, 60, 60, 0.5);
+    border-radius: 4px;
+    color: #ff5c5c;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .btn-confirm-danger:hover {
+    background: rgba(255, 40, 40, 0.2);
+    border-color: #ff3c3c;
+    box-shadow: 0 0 14px rgba(255, 40, 40, 0.5);
+  }
+  .settings-diff-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 22px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 4px;
+    padding-bottom: 8px;
+  }
+  .settings-diff-list::after {
+    content: '';
+    display: block;
+    height: 28px;
+    flex-shrink: 0;
+  }
+  .settings-diff-card {
+    border: 1px solid rgba(15,240,252,0.3);
+    border-radius: 6px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.03);
+    text-align: left;
+  }
+  .settings-diff-name {
+    font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+  .settings-diff-stats {
+    font-size: 12px;
+    line-height: 1.7;
+    color: #cdb8e8;
+    letter-spacing: 0.5px;
+  }
+  .settings-diff-card.locked {
+    opacity: 0.55;
+    border-style: dashed;
+  }
+  .settings-diff-card.locked .settings-diff-name {
+    color: #888;
+  }
+  .settings-diff-card.locked .settings-diff-stats {
+    color: #888;
+    font-style: italic;
+  }
+  .menu-btn-row.locked {
+    opacity: 0.5;
+    cursor: default;
+    border-style: dashed;
+  }
+  .menu-btn-row.locked:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(0, 240, 255, 0.2);
+    box-shadow: none;
+    transform: none;
+  }
+  .menu-btn-row.locked .row-action-indicator {
+    opacity: 0.7;
+  }
+  .zone-tile.achievement-tile {
+    cursor: default;
+  }
+  .zone-tile.achievement-tile:hover {
+    border-color: rgba(15, 240, 252, 0.25);
+    background: rgba(255, 255, 255, 0.03);
+    box-shadow: none;
+    transform: none;
+  }
+  .zone-tile.achievement-unlocked {
+    overflow: hidden;
+    opacity: 1;
+    border-style: solid;
+  }
+  .zone-tile.achievement-unlocked::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 36%, rgba(255, 255, 255, 0.16) 50%, transparent 64%);
+    background-size: 220% 100%;
+    animation: achShine 3.8s ease-in-out infinite;
+  }
+  .zone-tile.achievement-unlocked::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    pointer-events: none;
+    border-radius: 2px;
+    background:
+      linear-gradient(currentColor, currentColor) top left / 8px 1.5px no-repeat,
+      linear-gradient(currentColor, currentColor) top left / 1.5px 8px no-repeat,
+      linear-gradient(currentColor, currentColor) top right / 8px 1.5px no-repeat,
+      linear-gradient(currentColor, currentColor) top right / 1.5px 8px no-repeat,
+      linear-gradient(currentColor, currentColor) bottom left / 8px 1.5px no-repeat,
+      linear-gradient(currentColor, currentColor) bottom left / 1.5px 8px no-repeat,
+      linear-gradient(currentColor, currentColor) bottom right / 8px 1.5px no-repeat,
+      linear-gradient(currentColor, currentColor) bottom right / 1.5px 8px no-repeat;
+    opacity: 0.9;
+  }
+  .ach-seal {
+    position: relative;
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+  .ach-seal::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 3px;
+    width: 5px;
+    height: 9px;
+    border-style: solid;
+    border-width: 0 2px 2px 0;
+    transform: rotate(40deg);
+  }
+  .zone-tile.achievement-done.achievement-unlocked {
+    color: #7dffb4;
+    border-color: rgba(90, 255, 170, 0.75);
+    background: linear-gradient(180deg, rgba(70, 255, 160, 0.2), rgba(10, 32, 24, 0.62));
+    box-shadow:
+      0 0 14px rgba(80, 255, 160, 0.38),
+      inset 0 0 16px rgba(80, 255, 160, 0.1);
+    animation: achPulseDone 2.8s ease-in-out infinite;
+  }
+  .zone-tile.achievement-done .tile-name {
+    color: #d6ffe8;
+    text-shadow: 0 0 8px rgba(90, 255, 170, 0.45);
+  }
+  .zone-tile.achievement-done .ach-seal {
+    border: 1.5px solid #8fffc8;
+    background: radial-gradient(circle at 38% 32%, rgba(255,255,255,0.45), rgba(40, 170, 110, 0.28) 55%, rgba(6, 24, 18, 0.95));
+    box-shadow: 0 0 8px rgba(125, 255, 180, 0.95);
+  }
+  .zone-tile.achievement-done .ach-seal::after {
+    border-color: #f2fff8;
+    filter: drop-shadow(0 0 3px #7dffb4);
+  }
+  .zone-tile.achievement-done.achievement-unlocked:hover {
+    border-color: #9dffd0;
+    background: linear-gradient(180deg, rgba(70, 255, 160, 0.26), rgba(10, 32, 24, 0.7));
+    box-shadow:
+      0 0 18px rgba(80, 255, 160, 0.5),
+      inset 0 0 18px rgba(80, 255, 160, 0.14);
+  }
+  .zone-tile.achievement-deathless.achievement-unlocked {
+    color: #cfe4ff;
+    border-color: rgba(170, 210, 255, 0.85);
+    background: linear-gradient(180deg, rgba(170, 210, 255, 0.22), rgba(10, 18, 36, 0.66));
+    box-shadow:
+      0 0 14px rgba(170, 210, 255, 0.4),
+      inset 0 0 16px rgba(170, 210, 255, 0.12);
+    animation: achPulseRank 2.8s ease-in-out infinite;
+  }
+  .zone-tile.achievement-deathless .tile-name {
+    color: #eef6ff;
+    text-shadow: 0 0 8px rgba(180, 215, 255, 0.55);
+  }
+  .zone-tile.achievement-deathless .ach-seal {
+    border: 1.5px solid #d4e7ff;
+    background: radial-gradient(circle at 38% 32%, rgba(255,255,255,0.62), rgba(120, 160, 210, 0.32) 55%, rgba(8, 14, 28, 0.95));
+    box-shadow: 0 0 8px rgba(180, 215, 255, 0.95);
+  }
+  .zone-tile.achievement-deathless .ach-seal::after {
+    border-color: #ffffff;
+    filter: drop-shadow(0 0 3px #b8d8ff);
+  }
+  .zone-tile.achievement-deathless.achievement-unlocked:hover {
+    border-color: #e8f2ff;
+    background: linear-gradient(180deg, rgba(170, 210, 255, 0.3), rgba(10, 18, 36, 0.74));
+    box-shadow:
+      0 0 18px rgba(170, 210, 255, 0.55),
+      inset 0 0 18px rgba(170, 210, 255, 0.16);
+  }
+  .zone-tile.achievement-distance.achievement-unlocked {
+    color: #d4b8ff;
+    border-color: rgba(190, 140, 255, 0.8);
+    background: linear-gradient(180deg, rgba(180, 130, 255, 0.22), rgba(24, 10, 42, 0.62));
+    box-shadow:
+      0 0 14px rgba(180, 130, 255, 0.4),
+      inset 0 0 16px rgba(180, 130, 255, 0.12);
+    animation: achPulsePurple 2.8s ease-in-out infinite;
+  }
+  .zone-tile.achievement-distance .tile-name {
+    color: #efe4ff;
+    text-shadow: 0 0 8px rgba(190, 140, 255, 0.5);
+  }
+  .zone-tile.achievement-distance .ach-seal {
+    border: 1.5px solid #e2c8ff;
+    background: radial-gradient(circle at 38% 32%, rgba(255,255,255,0.45), rgba(140, 90, 220, 0.32) 55%, rgba(18, 8, 32, 0.95));
+    box-shadow: 0 0 8px rgba(190, 140, 255, 0.95);
+  }
+  .zone-tile.achievement-distance .ach-seal::after {
+    border-color: #f6eeff;
+    filter: drop-shadow(0 0 3px #c9a4ff);
+  }
+  .zone-tile.achievement-distance.achievement-unlocked:hover {
+    border-color: #e2c8ff;
+    background: linear-gradient(180deg, rgba(180, 130, 255, 0.3), rgba(24, 10, 42, 0.7));
+    box-shadow:
+      0 0 18px rgba(180, 130, 255, 0.55),
+      inset 0 0 18px rgba(180, 130, 255, 0.16);
+  }
+  .zone-tile.achievement-rank.achievement-unlocked {
+    color: #ffe08a;
+    border-color: rgba(255, 214, 63, 0.8);
+    background: linear-gradient(180deg, rgba(255, 214, 63, 0.2), rgba(36, 24, 6, 0.62));
+    box-shadow:
+      0 0 16px rgba(255, 214, 63, 0.42),
+      inset 0 0 16px rgba(255, 214, 63, 0.12);
+    animation: achPulseGold 2.4s ease-in-out infinite;
+  }
+  .zone-tile.achievement-rank .tile-name {
+    color: #fff3c2;
+    text-shadow: 0 0 8px rgba(255, 214, 63, 0.5);
+  }
+  .zone-tile.achievement-rank .ach-seal {
+    border: 1.5px solid #ffe38a;
+    background: radial-gradient(circle at 38% 32%, rgba(255,255,255,0.55), rgba(210, 160, 40, 0.32) 55%, rgba(28, 18, 4, 0.95));
+    box-shadow: 0 0 9px rgba(255, 214, 63, 1);
+  }
+  .zone-tile.achievement-rank .ach-seal::after {
+    border-color: #fff8e0;
+    filter: drop-shadow(0 0 3px #ffd23f);
+  }
+  .zone-tile.achievement-rank.achievement-unlocked:hover {
+    border-color: #ffe9a8;
+    background: linear-gradient(180deg, rgba(255, 214, 63, 0.28), rgba(36, 24, 6, 0.7));
+    box-shadow:
+      0 0 20px rgba(255, 214, 63, 0.55),
+      inset 0 0 18px rgba(255, 214, 63, 0.16);
+  }
+  .zone-tile.achievement-trail.achievement-unlocked {
+    color: #d8ff6a;
+    border-color: rgba(196, 255, 64, 0.82);
+    background: linear-gradient(180deg, rgba(190, 255, 50, 0.2), rgba(18, 28, 4, 0.64));
+    box-shadow:
+      0 0 14px rgba(196, 255, 64, 0.38),
+      inset 0 0 16px rgba(196, 255, 64, 0.1);
+    animation: achPulseTrail 2.8s ease-in-out infinite;
+  }
+  .zone-tile.achievement-trail .tile-name {
+    color: #f2ffc8;
+    text-shadow: 0 0 8px rgba(196, 255, 64, 0.5);
+  }
+  .zone-tile.achievement-trail .ach-seal {
+    border: 1.5px solid #e4ff8a;
+    background: radial-gradient(circle at 38% 32%, rgba(255,255,255,0.5), rgba(150, 200, 30, 0.32) 55%, rgba(16, 22, 4, 0.95));
+    box-shadow: 0 0 8px rgba(196, 255, 64, 0.95);
+  }
+  .zone-tile.achievement-trail .ach-seal::after {
+    border-color: #f8ffe8;
+    filter: drop-shadow(0 0 3px #c8ff50);
+  }
+  .zone-tile.achievement-trail.achievement-unlocked:hover {
+    border-color: #e8ff9a;
+    background: linear-gradient(180deg, rgba(190, 255, 50, 0.28), rgba(18, 28, 4, 0.72));
+    box-shadow:
+      0 0 18px rgba(196, 255, 64, 0.52),
+      inset 0 0 18px rgba(196, 255, 64, 0.14);
+  }
+  .zone-tile.achievement-ship.achievement-unlocked {
+    color: #ff7ab8;
+    border-color: rgba(255, 32, 121, 0.82);
+    background: linear-gradient(180deg, rgba(255, 32, 121, 0.22), rgba(8, 24, 36, 0.7));
+    box-shadow:
+      0 0 14px rgba(15, 240, 252, 0.32),
+      inset 0 0 16px rgba(255, 32, 121, 0.12);
+    animation: achPulseShip 2.8s ease-in-out infinite;
+  }
+  .zone-tile.achievement-ship .tile-name {
+    color: #ffe3f2;
+    text-shadow: 0 0 8px rgba(255, 32, 121, 0.55);
+  }
+  .zone-tile.achievement-ship .ach-seal {
+    border: 1.5px solid #0ff0fc;
+    background: radial-gradient(circle at 38% 32%, rgba(255,255,255,0.5), rgba(255, 32, 121, 0.35) 55%, rgba(8, 8, 18, 0.95));
+    box-shadow: 0 0 8px rgba(15, 240, 252, 0.9);
+  }
+  .zone-tile.achievement-ship .ach-seal::after {
+    border-color: #fff4c8;
+    filter: drop-shadow(0 0 3px #ffd23f);
+  }
+  .zone-tile.achievement-ship.achievement-unlocked:hover {
+    border-color: #0ff0fc;
+    background: linear-gradient(180deg, rgba(255, 32, 121, 0.3), rgba(8, 24, 36, 0.78));
+    box-shadow:
+      0 0 18px rgba(15, 240, 252, 0.5),
+      inset 0 0 18px rgba(255, 32, 121, 0.16);
+  }
+  @keyframes achShine {
+    0%, 70% { background-position: 120% 0; }
+    100% { background-position: -40% 0; }
+  }
+  @keyframes achPulseDone {
+    0%, 100% { box-shadow: 0 0 12px rgba(80, 255, 160, 0.32), inset 0 0 14px rgba(80, 255, 160, 0.08); }
+    50% { box-shadow: 0 0 20px rgba(80, 255, 160, 0.55), inset 0 0 18px rgba(80, 255, 160, 0.14); }
+  }
+  @keyframes achPulseGold {
+    0%, 100% { box-shadow: 0 0 12px rgba(255, 214, 63, 0.32), inset 0 0 14px rgba(255, 214, 63, 0.08); }
+    50% { box-shadow: 0 0 20px rgba(255, 214, 63, 0.55), inset 0 0 18px rgba(255, 214, 63, 0.14); }
+  }
+  @keyframes achPulsePurple {
+    0%, 100% { box-shadow: 0 0 12px rgba(180, 130, 255, 0.32), inset 0 0 14px rgba(180, 130, 255, 0.08); }
+    50% { box-shadow: 0 0 20px rgba(180, 130, 255, 0.55), inset 0 0 18px rgba(180, 130, 255, 0.14); }
+  }
+  @keyframes achPulseTrail {
+    0%, 100% { box-shadow: 0 0 12px rgba(196, 255, 64, 0.3), inset 0 0 14px rgba(196, 255, 64, 0.08); }
+    50% { box-shadow: 0 0 20px rgba(196, 255, 64, 0.52), inset 0 0 18px rgba(196, 255, 64, 0.14); }
+  }
+  @keyframes achPulseShip {
+    0%, 100% { box-shadow: 0 0 12px rgba(15, 240, 252, 0.28), inset 0 0 14px rgba(255, 32, 121, 0.1); }
+    50% { box-shadow: 0 0 20px rgba(255, 32, 121, 0.48), inset 0 0 18px rgba(15, 240, 252, 0.16); }
+  }
+  @keyframes achPulseRank {
+    0%, 100% { box-shadow: 0 0 12px rgba(170, 210, 255, 0.32), inset 0 0 14px rgba(170, 210, 255, 0.08); }
+    50% { box-shadow: 0 0 20px rgba(170, 210, 255, 0.55), inset 0 0 18px rgba(170, 210, 255, 0.14); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .zone-tile.achievement-unlocked,
+    .zone-tile.achievement-unlocked::before {
+      animation: none;
+    }
+  }
+  .achievement-section-header {
+    margin: 20px 0 4px;
+    padding-bottom: 6px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgba(255, 214, 63, 0.85);
+    border-bottom: 1px solid rgba(255, 214, 63, 0.25);
+  }
+  .achievement-section-note {
+    margin: 0 0 10px;
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    line-height: 1.45;
+    color: rgba(205, 184, 232, 0.85);
+  }
+  .stats-hero {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    width: 100%;
+    margin-top: 18px;
+    align-self: stretch;
+  }
+  .stats-hero-card {
+    padding: 16px 12px 14px;
+    border-radius: 8px;
+    text-align: center;
+    background: rgba(8, 4, 22, 0.88);
+    cursor: default;
+  }
+  .stats-hero-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: rgba(255, 255, 255, 0.62);
+  }
+  .stats-hero-value {
+    margin-top: 8px;
+    font-family: 'Orbitron', 'Courier New', monospace;
+    font-size: clamp(18px, 2.4vw, 28px);
+    font-weight: 900;
+    letter-spacing: 1px;
+    line-height: 1.1;
+  }
+  .stats-hero-unit {
+    margin-left: 3px;
+    font-size: 0.55em;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+  }
+  .stats-hero-distance {
+    border: 1px solid rgba(15, 240, 252, 0.6);
+    box-shadow:
+      0 0 16px rgba(15, 240, 252, 0.28),
+      inset 0 0 18px rgba(15, 240, 252, 0.08);
+  }
+  .stats-hero-distance .stats-hero-value {
+    color: #7af8ff;
+    text-shadow: 0 0 12px rgba(15, 240, 252, 0.8);
+  }
+  .stats-hero-deaths {
+    border: 1px solid rgba(170, 210, 255, 0.7);
+    box-shadow:
+      0 0 16px rgba(170, 210, 255, 0.3),
+      inset 0 0 18px rgba(170, 210, 255, 0.1);
+  }
+  .stats-hero-deaths .stats-hero-value {
+    color: #cfe4ff;
+    text-shadow: 0 0 12px rgba(170, 210, 255, 0.8);
+  }
+  .stats-hero-clears {
+    border: 1px solid rgba(255, 214, 63, 0.65);
+    box-shadow:
+      0 0 16px rgba(255, 214, 63, 0.28),
+      inset 0 0 18px rgba(255, 214, 63, 0.1);
+  }
+  .stats-hero-clears .stats-hero-value {
+    color: #ffe08a;
+    text-shadow: 0 0 12px rgba(255, 214, 63, 0.75);
+  }
+  .stats-cat {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    margin: 24px 0 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.26em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .stats-cat::before,
+  .stats-cat::after {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    box-shadow: 0 0 8px currentColor;
+    flex: none;
+  }
+  .stats-cat-deaths {
+    color: #cfe4ff;
+    text-shadow: 0 0 10px rgba(170, 210, 255, 0.55);
+  }
+  .stats-cat-clears {
+    color: #ffe08a;
+    text-shadow: 0 0 10px rgba(255, 214, 63, 0.5);
+  }
+  .stats-cat-done {
+    color: #8fffc8;
+    text-shadow: 0 0 10px rgba(125, 255, 180, 0.5);
+  }
+  .stats-cat-deathless {
+    color: #cfe4ff;
+    text-shadow: 0 0 10px rgba(170, 210, 255, 0.55);
+  }
+  .stats-cat-distance {
+    color: #d4b8ff;
+    text-shadow: 0 0 10px rgba(190, 140, 255, 0.5);
+  }
+  .stats-cat-ranks {
+    color: #ffe08a;
+    text-shadow: 0 0 10px rgba(255, 214, 63, 0.5);
+  }
+  .stats-cat-trails {
+    color: #d8ff6a;
+    text-shadow: 0 0 10px rgba(196, 255, 64, 0.5);
+  }
+  .stats-cat-ships {
+    color: #ff7ab8;
+    text-shadow: 0 0 10px rgba(255, 32, 121, 0.5);
+  }
+  .stats-cat + .achievement-section-note {
+    margin-top: -4px;
+    text-align: center;
+  }
+  .stat-zone-tile {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(15,240,252,0.18);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 8px 8px 6px;
+    cursor: default;
+    position: relative;
+    min-height: 70px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .stat-zone-tile::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: transparent;
+  }
+  .stat-zone-count {
+    align-self: flex-end;
+    font-family: 'Orbitron', 'Courier New', monospace;
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    line-height: 1;
+  }
+  .stat-zone-tile.is-empty {
+    border-style: dashed;
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.22);
+    opacity: 0.72;
+  }
+  .stat-zone-tile.is-empty .tile-name {
+    color: rgba(255, 255, 255, 0.45);
+  }
+  .stat-zone-tile.is-empty .stat-zone-count {
+    color: rgba(255, 255, 255, 0.28);
+    font-size: 16px;
+  }
+  .stat-zone-deaths.has-value {
+    border-color: rgba(170, 210, 255, calc(0.38 + var(--stat-heat, 0.5) * 0.55));
+    background: linear-gradient(180deg, rgba(170, 210, 255, calc(0.08 + var(--stat-heat, 0.5) * 0.16)), rgba(10, 18, 36, 0.72));
+    box-shadow: 0 0 calc(6px + var(--stat-heat, 0.5) * 12px) rgba(170, 210, 255, calc(0.16 + var(--stat-heat, 0.5) * 0.38));
+  }
+  .stat-zone-deaths.has-value::before {
+    background: #cfe4ff;
+    box-shadow: 0 0 8px #cfe4ff;
+  }
+  .stat-zone-deaths.has-value .tile-num,
+  .stat-zone-deaths.has-value .tile-name {
+    color: #eef6ff;
+  }
+  .stat-zone-deaths.has-value .stat-zone-count {
+    color: #cfe4ff;
+    text-shadow: 0 0 10px rgba(170, 210, 255, 0.85);
+  }
+  .stat-zone-clears.has-value {
+    border-color: rgba(255, 214, 63, calc(0.4 + var(--stat-heat, 0.5) * 0.5));
+    background: linear-gradient(180deg, rgba(255, 214, 63, calc(0.08 + var(--stat-heat, 0.5) * 0.16)), rgba(36, 24, 6, 0.72));
+    box-shadow: 0 0 calc(6px + var(--stat-heat, 0.5) * 12px) rgba(255, 214, 63, calc(0.16 + var(--stat-heat, 0.5) * 0.38));
+  }
+  .stat-zone-clears.has-value::before {
+    background: #ffe08a;
+    box-shadow: 0 0 8px #ffe08a;
+  }
+  .stat-zone-clears.has-value .tile-num,
+  .stat-zone-clears.has-value .tile-name {
+    color: #fff3c2;
+  }
+  .stat-zone-clears.has-value .stat-zone-count {
+    color: #ffe08a;
+    text-shadow: 0 0 10px rgba(255, 214, 63, 0.85);
+  }
+  .zone-select-panel {
+    width: 780px;
+    max-width: 92vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+  .zone-select-subtitle {
+    text-align: center;
+  }
+  .zone-select-wrapper {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    margin-top: 18px;
+  }
+  .zone-grid {
+    flex: 1.3;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .menu-panel > .zone-grid {
+    align-self: stretch;
+  }
+  .zone-tile {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(15,240,252,0.25);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 8px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    min-height: 64px;
+    min-width: 0;
+  }
+  .zone-tile:hover {
+    border-color: var(--neon-pink);
+    background: rgba(255,32,121,0.15);
+    box-shadow: 0 0 6px rgba(255,32,121,0.5);
+    transform: translateY(-2px);
+  }
+  .zone-tile.active {
+    border-color: var(--neon-cyan);
+    background: rgba(15,240,252,0.15);
+    box-shadow: 0 0 6px rgba(15,240,252,0.6);
+  }
+  .zone-tile.locked {
+    border-color: rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.3);
+    opacity: 0.5;
+    cursor: default;
+  }
+  .zone-tile.locked:hover {
+    border-color: rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.3);
+    box-shadow: none;
+    transform: none;
+  }
+  .tile-num {
+    font-size: 10px;
+    color: var(--neon-cyan);
+    font-weight: 700;
+  }
+  .tile-name {
+    font-size: 8px;
+    color: #fff;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+    line-height: 1.2;
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+  .tile-status {
+    align-self: flex-end;
+    font-size: 12px;
+  }
+  .zone-preview-panel {
+    flex: 0.9;
+    background: rgba(10,2,26,0.6);
+    border: 1px solid var(--neon-cyan);
+    box-shadow: 0 0 20px rgba(15,240,252,0.3);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    pointer-events: auto;
+  }
+  .preview-viewport {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 860 / 412;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #050208;
+  }
+  .preview-viewport.locked {
+    background: #050208 !important;
+  }
+  .preview-viewport.locked::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .preview-shot {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    display: block;
+    image-rendering: auto;
+  }
+  .preview-locked-label {
+    position: relative;
+    z-index: 1;
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: rgba(255,255,255,0.55);
+    text-shadow: 0 0 8px rgba(0,0,0,0.8);
+  }
+  .preview-details {
+    margin-top: 12px;
+  }
+  .preview-title {
+    font-size: 15px;
+    color: var(--neon-yellow);
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+  .preview-stats {
+    font-size: 10px;
+    color: rgba(255,255,255,0.7);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .btn-warp {
+    width: 100%;
+    height: 42px;
+    background: linear-gradient(90deg, #ff2079 0%, #0ff0fc 100%);
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    cursor: pointer;
+    box-shadow: 0 0 12px rgba(255,32,121,0.4);
+    margin-top: 10px;
+    pointer-events: auto;
+  }
+  .btn-warp:hover {
+    filter: brightness(1.2);
+    box-shadow: 0 0 20px rgba(15,240,252,0.8);
+  }
+  .btn-warp:disabled {
+    opacity: 0.4;
+    cursor: default;
+    filter: none;
+    box-shadow: none;
+  }
+  .panel-footer-hint {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--neon-pink);
+    text-shadow: 0 0 6px rgba(255,32,121,0.4);
+  }
+  .scrollable-overlay-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--neon-cyan) rgba(0,0,0,0.35);
+  }
+  .scrollable-overlay-list::-webkit-scrollbar {
+    width: 8px;
+  }
+  .scrollable-overlay-list::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.35);
+    border-radius: 4px;
+    border: 1px solid rgba(0,240,255,0.15);
+  }
+  .scrollable-overlay-list::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--neon-cyan) 0%, var(--neon-pink) 100%);
+    border-radius: 4px;
+    box-shadow: 0 0 6px rgba(15,240,252,0.7);
+  }
+  .scrollable-overlay-list::-webkit-scrollbar-thumb:hover {
+    box-shadow: 0 0 10px rgba(255,32,121,0.9);
+  }
+  #overlay.home-layout {
+    display: block;
+    background: transparent;
+    color: inherit;
+    text-shadow: none;
+    overflow: hidden;
+  }
+  .game-logo-plate.home-title-plate {
+    position: absolute;
+    top: 44%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    padding: 8px 56px 10px;
+    max-width: 92vw;
+    box-sizing: border-box;
+    background: transparent;
+    border: none;
+    border-radius: 14px;
+    box-shadow: none;
+    filter: none;
+  }
+  .game-logo.home-title {
+    position: relative;
+    font-size: clamp(34px, 7vw, 92px);
+    letter-spacing: 0.08em;
+    word-spacing: 0.28em;
+    line-height: 0.92;
+    white-space: nowrap;
+    transform: skewX(-6deg);
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    color: #7af4ff;
+    -webkit-text-fill-color: #7af4ff;
+    -webkit-text-stroke: 0;
+    outline: none;
+    filter:
+      drop-shadow(0 2px 0 rgba(8, 2, 20, 0.7))
+      drop-shadow(0 0 8px rgba(255, 94, 200, 0.5));
+  }
+  .game-logo.options-title {
+    font-size: clamp(28px, 5vw, 48px);
+    margin: 0 0 16px;
+  }
+  #overlay.home-layout #menu-start-prompt {
+    position: absolute;
+    top: 82%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 12px 36px;
+    width: auto;
+    height: auto;
+    max-width: none;
+    min-width: 0;
+    box-sizing: border-box;
+    text-align: center;
+    font-family: 'Orbitron', 'Courier New', monospace;
+    font-size: clamp(13px, 1.8vw, 18px);
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    line-height: 1.2;
+    color: #ffffff;
+    background: rgba(16, 4, 28, 0.92);
+    border: 2px solid #ff2ec4;
+    border-radius: 8px;
+    box-shadow:
+      0 0 14px rgba(255, 46, 196, 0.85),
+      0 0 28px rgba(255, 46, 196, 0.4);
+    text-shadow:
+      0 0 8px rgba(255, 46, 196, 0.85);
+    animation: startPromptPulse 1.6s ease-in-out infinite;
+    cursor: pointer;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #overlay.home-layout #menu-start-prompt:hover {
+    color: #ffffff;
+    background: #1a0828;
+    border-color: #ff79e0;
+    box-shadow:
+      0 0 20px rgba(255, 46, 196, 1),
+      0 0 36px rgba(255, 46, 196, 0.55);
+  }
+  @keyframes startPromptPulse {
+    0%, 100% {
+      box-shadow:
+        0 0 14px rgba(255, 46, 196, 0.85),
+        0 0 28px rgba(255, 46, 196, 0.4);
+    }
+    50% {
+      box-shadow:
+        0 0 22px rgba(255, 46, 196, 1),
+        0 0 40px rgba(255, 46, 196, 0.55);
+    }
+  }
+  #sub-panel-back {
+    margin-top: 30px;
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: #ff2079;
+    text-shadow: 0 0 8px rgba(255,32,121,0.7);
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  #sub-panel-back:hover {
+    text-shadow: 0 0 14px rgba(255,32,121,0.9);
+  }
+  .reward-card {
+    width: 580px;
+    max-width: 90vw;
+    box-sizing: border-box;
+    margin-top: 18px;
+    background: rgba(12, 3, 28, 0.94);
+    border: 2px solid var(--neon-gold);
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.3), inset 0 0 20px rgba(255, 215, 0, 0.1);
+    border-radius: 10px;
+    padding: 24px 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .rank-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 215, 0, 0.1);
+    border: 1px solid var(--neon-gold);
+    padding: 8px 20px;
+    border-radius: 20px;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+    margin-bottom: 18px;
+  }
+  .rank-badge .star {
+    color: var(--neon-gold);
+    font-size: 16px;
+  }
+  .rank-badge .rank-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--neon-gold);
+    letter-spacing: 3px;
+    text-shadow: 0 0 10px var(--neon-gold);
+  }
+  .stats-matrix {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+  .stat-box {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(15, 240, 252, 0.2);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+  .stat-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 8px var(--neon-cyan);
+  }
+  .zone-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: 24px;
+    row-gap: 4px;
+    width: 100%;
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+    padding-top: 18px;
+    margin-bottom: 18px;
+  }
+  .zone-stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: #ffffff;
+    text-shadow: 0 0 6px rgba(15, 240, 252, 0.5);
+  }
+  .zone-stat-row .skull {
+    margin-right: 4px;
+    filter: drop-shadow(0 0 3px var(--neon-cyan));
+  }
+  .zone-stat-row .deaths {
+    color: var(--neon-gold);
+    font-weight: 700;
+  }
+  .btn-continue {
+    width: 100%;
+    height: 46px;
+    background: linear-gradient(90deg, var(--neon-gold) 0%, var(--neon-pink) 100%);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    cursor: pointer;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+    transition: all 0.2s;
+  }
+  .btn-continue:hover {
+    filter: brightness(1.2);
+    box-shadow: 0 0 30px rgba(255, 0, 127, 0.8);
+    transform: scale(1.02);
+  }
+  #rotate-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #0d0221;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    color: #0ff0fc;
+    text-align: center;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  #rotate-overlay.active {
+    display: flex;
+  }
+  #rotate-icon {
+    font-size: 64px;
+    animation: rotateHint 1.6s ease-in-out infinite;
+    margin-bottom: 20px;
+  }
+  #rotate-overlay p {
+    font-size: 16px;
+    letter-spacing: 1px;
+    max-width: 280px;
+    line-height: 1.6;
+  }
+  @keyframes rotateHint {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(90deg); }
+  }
+  #dev-toggle {
+    position: fixed;
+    bottom: 8px;
+    left: 8px;
+    z-index: 200;
+    background: rgba(0,0,0,0.6);
+    color: #0ff0fc;
+    border: 1px solid #0ff0fc;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.6;
+  }
+  #dev-toggle:hover { opacity: 1; }
+  #pause-toggle {
+    position: fixed;
+    top: 52px;
+    right: 8px;
+    z-index: 200;
+    background: rgba(0,0,0,0.55);
+    color: #0ff0fc;
+    border: 2px solid #0ff0fc;
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    font-weight: bold;
+    letter-spacing: 4px;
+    padding: 8px 12px 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(15,240,252,0.4);
+    opacity: 0.75;
+    display: none;
+  }
+  #pause-toggle:hover, #pause-toggle:active {
+    opacity: 1;
+    box-shadow: 0 0 16px rgba(15,240,252,0.7);
+  }
+  #dev-panel {
+    position: fixed;
+    bottom: 34px;
+    left: 8px;
+    top: 8px;
+    z-index: 200;
+    background: rgba(10,5,25,0.9);
+    border: 1px solid #0ff0fc;
+    border-radius: 6px;
+    padding: 8px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    font-family: 'Courier New', monospace;
+    max-height: calc(100vh - 42px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+  }
+  #dev-panel.active { display: flex; }
+  #dev-panel::-webkit-scrollbar {
+    width: 6px;
+  }
+  #dev-panel::-webkit-scrollbar-track {
+    background: rgba(15,240,252,0.08);
+  }
+  #dev-panel::-webkit-scrollbar-thumb {
+    background: var(--neon-cyan);
+    border-radius: 4px;
+  }
+  #dev-panel button {
+    background: rgba(15,240,252,0.1);
+    color: #0ff0fc;
+    border: 1px solid #0ff0fc;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  #dev-panel button:hover {
+    background: rgba(15,240,252,0.25);
+  }
+  #dev-panel .dev-label {
+    color: #ff2079;
+    font-size: 10px;
+    letter-spacing: 1px;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+  #editor-toggle {
+    position: fixed;
+    bottom: 8px;
+    left: 68px;
+    z-index: 200;
+    background: rgba(0,0,0,0.6);
+    color: #ffcc33;
+    border: 1px solid #ffcc33;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  #editor-toggle:hover { opacity: 1; }
+  #editor-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #180400;
+    z-index: 300;
+    display: none;
+    flex-direction: column;
+    font-family: 'Courier New', monospace;
+    color: #ffcc33;
+  }
+  #editor-overlay.active { display: flex; }
+  #editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #2b0000;
+    border-bottom: 1px solid #ffcc33;
+  }
+  #editor-toolbar button {
+    background: rgba(255,204,51,0.08);
+    color: #ffcc33;
+    border: 1px solid #ffcc33;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  #editor-toolbar button:hover { background: rgba(255,204,51,0.2); }
+  #editor-toolbar button.tool-active {
+    background: #ffcc33;
+    color: #2b0000;
+    font-weight: bold;
+  }
+  #editor-toolbar .editor-spacer { flex: 1; }
+  #editor-status {
+    font-size: 11px;
+    color: #ff3300;
+    min-width: 140px;
+  }
+  #editor-canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  #editorCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+  }
+  #editor-hint {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: rgba(255,204,51,0.6);
+    background: #2b0000;
+    border-top: 1px solid rgba(255,204,51,0.3);
+  }
+  #preview-toggle {
+    position: fixed;
+    bottom: 8px;
+    left: 160px;
+    z-index: 200;
+    background: rgba(0,0,0,0.6);
+    color: #9d7bff;
+    border: 1px solid #9d7bff;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  #preview-toggle:hover { opacity: 1; }
+  #sfx-toggle {
+    position: fixed;
+    bottom: 8px;
+    left: 290px;
+    z-index: 200;
+    background: rgba(0,0,0,0.6);
+    color: #ff2079;
+    border: 1px solid #ff2079;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.75;
+  }
+  #sfx-toggle:hover { opacity: 1; }
+  #sfx-tester {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(8, 2, 20, 0.96);
+    z-index: 320;
+    display: none;
+    flex-direction: column;
+    font-family: 'Courier New', monospace;
+    color: #0ff0fc;
+  }
+  #sfx-tester.active { display: flex; }
+  #sfx-tester-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #15081f;
+    border-bottom: 1px solid #ff2079;
+  }
+  #sfx-tester-toolbar h2 {
+    margin: 0;
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: #ff2079;
+  }
+  #sfx-tester-toolbar button {
+    background: rgba(255,32,121,0.12);
+    color: #ff2079;
+    border: 1px solid #ff2079;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  #sfx-tester-toolbar button:hover { background: rgba(255,32,121,0.28); }
+  #sfx-tester-hint {
+    font-size: 11px;
+    color: rgba(15,240,252,0.7);
+    flex: 1;
+    min-width: 200px;
+  }
+  #sfx-tester-list {
+    flex: 1;
+    overflow: auto;
+    padding: 12px 16px 28px;
+  }
+  .sfx-section-title {
+    margin: 18px 0 8px;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: #ffd23f;
+    border-bottom: 1px solid rgba(255,210,63,0.35);
+    padding-bottom: 4px;
+  }
+  .sfx-section-title:first-child { margin-top: 0; }
+  .sfx-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 6px;
+  }
+  .sfx-glow-row {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    grid-column: 1 / -1;
+    max-width: 520px;
+  }
+  .sfx-glow-row .sfx-btn { flex: 1; }
+  .sfx-glow-arrow {
+    width: 36px;
+    flex-shrink: 0;
+    background: rgba(15,240,252,0.08);
+    color: #0ff0fc;
+    border: 1px solid rgba(15,240,252,0.45);
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .sfx-glow-arrow:hover { background: rgba(15,240,252,0.2); }
+  .sfx-btn {
+    text-align: left;
+    background: rgba(15,240,252,0.06);
+    color: #0ff0fc;
+    border: 1px solid rgba(15,240,252,0.45);
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .sfx-btn:hover { background: rgba(15,240,252,0.16); }
+  .sfx-btn.playing {
+    border-color: #ff2079;
+    color: #ff2079;
+    background: rgba(255,32,121,0.15);
+  }
+  .sfx-btn .sfx-kind {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 1px;
+    opacity: 0.55;
+    margin-top: 3px;
+  }
+  #preview-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #0a0714;
+    z-index: 300;
+    display: none;
+    flex-direction: column;
+    font-family: 'Courier New', monospace;
+    color: #9d7bff;
+  }
+  #preview-overlay.active { display: flex; }
+  #preview-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #150f28;
+    border-bottom: 1px solid #9d7bff;
+  }
+  #preview-toolbar button, .preview-zone-btn {
+    background: rgba(157,123,255,0.08);
+    color: #9d7bff;
+    border: 1px solid #9d7bff;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  #preview-toolbar button:hover, .preview-zone-btn:hover {
+    background: rgba(157,123,255,0.2);
+  }
+  .preview-zone-btn.active {
+    background: #9d7bff;
+    color: #150f28;
+    font-weight: bold;
+  }
+  .preview-label {
+    font-size: 11px;
+    color: rgba(157,123,255,0.7);
+  }
+  #preview-toolbar input[type="number"] {
+    background: rgba(157,123,255,0.08);
+    color: #9d7bff;
+    border: 1px solid #9d7bff;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 5px 6px;
+    border-radius: 4px;
+    width: 64px;
+  }
+  #preview-toolbar input[type="number"]:focus {
+    outline: none;
+    background: rgba(157,123,255,0.2);
+  }
+  #preview-status {
+    font-size: 11px;
+    color: #ffcc33;
+    min-width: 140px;
+  }
+  #preview-canvas-wrap {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+  }
+  #previewCanvas {
+    display: block;
+    height: 100%;
+  }
+  #preview-hint {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: rgba(157,123,255,0.6);
+    background: #150f28;
+    border-top: 1px solid rgba(157,123,255,0.3);
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+  <div id="overlay" class="home-layout">
+    <div class="game-logo-plate home-title-plate">
+      <div class="game-logo home-title">SYNTH FLIGHT</div>
+    </div>
+    <div id="menu-start-prompt" class="clickable" data-action="go-to-options">CLICK TO START</div>
+  </div>
+</div>
+<div id="rotate-overlay">
+  <div id="rotate-icon">📱</div>
+  <p>Rotate your device to landscape to play</p>
+</div>
+<button id="pause-toggle" title="Pause (Esc)">II</button>
+<button id="dev-toggle">DEV</button>
+<div id="dev-panel">
+  <div class="dev-label">JUMP TO ZONE (or press 1-4)</div>
+  <div class="dev-label" style="color:#ff2079; margin-top:6px;">
+    Flame speed: <span id="fireball-speed-value">1.6</span>x
+    <input type="range" id="fireball-speed-slider" min="0.5" max="4" step="0.1" value="1.6" style="width:100%; margin-top:2px;">
+  </div>
+  <div class="dev-label" id="dev-status" style="color:#0ff0fc;"></div>
+</div>
+<button id="editor-toggle">EDIT ZONE 4</button>
+<div id="editor-overlay">
+  <div id="editor-toolbar">
+    <button id="tool-top" class="tool-active">Draw Top Wall</button>
+    <button id="tool-bottom">Draw Bottom Wall</button>
+    <button id="editor-clear">Reset Flat</button>
+    <button id="editor-save">Save</button>
+    <button id="editor-toggle-custom">Using: Custom</button>
+    <button id="editor-test">Test Level ▶</button>
+    <div class="editor-spacer"></div>
+    <span id="editor-status"></span>
+    <button id="editor-close">✕ Close</button>
+  </div>
+  <div id="editor-canvas-wrap">
+    <canvas id="editorCanvas"></canvas>
+  </div>
+  <div id="editor-hint">Click-drag on the canvas to draw. Scroll/drag the ruler to pan. Level loops every 3200px (dashed line = loop point).</div>
+</div>
+<button id="preview-toggle">PREVIEW ZONE</button>
+<div id="preview-overlay">
+  <div id="preview-toolbar">
+    <span class="preview-label">ZONE:</span>
+    <button class="preview-zone-btn" data-zone="0">1</button>
+    <button class="preview-zone-btn" data-zone="1">2</button>
+    <button class="preview-zone-btn" data-zone="2">3</button>
+    <button class="preview-zone-btn" data-zone="3">4</button>
+    <button class="preview-zone-btn" data-zone="4">5</button>
+    <button class="preview-zone-btn" data-zone="5">6</button>
+    <button class="preview-zone-btn" data-zone="6">7</button>
+    <button class="preview-zone-btn" data-zone="7">8</button>
+    <button class="preview-zone-btn" data-zone="8">9</button>
+    <button class="preview-zone-btn" data-zone="9">10</button>
+    <button class="preview-zone-btn" data-zone="10">11</button>
+    <button class="preview-zone-btn" data-zone="11">12</button>
+    <div class="editor-spacer"></div>
+    <button id="preview-edit-toggle">Edit Mode: Off</button>
+    <button id="preview-bolt-shape" style="display:none;">Shape: E1</button>
+    <button id="preview-bolt-delete" style="display:none;">Delete bolt</button>
+    <button id="preview-bolt-add" style="display:none;">Add bolt</button>
+    <button id="preview-bh-delete" style="display:none;">Delete hole</button>
+    <button id="preview-bh-add" style="display:none;">Add black hole</button>
+    <span id="preview-bh-size-controls" style="display:none; align-items:center; gap:6px;">
+      <span class="preview-label">Core R:</span>
+      <input type="number" id="preview-bh-core-input" min="20" max="400" step="5">
+      <span class="preview-label">Reach R:</span>
+      <input type="number" id="preview-bh-reach-input" min="20" max="800" step="5">
+    </span>
+    <button id="preview-vortex-delete" style="display:none;">Delete vortex</button>
+    <button id="preview-vortex-add" style="display:none;">Add wind vortex</button>
+    <span id="preview-vortex-size-controls" style="display:none; align-items:center; gap:6px;">
+      <span class="preview-label">Reach R:</span>
+      <input type="number" id="preview-vortex-reach-input" min="60" max="500" step="10">
+    </span>
+    <button id="preview-arc-delete" style="display:none;">Delete arc</button>
+    <button id="preview-arc-add" style="display:none;">Add cloud arc</button>
+    <button id="preview-lens-delete" style="display:none;">Delete lens</button>
+    <button id="preview-lens-add" style="display:none;">Add lensing zone</button>
+    <span id="preview-lens-size-controls" style="display:none; align-items:center; gap:6px;">
+      <span class="preview-label">Core R:</span>
+      <input type="number" id="preview-lens-core-input" min="4" max="60" step="1">
+      <span class="preview-label">Zone R:</span>
+      <input type="number" id="preview-lens-zone-input" min="20" max="300" step="5">
+    </span>
+    <button id="preview-nova-delete" style="display:none;">Delete nova</button>
+    <button id="preview-nova-add" style="display:none;">Add supernova</button>
+    <span id="preview-nova-size-controls" style="display:none; align-items:center; gap:6px;">
+      <span class="preview-label">Planet R:</span>
+      <input type="number" id="preview-nova-planet-input" min="40" max="300" step="5">
+      <span id="preview-nova-dormant-wrap" style="display:inline-flex; align-items:center; gap:6px;">
+        <span class="preview-label">Dormant:</span>
+        <input type="number" id="preview-nova-dormant-input" min="30" max="600" step="10">
+      </span>
+      <span class="preview-label">Warning:</span>
+      <input type="number" id="preview-nova-warning-input" min="20" max="300" step="10">
+      <button id="preview-nova-variant">Variant: Timer</button>
+    </span>
+    <button id="preview-turret-delete" style="display:none;">Delete turret</button>
+    <button id="preview-turret-add" style="display:none;">Add turret</button>
+    <span id="preview-turret-controls" style="display:none; align-items:center; gap:6px;">
+      <button id="preview-turret-anchor">Anchor: Top</button>
+      <span class="preview-label">Angle°:</span>
+      <input type="number" id="preview-turret-angle-input" min="-80" max="80" step="5">
+      <span class="preview-label">Shots:</span>
+      <input type="number" id="preview-turret-shots-input" min="1" max="10" step="1">
+      <span class="preview-label">Interval:</span>
+      <input type="number" id="preview-turret-interval-input" min="20" max="300" step="10">
+    </span>
+    <button id="preview-emp-delete" style="display:none;">Delete EMP</button>
+    <button id="preview-emp-add" style="display:none;">Add EMP</button>
+    <span id="preview-emp-controls" style="display:none; align-items:center; gap:6px;">
+      <button id="preview-emp-anchor">Anchor: Top</button>
+      <span class="preview-label">Reach:</span>
+      <input type="number" id="preview-emp-reach-input" min="100" max="450" step="10">
+      <span class="preview-label">Charge:</span>
+      <input type="number" id="preview-emp-charge-input" min="60" max="400" step="10">
+      <span class="preview-label">Discharge:</span>
+      <input type="number" id="preview-emp-discharge-input" min="15" max="120" step="5">
+    </span>
+    <button id="preview-orb-delete" style="display:none;">Delete orb</button>
+    <button id="preview-orb-add" style="display:none;">Add orb</button>
+    <span id="preview-orb-controls" style="display:none; align-items:center; gap:6px;">
+      <span class="preview-label">Min R:</span>
+      <input type="number" id="preview-orb-minr-input" min="15" max="150" step="5">
+      <span class="preview-label">Max R:</span>
+      <input type="number" id="preview-orb-maxr-input" min="60" max="250" step="10">
+      <span class="preview-label">Period:</span>
+      <input type="number" id="preview-orb-period-input" min="100" max="600" step="10">
+    </span>
+    <button id="preview-save">Save</button>
+    <button id="preview-reset">Reset to default</button>
+    <span id="preview-status"></span>
+    <button id="preview-close">✕ Close</button>
+  </div>
+  <div id="preview-canvas-wrap">
+    <canvas id="previewCanvas"></canvas>
+  </div>
+  <div id="preview-hint">Shaded bands show the full range an obstacle can occupy (including oscillation). In Edit Mode: drag a bolt to move it, drag its corner handle to resize, click Shape to cycle its silhouette.</div>
+</div>
+
+<button id="sfx-toggle">SOUND TEST</button>
+<div id="sfx-tester">
+  <div id="sfx-tester-toolbar">
+    <h2>SOUND TESTER</h2>
+    <button type="button" id="sfx-tester-stop">Stop all</button>
+    <span id="sfx-tester-hint">Click a cue to play it. Loops toggle on/off. SFX are SNES / Mega Man X-style; stage music is still space pads. Not all cues are wired into gameplay yet.</span>
+    <button type="button" id="sfx-tester-close">✕ Close</button>
+  </div>
+  <div id="sfx-tester-list"></div>
+</div>
+
+<script>
+window.SHIPPED_CUSTOM_LEVELS = {
+  "_version": "snes229",
+  "bolt-patterns-custom": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    [
+      {
+        "spacing": 500,
+        "bolts": []
+      },
+      {
+        "spacing": 260,
+        "bolts": [
+          {
+            "xJitter": -259,
+            "yFrac": 0.5192765812287534,
+            "heightFrac": 0.5490066225165562,
+            "swingWidthPx": 97,
+            "shape": "E1",
+            "onFrames": 70,
+            "offFrames": 95,
+            "phaseFrac": 0.6
+          }
+        ]
+      },
+      {
+        "spacing": 260,
+        "bolts": [
+          {
+            "heightFrac": 0.38609271523178806,
+            "swingWidthPx": 145,
+            "shape": "E1",
+            "onFrames": 70,
+            "offFrames": 90,
+            "phaseFrac": 0.3,
+            "xJitter": 5871,
+            "yFrac": 0.2748344370860926
+          }
+        ]
+      },
+      {
+        "spacing": 520,
+        "bolts": [
+          {
+            "xJitter": 377,
+            "yFrac": 0.8332302118499523,
+            "heightFrac": 0.21754966887417218,
+            "swingWidthPx": 172,
+            "shape": "E6",
+            "onFrames": 90,
+            "offFrames": 65,
+            "phaseFrac": 0.5
+          },
+          {
+            "heightFrac": 0.3,
+            "swingWidthPx": 36,
+            "shape": "E1",
+            "onFrames": 70,
+            "offFrames": 90,
+            "phaseFrac": 0.3,
+            "xJitter": 1137,
+            "yFrac": 0.8484619999294225
+          },
+          {
+            "heightFrac": 0.3,
+            "swingWidthPx": 36,
+            "shape": "E1",
+            "onFrames": 70,
+            "offFrames": 90,
+            "phaseFrac": 0.3,
+            "xJitter": 1266,
+            "yFrac": 0.17627656946584638
+          }
+        ]
+      },
+      {
+        "spacing": 510,
+        "bolts": [
+          {
+            "xJitter": -672,
+            "yFrac": 0.7157545316598637,
+            "heightFrac": 0.4632450331125828,
+            "swingWidthPx": 93,
+            "shape": "E1",
+            "onFrames": 80,
+            "offFrames": 80,
+            "phaseFrac": 0.9
+          }
+        ]
+      },
+      {
+        "spacing": 520,
+        "bolts": [
+          {
+            "xJitter": -1365,
+            "yFrac": 0.2048463176220107,
+            "heightFrac": 0.39284768211920534,
+            "swingWidthPx": 97,
+            "shape": "E1",
+            "onFrames": 70,
+            "offFrames": 100,
+            "phaseFrac": 0.05
+          }
+        ]
+      }
+    ],
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "blackhole-events-custom": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    [
+      {
+        "triggerDistance": 123.33333333333331,
+        "yFrac": 0.2899531637527301,
+        "coreR": 325,
+        "reachR": 510
+      },
+      {
+        "triggerDistance": 380,
+        "yFrac": 0.94,
+        "coreR": 355,
+        "reachR": 615
+      },
+      {
+        "triggerDistance": 591.2,
+        "yFrac": 0.48410596026490066,
+        "coreR": 195,
+        "reachR": 320
+      },
+      {
+        "triggerDistance": 743.7333333333332,
+        "yFrac": 0.12980132450331128,
+        "coreR": 400,
+        "reachR": 660
+      },
+      {
+        "triggerDistance": 269.0666666666667,
+        "yFrac": 0.6909676266207777,
+        "coreR": 200,
+        "reachR": 335
+      }
+    ],
+    null,
+    null
+  ],
+  "windvortex-events-custom": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    [
+      {
+        "triggerDistance": 53.333333333333336,
+        "yFrac": 0.4400662251655629,
+        "reachR": 210
+      },
+      {
+        "triggerDistance": 480,
+        "yFrac": 0.65,
+        "reachR": 220
+      },
+      {
+        "triggerDistance": 750,
+        "yFrac": 0.5,
+        "reachR": 230
+      },
+      {
+        "triggerDistance": 306.5333333333333,
+        "yFrac": 0.4178807947019868,
+        "reachR": 220
+      }
+    ],
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "cloudarc-events-custom": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    [
+      {
+        "triggerDistance": 67.06666666666666,
+        "y1Frac": 0.19880794701986754,
+        "y2Frac": 0.6124503311258278,
+        "spanPx": 342.66666666666674,
+        "onFrames": 70,
+        "offFrames": 90,
+        "phaseFrac": 0.3
+      },
+      {
+        "triggerDistance": 619.2000000000002,
+        "y1Frac": 0.7460264900662251,
+        "y2Frac": 0.2271523178807947,
+        "spanPx": 225.33333333333334,
+        "onFrames": 65,
+        "offFrames": 95,
+        "phaseFrac": 0.6
+      },
+      {
+        "triggerDistance": 900,
+        "y1Frac": 0.3,
+        "y2Frac": 0.7,
+        "spanPx": 550,
+        "onFrames": 70,
+        "offFrames": 90,
+        "phaseFrac": 0.2
+      },
+      {
+        "triggerDistance": 900,
+        "y1Frac": 0.3,
+        "y2Frac": 0.7,
+        "spanPx": 550,
+        "onFrames": 70,
+        "offFrames": 90,
+        "phaseFrac": 0.2
+      },
+      {
+        "triggerDistance": 900,
+        "y1Frac": 0.3,
+        "y2Frac": 0.7,
+        "spanPx": 550,
+        "onFrames": 70,
+        "offFrames": 90,
+        "phaseFrac": 0.2
+      },
+      {
+        "triggerDistance": 321.2666666666667,
+        "y1Frac": 0.2549668874172185,
+        "y2Frac": 0.7,
+        "spanPx": 352.6666666666665,
+        "onFrames": 70,
+        "offFrames": 90,
+        "phaseFrac": 0.2
+      }
+    ],
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "lensingzone-events-custom": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    [
+      {
+        "triggerDistance": 218.8,
+        "yFrac": 0.4572755702722591,
+        "zoneRadius": 120,
+        "coreR": 12
+      },
+      {
+        "triggerDistance": 508,
+        "yFrac": 0.6641059602649008,
+        "zoneRadius": 155,
+        "coreR": 52
+      },
+      {
+        "triggerDistance": 711.4666666666667,
+        "yFrac": 0.3735099337748345,
+        "zoneRadius": 125,
+        "coreR": 12
+      },
+      {
+        "triggerDistance": 388.1333333333333,
+        "yFrac": 0.204635761589404,
+        "coreR": 12,
+        "zoneRadius": 120
+      }
+    ],
+    null,
+    null
+  ],
+  "supernova-events-custom": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    [
+      {
+        "triggerDistance": 350,
+        "yFrac": 0.25,
+        "planetR": 140,
+        "variant": "timer",
+        "dormantFrames": 220,
+        "warningFrames": 100
+      },
+      {
+        "triggerDistance": 680,
+        "yFrac": 0.7,
+        "planetR": 150,
+        "variant": "timer",
+        "dormantFrames": 100,
+        "warningFrames": 110
+      },
+      {
+        "triggerDistance": 525.1333333333333,
+        "yFrac": 0.2708609271523179,
+        "planetR": 140,
+        "variant": "timer",
+        "dormantFrames": 200,
+        "warningFrames": 100
+      },
+      {
+        "triggerDistance": 841,
+        "yFrac": 0.8245033112582784,
+        "planetR": 140,
+        "variant": "timer",
+        "dormantFrames": 150,
+        "warningFrames": 100
+      },
+      {
+        "triggerDistance": 243.13333333333333,
+        "yFrac": 0.4622792528165098,
+        "planetR": 260,
+        "variant": "timer",
+        "dormantFrames": 100,
+        "warningFrames": 100
+      },
+      {
+        "triggerDistance": 755.8666666666668,
+        "yFrac": 0.5317880794701988,
+        "planetR": 140,
+        "variant": "timer",
+        "dormantFrames": 130,
+        "warningFrames": 100
+      },
+      {
+        "triggerDistance": 431.3333333333333,
+        "yFrac": 0.34105960264900664,
+        "planetR": 280,
+        "variant": "timer",
+        "dormantFrames": 80,
+        "warningFrames": 100
+      }
+    ],
+    null,
+    null
+  ],
+  "turret-events-custom": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    [
+      {
+        "triggerDistance": 142.4,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 60,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 620,
+        "anchor": "bottom",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": -35,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 20,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 50,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 42.199999999999996,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 70,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 64.46666666666668,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 50,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 342.33333333333337,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 55,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 728,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 50,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 179.86666666666665,
+        "anchor": "bottom",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": -45,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 317.73333333333335,
+        "anchor": "bottom",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": -40,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 444.4,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 45,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 431.46666666666664,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 80,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 493.2,
+        "anchor": "bottom",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": -45,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 447.4666666666668,
+        "anchor": "bottom",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": -75,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 538,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 80,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 585.3333333333334,
+        "anchor": "top",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": 70,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      },
+      {
+        "triggerDistance": 650.8,
+        "anchor": "bottom",
+        "mountOffset": 70,
+        "numShots": 7,
+        "fireInterval": 80,
+        "fireAngleDeg": -70,
+        "projectileSpeed": 6.5,
+        "projectileR": 10
+      }
+    ],
+    null
+  ],
+  "emp-events-custom": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    [
+      {
+        "triggerDistance": 469.2,
+        "anchor": "top",
+        "reachDepth": 300,
+        "chargeFrames": 250,
+        "dischargeFrames": 45
+      },
+      {
+        "triggerDistance": 780,
+        "anchor": "bottom",
+        "reachDepth": 300,
+        "chargeFrames": 250,
+        "dischargeFrames": 45
+      },
+      {
+        "triggerDistance": 469.93333333333334,
+        "anchor": "bottom",
+        "reachDepth": 300,
+        "chargeFrames": 250,
+        "dischargeFrames": 45
+      },
+      {
+        "triggerDistance": 556.8666666666667,
+        "anchor": "top",
+        "reachDepth": 450,
+        "chargeFrames": 250,
+        "dischargeFrames": 45
+      }
+    ],
+    null
+  ],
+  "orb-events-custom": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    [
+      {
+        "triggerDistance": 200,
+        "minR": 40,
+        "maxR": 200,
+        "period": 350
+      },
+      {
+        "triggerDistance": 750,
+        "minR": 40,
+        "maxR": 200,
+        "period": 350
+      }
+    ],
+    null
+  ]
+};
+
+</script>
+<script>
+(function () {
+  var overlay = document.getElementById('overlay');
+  if (!overlay) return;
+  overlay.addEventListener('pointerup', function () {
+    if (window.SYNTH_FLIGHT_BOOTED) return;
+    var prompt = document.getElementById('menu-start-prompt');
+    if (prompt) prompt.textContent = 'STILL LOADING GAME…';
+  });
+})();
+</script>
+<!-- GAME_PARTS -->
+<script>
 window.SYNTH_FLIGHT_JS_STARTED = true;
 const canvas = document.getElementById('gameCanvas');
 let ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
@@ -2158,6 +4822,9 @@ function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
     ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
 }
 
+
+</script>
+<script>
 function rectIntersectsPolygon(left, top, right, bottom, poly) {
   const corners = [[left, top], [right, top], [right, bottom], [left, bottom]];
   for (const [cx, cy] of corners) {
@@ -5693,6 +8360,9 @@ function updateReactorCoreBoss() {
   }
 }
 
+
+</script>
+<script>
 function update() {
   noteFrameTime();
   syncGlowDangerSound();
@@ -8425,6 +11095,9 @@ function playNesDutyPulse({ when, duration, freq, freqEnd, vol, duty = 0.5 }) {
   src.stop(when + duration + 0.01);
 }
 
+
+</script>
+<script>
 function playNesApuNoise({ when, duration, period, periodEnd, vol }) {
   if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
   const cpu = 1789773;
@@ -11465,6 +14138,9 @@ function stopMoltenFlameWallSound() {
   });
 }
 
+
+</script>
+<script>
 function syncMoltenFlameWallSound() {
   if (typeof previewLoopId === 'string' && previewLoopId === 'coreFlame') return;
   const th = currentTheme();
@@ -14120,6 +16796,9 @@ function drawBossCracks(bx, by, r, framesSincePhase4) {
 // 3D shading, factored out so the phase 5 transformation can render
 // an exact match before morphing, instead of a simplified stand-in
 // that visibly pops the moment the sequence begins
+
+</script>
+<script>
 function drawBossStandardSphere(bx, by, r, effAccentA, effAccentB, effSkyTop) {
   ctx.save();
   const grad = ctx.createLinearGradient(0, by - r, 0, by + r);
@@ -17352,6 +20031,9 @@ function drawEmp(g, theme) {
   ctx.restore();
 }
 
+
+</script>
+<script>
 function drawSignalCorruption(g, theme) {
   ctx.save();
 
@@ -20996,6 +23678,9 @@ devToggle.addEventListener('click', () => {
   devPanel.classList.toggle('active');
 });
 
+
+</script>
+<script>
 function devStatus(msg) {
   const el = document.getElementById('dev-status');
   if (el) el.textContent = msg;
@@ -24413,6 +27098,9 @@ window.addEventListener('mouseup', () => {
   previewDragStart = null;
 });
 
+
+</script>
+<script>
 function runPreview(themeIdx) {
   setPreviewStatus('Simulating...');
   document.querySelectorAll('.preview-zone-btn').forEach(b => {
@@ -24571,3 +27259,8 @@ try {
   overlay.innerHTML = '<div id="subtitle" style="max-width:640px; font-size:14px; color:#ff2079; pointer-events:auto;">Startup error: ' + String(e && e.stack ? e.stack : e) + '</div>';
 }
 
+
+</script>
+<!-- /GAME_PARTS -->
+</body>
+</html>
