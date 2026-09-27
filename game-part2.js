@@ -1,3 +1,72 @@
+function barrierIsActive(g) {
+  const t = (frame - zoneStartFrame + g.phaseOffset) % g.cycleLength;
+  return t < g.onFrames;
+}
+
+// how many frames remain until this barrier's next state change (for the
+// pre-activation warning flicker in the renderer)
+function barrierFramesToToggle(g) {
+  const t = (frame - zoneStartFrame + g.phaseOffset) % g.cycleLength;
+  return t < g.onFrames ? (g.onFrames - t) : (g.cycleLength - t);
+}
+
+function spawnHBarCluster(x) {
+  const th = currentTheme();
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+
+  const entry = th.pattern[patternIndex % th.pattern.length];
+  patternIndex++;
+
+  for (const b of entry.bars) {
+    gates.push({
+      type: 'hbar',
+      x: x + (b.xOffsetPx || 0),
+      baseCenter: PLAY_TOP + b.yFrac * playHeight,
+      amplitude: b.ampFrac * playHeight,
+      freq: b.freq,
+      phase: b.phase,
+      width: b.widthPx,
+      thickness: b.thicknessPx,
+      passed: false
+    });
+  }
+  return entry.spacing;
+}
+
+// hand-picked bolt silhouettes (normalized: x as fraction of swingWidth/2,
+// y as fraction of height from top), each a distinct filled icon shape
+const BOLT_SHAPES = {
+  E1: [[0.55, 0], [-0.45, 0.425], [0.2, 0.425], [-0.625, 1], [0.875, 0.45], [0.075, 0.45]],
+  E3: [[0.8, 0], [-0.75, 0.45], [0.25, 0.45], [-0.875, 1], [1.125, 0.5], [0.2, 0.5]],
+  E4: [[0.5, 0.15], [-0.45, 0.45], [0.15, 0.45], [-0.55, 0.85], [0.8, 0.525], [0.05, 0.525]],
+  E5: [[0.3, 0], [-0.35, 0.55], [0.125, 0.55], [-0.4, 1], [0.55, 0.6], [0.05, 0.6]],
+  E6: [[0.2, 0], [-0.2, 0.45], [0.075, 0.45], [-0.25, 1], [0.35, 0.475], [0.025, 0.475]]
+};
+
+// accurate polygon-vs-rectangle collision, used so hitboxes match the
+// visible jagged bolt silhouette instead of its full bounding box (which
+// is much wider than thin shapes like E5/E6 actually render)
+function pointInPolygon(px, py, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    const intersect = ((yi > py) !== (yj > py)) &&
+      (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
+  const d1 = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx);
+  const d2 = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx);
+  const d3 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+  const d4 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
 function rectIntersectsPolygon(left, top, right, bottom, poly) {
   const corners = [[left, top], [right, top], [right, bottom], [left, bottom]];
   for (const [cx, cy] of corners) {
@@ -1620,9 +1689,19 @@ function spawnExtraGeyser() {
   const entry = th.extraGeyserPattern[extraGeyserPatternIndex % th.extraGeyserPattern.length];
   extraGeyserPatternIndex++;
 
+  let spawnX = W + 50;
+  const zoneDist = distance - zoneStartDistance;
+  const nudges = th.extraGeyserNudges || [];
+  for (let i = 0; i < nudges.length; i++) {
+    const n = nudges[i];
+    if (n.pivotSide && n.pivotSide !== entry.pivotSide) continue;
+    if (zoneDist < (n.minDistance || 0) || zoneDist > (n.maxDistance == null ? 1e9 : n.maxDistance)) continue;
+    spawnX += n.xOffsetPx || 0;
+  }
+
   gates.push({
     type: 'geyser',
-    x: W + 50,
+    x: spawnX,
     spawnFrame: frame,
     pivotSide: entry.pivotSide,
     lowHeight: entry.lowHeightPx,
@@ -1804,6 +1883,7 @@ function spawnKeyAndDoor(eventIndex) {
   // can end up sitting on this exact spot before the key ever exists to
   // check against
   gates = gates.filter(g => {
+    if (g.type === 'movingdoor' && (Math.abs(g.x - keyX) < 90 || Math.abs(g.x - doorX) < 90)) return false;
     if (g.type !== 'wreckage') return true;
     const distToKey = Math.hypot(g.x - keyX, g.y - keyY);
     if (distToKey < g.r + keyR + 20) return false;
@@ -1879,14 +1959,23 @@ function spawnAcidDrip(x) {
   const entry = th.pattern[patternIndex % th.pattern.length];
   patternIndex++;
 
-  // fall speed is derived from how far this drip actually needs to travel
-  // to reach the ship, not a fixed value -- this guarantees it's still
-  // genuinely mid-fall (not already culled) by the time it arrives,
-  // regardless of exactly where along the spacing chain it happened to spawn
+  let fallFrac = entry.targetFallFrac;
+  const zoneDist = distance - zoneStartDistance;
+  const atShipDist = zoneDist + Math.max(0, x - ship.x) * 0.1;
+  const dripNudges = th.acidDripNudges || [];
+  for (let i = 0; i < dripNudges.length; i++) {
+    const n = dripNudges[i];
+    const d0 = n.minAtShipDistance != null ? n.minAtShipDistance : (n.minDistance || 0);
+    const d1 = n.maxAtShipDistance != null ? n.maxAtShipDistance : (n.maxDistance == null ? 1e9 : n.maxDistance);
+    const dist = (n.minAtShipDistance != null || n.maxAtShipDistance != null) ? atShipDist : zoneDist;
+    if (dist < d0 || dist > d1) continue;
+    if (n.targetFallFrac != null) fallFrac = n.targetFallFrac;
+  }
+
   const effScroll = SCROLL_SPEED * (th.scrollMult || 1);
   const distanceToShip = Math.max(100, x - ship.x);
   const framesToReachShip = distanceToShip / effScroll;
-  const fallSpeed = (playHeight * entry.targetFallFrac) / framesToReachShip;
+  const fallSpeed = (playHeight * fallFrac) / framesToReachShip;
 
   gates.push({
     type: 'aciddrip',
@@ -1979,6 +2068,7 @@ function initTerrain() {
   terrainWaypointSegLeft = 0;
   terrainWaypointGapTarget = null;
   terrainWaypointIslandTarget = 0;
+  terrainMeanderIndex = 0;
   for (let x = -spacing; x <= W + spacing; x += spacing) {
     terrainSegments.push({ x, topY: startTop, bottomY: startBottom, islandTop: startCenter, islandBottom: startCenter });
     terrainSegmentsSinceEntry++;
@@ -2035,8 +2125,25 @@ function addTerrainSegment() {
     const maxDeltaPerSegment = Math.min(maxClimbSpeed, maxDiveSpeed) * framesPerSegment * safetyFactor;
 
     if (terrainWaypointSegLeft <= 0) {
-      const entry = th.pattern[patternIndex % th.pattern.length];
-      patternIndex++;
+      const upcoming = th.pattern[patternIndex % th.pattern.length];
+      const genDistance = (terrainLevelX + W) / 10;
+      let entry = upcoming;
+      let consumePattern = true;
+      if (upcoming.startDistance != null && genDistance < upcoming.startDistance) {
+        const meander = upcoming.meander || [
+          { centerFrac: 0.82 }, { centerFrac: 0.73 },
+          { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 },
+          { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 },
+          { centerFrac: 0.63 }
+        ];
+        entry = meander[terrainMeanderIndex % meander.length];
+        terrainMeanderIndex++;
+        consumePattern = false;
+      }
+      if (consumePattern) {
+        patternIndex++;
+        terrainMeanderIndex = 0;
+      }
 
       const gapMult = entry.gapMult !== undefined ? entry.gapMult : 1;
       const entryGap = baseGap * gapMult;
@@ -2044,19 +2151,18 @@ function addTerrainSegment() {
       const maxCenter = PLAY_BOTTOM - entryGap / 2 - margin;
       const rawTarget = PLAY_TOP + entry.centerFrac * playHeight;
       terrainWaypointTarget = Math.max(minCenter, Math.min(maxCenter, rawTarget));
-      terrainWaypointGapTarget = entryGap;
+      const outerPadPx = (entry.fork && entry.fork.outerPadPx) ? entry.fork.outerPadPx : 0;
+      terrainWaypointGapTarget = entryGap + outerPadPx * 2;
 
       if (entry.fork) {
-        // island thickness as a fraction of THIS waypoint's gap, capped so both
-        // resulting paths always keep a comfortable, independently-flyable width
         const islandFrac = Math.min(0.45, entry.fork.islandFrac || 0.3);
         terrainWaypointIslandTarget = Math.max(0, entryGap * islandFrac - SHIP_H * 2);
       } else {
         terrainWaypointIslandTarget = 0;
       }
 
-      const lastCenter = (last.topY + last.bottomY) / 2;
-      const fullDelta = Math.abs(terrainWaypointTarget - lastCenter);
+      const holdLastCenter = (last.topY + last.bottomY) / 2;
+      const fullDelta = Math.abs(terrainWaypointTarget - holdLastCenter);
       terrainWaypointSegLeft = Math.max(1, Math.ceil(fullDelta / Math.max(1, maxDeltaPerSegment)));
     }
 
@@ -2154,10 +2260,18 @@ function diamondGeometry(gate) {
 }
 
 function liveGateCenter(gate) {
-  const gap = liveGateGap(gate);
   const margin = 20;
-  const minCenter = PLAY_TOP + gap / 2 + margin;
-  const maxCenter = PLAY_BOTTOM - gap / 2 - margin;
+  let minCenter;
+  let maxCenter;
+  if (gate.type === 'hbar') {
+    const half = (gate.thickness || 18) / 2;
+    minCenter = PLAY_TOP + half + margin;
+    maxCenter = PLAY_BOTTOM - half - margin;
+  } else {
+    const gap = liveGateGap(gate);
+    minCenter = PLAY_TOP + gap / 2 + margin;
+    maxCenter = PLAY_BOTTOM - gap / 2 - margin;
+  }
   let c = gate.baseCenter + gate.amplitude * Math.sin((frame - zoneStartFrame) * gate.freq + gate.phase);
   return Math.max(minCenter, Math.min(maxCenter, c));
 }
@@ -2166,13 +2280,16 @@ function initBackgroundParticles(theme) {
   bgParticles = [];
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
   if (theme.bgStyle === 'matrix') {
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 64; i++) {
+      const tint = i % 3;
       bgParticles.push({
         x: Math.random() * W,
         y: PLAY_TOP + Math.random() * playHeight,
-        speed: 1.5 + Math.random() * 3.5,
-        len: 20 + Math.random() * 50,
-        alpha: 0.3 + Math.random() * 0.6
+        speed: 1.2 + Math.random() * 3.2,
+        len: 16 + Math.random() * 46,
+        alpha: 0.22 + Math.random() * 0.5,
+        drift: (Math.random() - 0.5) * 0.35,
+        tint
       });
     }
   } else if (theme.bgStyle === 'stars') {
@@ -2185,15 +2302,28 @@ function initBackgroundParticles(theme) {
         speed: 0.3 + Math.random() * 1.4
       });
     }
-  } else if (theme.bgStyle === 'embers') {
-    for (let i = 0; i < 60; i++) {
+    } else if (theme.bgStyle === 'embers') {
+    for (let i = 0; i < 16; i++) {
       bgParticles.push({
+        kind: 'rush',
         x: Math.random() * W,
         y: PLAY_TOP + Math.random() * playHeight,
-        r: 1 + Math.random() * 2.2,
-        alpha: 0.3 + Math.random() * 0.6,
-        speed: 0.4 + Math.random() * 1.2,
-        drift: (Math.random() - 0.5) * 0.6
+        speed: 7 + Math.random() * 10,
+        len: 28 + Math.random() * 70,
+        alpha: 0.08 + Math.random() * 0.16,
+        thick: 1 + Math.random() * 1.4
+      });
+    }
+    for (let i = 0; i < 18; i++) {
+      bgParticles.push({
+        kind: 'spark',
+        x: Math.random() * W,
+        y: PLAY_TOP + Math.random() * playHeight,
+        speed: 3.2 + Math.random() * 5.5,
+        lift: 0.15 + Math.random() * 0.55,
+        len: 10 + Math.random() * 22,
+        r: 0.7 + Math.random() * 1.6,
+        alpha: 0.28 + Math.random() * 0.45
       });
     }
   } else if (theme.bgStyle === 'ruins') {
@@ -2208,14 +2338,16 @@ function initBackgroundParticles(theme) {
       });
     }
   } else if (theme.bgStyle === 'toxic') {
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 36; i++) {
       bgParticles.push({
         x: Math.random() * W,
         y: PLAY_TOP + Math.random() * playHeight,
-        r: 1 + Math.random() * 2.5,
-        alpha: 0.2 + Math.random() * 0.35,
-        speed: 0.2 + Math.random() * 0.5,
-        drift: (Math.random() - 0.5) * 0.4
+        r: 1.2 + Math.random() * 2.4,
+        alpha: 0.12 + Math.random() * 0.18,
+        speed: 0.12 + Math.random() * 0.28,
+        drift: (Math.random() - 0.5) * 0.25,
+        wobble: Math.random() * Math.PI * 2,
+        stretch: 1.2 + Math.random() * 0.8
       });
     }
   } else if (theme.bgStyle === 'station') {
@@ -2522,6 +2654,8 @@ function resetGame() {
   distance = 0;
   frame = 0;
   holding = false;
+  pointerHolding = false;
+  keyHolding = false;
   stopLiftSound();
   stopGlowDangerSound();
   stopFireballBreathSound();
@@ -2641,7 +2775,7 @@ function startPress() {
 }
 
 function endPress() {
-  holding = false;
+  holding = pointerHolding || keyHolding;
 }
 
 // cycles the selected difficulty in either direction, skipping over the
@@ -2662,7 +2796,8 @@ function cycleDifficulty(direction) {
 function pauseGame() {
   if (state !== 'playing') return;
   state = 'paused';
-  holding = false; // don't carry a stale "still holding" into the pause screen
+  pointerHolding = false;
+  holding = keyHolding;
   stopLiftSound();
   stopGlowDangerSound();
   sfxPause();
@@ -2762,6 +2897,12 @@ function handleOverlayActivate(e) {
     else if (action === 'trail-next') cycleShipTrail(1);
     else if (action === 'skin-prev') cycleShipSkin(-1);
     else if (action === 'skin-next') cycleShipSkin(1);
+    else if (action === 'copy-save-id') copySaveIdToClipboard();
+    else if (action === 'export-save') exportPlayerSaveFile();
+    else if (action === 'import-save') {
+      const input = document.getElementById('player-save-import');
+      if (input) input.click();
+    } else if (action === 'restore-save-id') promptRestoreSaveId();
   } else if ((state === 'achievements' || state === 'zone-select' || state === 'statistics') && action === 'back-to-options') {
     state = 'options';
   } else if (state === 'statistics' && action === 'confirm-reset-stats') {
@@ -2803,7 +2944,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault();
     unlockAudio();
-    if (!e.repeat) startPress();
+    if (!e.repeat) {
+      keyHolding = true;
+      startPress();
+    }
   } else if (e.code === 'Escape' && !e.repeat) {
     if (state === 'playing') pauseGame();
     else if (state === 'paused') resumeGame();
@@ -2812,31 +2956,38 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault();
+    keyHolding = false;
     endPress();
   }
 });
-// canvas mouse/touch presses go through this wrapper rather than calling
-// startPress() directly -- the home->options transition is deliberately
-// excluded here (it only happens via the explicit "CLICK TO START" button
-// or keyboard) since letting it fire on mousedown/touchstart re-renders
-// the DOM to the Options screen mid-click, and the same press's release
-// can then land on a real Options button underneath the cursor
+// Pointer capture keeps Chrome from dropping the hold when the cursor
+// crosses the pause button, HUD, or window chrome (mouseleave used to
+// call endPress and the ship would just fall).
 function canvasStartPress() {
   unlockAudio();
   if (state === 'home') return;
   startPress();
 }
-canvas.addEventListener('mousedown', canvasStartPress);
-canvas.addEventListener('mouseup', endPress);
-canvas.addEventListener('mouseleave', endPress);
-canvas.addEventListener('touchstart', (e) => {
+function onCanvasPointerDown(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (state === 'home') return;
   e.preventDefault();
+  pointerHolding = true;
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* older engines */ }
   canvasStartPress();
-}, { passive: false });
-canvas.addEventListener('touchend', (e) => {
-  e.preventDefault();
+}
+function onCanvasPointerRelease(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  pointerHolding = false;
   endPress();
-}, { passive: false });
+}
+canvas.addEventListener('pointerdown', onCanvasPointerDown, { passive: false });
+canvas.addEventListener('pointerup', onCanvasPointerRelease);
+canvas.addEventListener('pointercancel', onCanvasPointerRelease);
+window.addEventListener('blur', () => {
+  pointerHolding = false;
+  if (!keyHolding) endPress();
+});
 
 const pauseToggleBtn = document.getElementById('pause-toggle');
 pauseToggleBtn.addEventListener('pointerup', () => {
@@ -2849,6 +3000,9 @@ function updateBackgroundParticles(theme) {
   if (theme.bgStyle === 'matrix') {
     for (let p of bgParticles) {
       p.y += p.speed;
+      p.x += p.drift || 0;
+      if (p.x < -8) p.x = W + 8;
+      if (p.x > W + 8) p.x = -8;
       if (p.y - p.len > PLAY_BOTTOM) {
         p.y = PLAY_TOP - p.len;
         p.x = Math.random() * W;
@@ -2863,13 +3017,15 @@ function updateBackgroundParticles(theme) {
       }
     }
   } else if (theme.bgStyle === 'embers') {
+    const rushBoost = 0.85 + 0.45 * (theme.scrollMult || 1);
     for (let p of bgParticles) {
-      p.y -= p.speed;
-      p.x += p.drift;
-      if (p.y < PLAY_TOP) {
-        p.y = PLAY_BOTTOM;
-        p.x = Math.random() * W;
+      p.x -= p.speed * rushBoost;
+      if (p.kind === 'spark') p.y -= p.lift || 0;
+      if (p.x < -p.len) {
+        p.x = W + 20 + Math.random() * 40;
+        p.y = PLAY_TOP + Math.random() * playHeight;
       }
+      if (p.kind === 'spark' && p.y < PLAY_TOP) p.y = PLAY_BOTTOM;
     }
   } else if (theme.bgStyle === 'ruins') {
     for (let p of bgParticles) {
@@ -2882,8 +3038,9 @@ function updateBackgroundParticles(theme) {
     }
   } else if (theme.bgStyle === 'toxic') {
     for (let p of bgParticles) {
+      p.wobble = (p.wobble || 0) + 0.02;
       p.y -= p.speed;
-      p.x += p.drift;
+      p.x += p.drift + Math.sin(p.wobble) * 0.12;
       if (p.y < PLAY_TOP) {
         p.y = PLAY_BOTTOM;
         p.x = Math.random() * W;
@@ -3058,6 +3215,15 @@ function updateCoreSparks(phaseStartFrame, targetCount, shipTop, shipBottom, shi
   }
 }
 
+function beginCoreBulkhead(moving) {
+  miniBossAttackState = 'coreBulkheadTelegraph';
+  coreBulkheadIsMoving = !!moving;
+  coreBulkheadX = ship.x + 150;
+  if (!moving) coreBulkheadGapCenter = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.5;
+  miniBossAttackStateStartFrame = frame;
+  sfxCoreBulkheadTelegraph();
+}
+
 function updateReactorCoreBoss() {
   if (coreBossDefeated) {
     if (!shipFlyOffActive && frame - coreBossDefeatFrame >= CORE_BOSS_DEFEAT_PAUSE) {
@@ -3078,9 +3244,14 @@ function updateReactorCoreBoss() {
   const shipTop = ship.y - SHIP_H / 2, shipBottom = ship.y + SHIP_H / 2;
   const shipR = SHIP_W * 0.4;
 
-  if (coreBossPhase === 6 && (miniBossAttackState === 'coreCrossfireTelegraph' ||
+  let sparkTarget = coreSparkSpawned;
+  if (miniBossAttackState === 'coreSparkDeploy') sparkTarget = CORE_SPARK_COUNT;
+  else if (coreBossPhase === 6 && (miniBossAttackState === 'coreCrossfireTelegraph' ||
       miniBossAttackState === 'coreCrossfireActive' || miniBossAttackState === 'coreCrossfireGap')) {
-    updateCoreSparks(coreSparkPhaseStartFrame, CORE_P6_SPARK_COUNT, shipTop, shipBottom, shipR);
+    sparkTarget = CORE_P6_SPARK_COUNT;
+  }
+  if (sparkTarget > 0 || coreSparks.length > 0) {
+    updateCoreSparks(coreSparkPhaseStartFrame, sparkTarget, shipTop, shipBottom, shipR);
   }
 
   if (miniBossAttackState === 'coreFloating') {
@@ -3101,6 +3272,11 @@ function updateReactorCoreBoss() {
         });
       }
       coreDeathDebris = [];
+      return;
+    }
+
+    if (coreBossPhase === 7) {
+      if (coreSparks.length === 0) beginCoreBulkhead(true);
       return;
     }
 
@@ -3210,7 +3386,6 @@ function updateReactorCoreBoss() {
       miniBossAttackStateStartFrame = frame;
     }
   } else if (miniBossAttackState === 'coreSparkDeploy') {
-    updateCoreSparks(coreSparkPhaseStartFrame, CORE_SPARK_COUNT, shipTop, shipBottom, shipR);
     // beam volleys, firing simultaneously alongside the weaving sparks
     if (coreP3BeamState === 'none' && coreP3BeamVolleysFired < CORE_P3_BEAM_TRIGGER_TIMES.length &&
         stateElapsed >= CORE_P3_BEAM_TRIGGER_TIMES[coreP3BeamVolleysFired]) {
@@ -3239,8 +3414,7 @@ function updateReactorCoreBoss() {
     if (coreSparkSpawned >= CORE_SPARK_COUNT && coreSparks.length === 0 &&
         coreP3BeamVolleysFired >= CORE_P3_BEAM_TRIGGER_TIMES.length && coreP3BeamState === 'none') {
       coreBossPhase = 4;
-      miniBossAttackState = 'coreFloating';
-      miniBossAttackStateStartFrame = frame;
+      beginCoreBulkhead(true);
     }
   } else if (miniBossAttackState === 'coreEmpTelegraph') {
     if (stateElapsed >= CORE_EMP_TELEGRAPH) {
@@ -3306,8 +3480,12 @@ function updateReactorCoreBoss() {
       coreCrossfireRound++;
       if (coreCrossfireRound >= CORE_CROSSFIRE_ROUNDS) {
         coreBossPhase = 7;
-        miniBossAttackState = 'coreFloating';
-        miniBossAttackStateStartFrame = frame;
+        if (coreSparks.length === 0) {
+          beginCoreBulkhead(true);
+        } else {
+          miniBossAttackState = 'coreFloating';
+          miniBossAttackStateStartFrame = frame;
+        }
       } else {
         miniBossAttackState = 'coreCrossfireGap';
         miniBossAttackStateStartFrame = frame;

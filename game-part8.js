@@ -433,13 +433,16 @@ devPanel.appendChild(exportTextarea);
 
 const fireballSpeedSlider = document.getElementById('fireball-speed-slider');
 const fireballSpeedValue = document.getElementById('fireball-speed-value');
-fireballSpeedSlider.addEventListener('input', () => {
-  fireballSpeedMult = parseFloat(fireballSpeedSlider.value);
-  fireballSpeedValue.textContent = fireballSpeedMult.toFixed(1);
-  devStatus('Flame speed set to ' + fireballSpeedMult.toFixed(1) + 'x world scroll.');
-});
+if (DEV_TOOLS_ENABLED && fireballSpeedSlider && fireballSpeedValue) {
+  fireballSpeedSlider.addEventListener('input', () => {
+    fireballSpeedMult = parseFloat(fireballSpeedSlider.value);
+    fireballSpeedValue.textContent = fireballSpeedMult.toFixed(1);
+    devStatus('Flame speed set to ' + fireballSpeedMult.toFixed(1) + 'x world scroll.');
+  });
+}
 
 window.addEventListener('keydown', (e) => {
+  if (!DEV_TOOLS_ENABLED) return;
   const num = parseInt(e.key, 10);
   if (num >= 1 && num <= THEMES.length) {
     devJumpToTheme(num - 1);
@@ -738,6 +741,7 @@ function simulateZonePreview(themeIdx, targetDistance) {
   terrainLevelX = 0;
   terrainWaypointTarget = null;
   terrainWaypointSegLeft = 0;
+  terrainMeanderIndex = 0;
   ship.x = 0;
   ship.y = (PLAY_TOP + PLAY_BOTTOM) / 2;
 

@@ -1,3 +1,346 @@
+function playChargeStatic({ duration = 2, size = 1, isSuperBeam = false } = {}) {
+  if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
+  stopMegaManCharge(0.02);
+  const now = audioCtx.currentTime;
+  const dur = Math.max(0.12, duration);
+  const s = Math.min(6, Math.max(1, size));
+  const vol = (0.07 + s * 0.024) * (isSuperBeam ? 1.2 : 1);
+
+  const master = audioCtx.createGain();
+  master.gain.setValueAtTime(1, now);
+  if (dur > 0.06) master.gain.setValueAtTime(1, now + dur - 0.05);
+  master.gain.linearRampToValueAtTime(0.0001, now + dur);
+  master.connect(sfxGain);
+
+  const nBuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+  const nData = nBuf.getChannelData(0);
+  for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = nBuf;
+  noise.loop = true;
+  const nFilt = audioCtx.createBiquadFilter();
+  nFilt.type = 'bandpass';
+  nFilt.Q.value = 1.4;
+  nFilt.frequency.setValueAtTime(380, now);
+  nFilt.frequency.exponentialRampToValueAtTime(isSuperBeam ? 2800 : 2200, now + dur);
+  const nGain = audioCtx.createGain();
+  nGain.gain.setValueAtTime(vol * 0.25, now);
+  nGain.gain.linearRampToValueAtTime(vol * 0.9, now + dur);
+  noise.connect(nFilt);
+  nFilt.connect(nGain);
+  nGain.connect(master);
+
+  const tone = audioCtx.createOscillator();
+  tone.type = 'sine';
+  tone.frequency.setValueAtTime(160, now);
+  tone.frequency.exponentialRampToValueAtTime(isSuperBeam ? 880 : 680, now + dur);
+  const tGain = audioCtx.createGain();
+  tGain.gain.setValueAtTime(vol * 0.2, now);
+  tGain.gain.linearRampToValueAtTime(vol * 0.65, now + dur);
+  tone.connect(tGain);
+  tGain.connect(master);
+
+  const stopAt = now + dur + 0.04;
+  noise.start(now);
+  tone.start(now);
+  noise.stop(stopAt);
+  tone.stop(stopAt);
+  megaManChargeCtl = { master, nodes: [noise, tone] };
+}
+
+function playChargeTelegraph(opts) {
+  const id = currentChargeTelegraphId();
+  if (id === 'sweep') playChargeSweep(opts);
+  else if (id === 'heartbeat') playChargeHeartbeat(opts);
+  else if (id === 'static') playChargeStatic(opts);
+  else playMegaManCharge(opts);
+}
+
+function playChargeWhine() {
+  playChargeTelegraph({ duration: framesToSeconds(CORE_LASER_TELEGRAPH), size: 1 });
+}
+
+function playChargeBeamFire({ size = 1, isSuperBeam = false, duration = 1.5 } = {}) {
+  if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
+  const now = audioCtx.currentTime;
+  const s = Math.min(6, Math.max(1, size));
+  const dur = Math.max(0.12, duration);
+  const peak = (0.34 + s * 0.08) * (isSuperBeam ? 1.5 : 1);
+
+  playNoiseBurst({ duration: 0.1, filterFreq: 3200, filterType: 'highpass', volume: peak * 0.55, when: now });
+  playSynth({
+    type: 'sine', freq: 90, freqEnd: 38, duration: 0.22,
+    attack: 0.002, decay: 0.05, sustain: 0.35, release: 0.08,
+    volume: peak * 0.7, filterFreq: 240, delaySend: 0, when: now,
+  });
+
+  const out = audioCtx.createGain();
+  out.gain.setValueAtTime(0.0001, now);
+  out.gain.linearRampToValueAtTime(1, now + 0.04);
+  out.gain.setValueAtTime(1, now + Math.max(0.12, dur - 0.28));
+  out.gain.linearRampToValueAtTime(0.0001, now + dur);
+  out.connect(sfxGain);
+
+  const nBuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+  const nData = nBuf.getChannelData(0);
+  for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = nBuf;
+  noise.loop = true;
+  const nFilt = audioCtx.createBiquadFilter();
+  nFilt.type = 'lowpass';
+  nFilt.Q.value = 0.6;
+  nFilt.frequency.setValueAtTime(1100 + s * 120, now);
+  nFilt.frequency.exponentialRampToValueAtTime(280, now + dur);
+  const nGain = audioCtx.createGain();
+  nGain.gain.value = peak;
+  noise.connect(nFilt);
+  nFilt.connect(nGain);
+  nGain.connect(out);
+
+  const hiss = audioCtx.createBufferSource();
+  hiss.buffer = nBuf;
+  hiss.loop = true;
+  const hFilt = audioCtx.createBiquadFilter();
+  hFilt.type = 'bandpass';
+  hFilt.frequency.value = 1800 + s * 200;
+  hFilt.Q.value = 1.1;
+  const hGain = audioCtx.createGain();
+  hGain.gain.value = peak * 0.28;
+  hiss.connect(hFilt);
+  hFilt.connect(hGain);
+  hGain.connect(out);
+
+  const saw = audioCtx.createOscillator();
+  saw.type = 'sawtooth';
+  saw.frequency.setValueAtTime(150 + s * 12, now);
+  saw.frequency.exponentialRampToValueAtTime(72, now + dur);
+  const sFilt = audioCtx.createBiquadFilter();
+  sFilt.type = 'lowpass';
+  sFilt.frequency.setValueAtTime(1400, now);
+  sFilt.frequency.exponentialRampToValueAtTime(420, now + dur);
+  const sGain = audioCtx.createGain();
+  sGain.gain.value = peak * 0.38;
+  saw.connect(sFilt);
+  sFilt.connect(sGain);
+  sGain.connect(out);
+
+  const sub = audioCtx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(52 + s * 4, now);
+  sub.frequency.exponentialRampToValueAtTime(26, now + dur);
+  const subGain = audioCtx.createGain();
+  subGain.gain.value = peak * 0.72;
+  sub.connect(subGain);
+  subGain.connect(out);
+
+  const stopAt = now + dur + 0.05;
+  noise.start(now);
+  hiss.start(now);
+  saw.start(now);
+  sub.start(now);
+  noise.stop(stopAt);
+  hiss.stop(stopAt);
+  saw.stop(stopAt);
+  sub.stop(stopAt);
+
+  if (isSuperBeam || s >= 3.5) {
+    const rumble = audioCtx.createOscillator();
+    rumble.type = 'sine';
+    rumble.frequency.setValueAtTime(32, now);
+    rumble.frequency.exponentialRampToValueAtTime(18, now + dur);
+    const rGain = audioCtx.createGain();
+    rGain.gain.value = peak * 0.45;
+    rumble.connect(rGain);
+    rGain.connect(out);
+    rumble.start(now);
+    rumble.stop(stopAt);
+  }
+}
+
+function playBeamFire() {
+  playChargeBeamFire({ size: 1 });
+}
+
+function sfxCoreCrossfireTelegraph() {
+  return;
+}
+
+function sfxCoreEyeBeamTrack() {
+  playLockOn();
+}
+
+function sfxCoreEyeBeamLock() {
+  playTrackingLockOn();
+}
+
+function sfxCoreEyeBeamFire() {
+  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
+  const now = audioCtx.currentTime;
+  const dur = Math.max(0.72, framesToSeconds(CORE_EYEBEAM_ACTIVE_DURATION) * 2.4);
+  const peak = 0.52;
+
+  playNoiseBurst({ duration: 0.09, filterFreq: 5500, filterType: 'highpass', volume: 0.32, delaySend: 0.08, when: now });
+  playNoiseBurst({ duration: 0.12, filterFreq: 1800, filterType: 'bandpass', filterQ: 1.2, volume: 0.22, delaySend: 0.06, when: now });
+  playSynth({
+    type: 'sine', freq: 160, freqEnd: 72, duration: 0.22,
+    attack: 0.002, decay: 0.05, sustain: 0.4, release: 0.08,
+    volume: 0.22, filterFreq: 420, delaySend: 0, when: now,
+  });
+
+  const out = audioCtx.createGain();
+  out.gain.setValueAtTime(0.0001, now);
+  out.gain.linearRampToValueAtTime(1, now + 0.018);
+  out.gain.setValueAtTime(1, now + Math.max(0.18, dur - 0.22));
+  out.gain.linearRampToValueAtTime(0.0001, now + dur);
+  out.connect(sfxGain);
+
+  const nBuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+  const nData = nBuf.getChannelData(0);
+  for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
+
+  const roar = audioCtx.createBufferSource();
+  roar.buffer = nBuf;
+  roar.loop = true;
+  const rFilt = audioCtx.createBiquadFilter();
+  rFilt.type = 'bandpass';
+  rFilt.frequency.setValueAtTime(2200, now);
+  rFilt.frequency.exponentialRampToValueAtTime(900, now + dur);
+  rFilt.Q.value = 0.9;
+  const rGain = audioCtx.createGain();
+  rGain.gain.value = peak * 0.42;
+  roar.connect(rFilt);
+  rFilt.connect(rGain);
+  rGain.connect(out);
+
+  const hiss = audioCtx.createBufferSource();
+  hiss.buffer = nBuf;
+  hiss.loop = true;
+  const hFilt = audioCtx.createBiquadFilter();
+  hFilt.type = 'highpass';
+  hFilt.frequency.setValueAtTime(4200, now);
+  hFilt.frequency.exponentialRampToValueAtTime(2400, now + dur);
+  const hGain = audioCtx.createGain();
+  hGain.gain.value = peak * 0.28;
+  hiss.connect(hFilt);
+  hFilt.connect(hGain);
+  hGain.connect(out);
+
+  const sawA = audioCtx.createOscillator();
+  sawA.type = 'sawtooth';
+  sawA.frequency.setValueAtTime(880, now);
+  sawA.frequency.exponentialRampToValueAtTime(340, now + dur);
+  const sawB = audioCtx.createOscillator();
+  sawB.type = 'sawtooth';
+  sawB.frequency.setValueAtTime(910, now);
+  sawB.frequency.exponentialRampToValueAtTime(355, now + dur);
+  const sFilt = audioCtx.createBiquadFilter();
+  sFilt.type = 'lowpass';
+  sFilt.frequency.setValueAtTime(4800, now);
+  sFilt.frequency.exponentialRampToValueAtTime(1600, now + dur);
+  const sGain = audioCtx.createGain();
+  sGain.gain.value = peak * 0.36;
+  sawA.connect(sFilt);
+  sawB.connect(sFilt);
+  sFilt.connect(sGain);
+  sGain.connect(out);
+
+  const scream = audioCtx.createOscillator();
+  scream.type = 'square';
+  scream.frequency.setValueAtTime(1480, now);
+  scream.frequency.exponentialRampToValueAtTime(620, now + dur);
+  const scFilt = audioCtx.createBiquadFilter();
+  scFilt.type = 'bandpass';
+  scFilt.frequency.setValueAtTime(1600, now);
+  scFilt.frequency.exponentialRampToValueAtTime(700, now + dur);
+  scFilt.Q.value = 2.2;
+  const scGain = audioCtx.createGain();
+  scGain.gain.value = peak * 0.22;
+  scream.connect(scFilt);
+  scFilt.connect(scGain);
+  scGain.connect(out);
+
+  const pierce = audioCtx.createOscillator();
+  pierce.type = 'sine';
+  pierce.frequency.setValueAtTime(1760, now);
+  pierce.frequency.exponentialRampToValueAtTime(740, now + dur);
+  const pGain = audioCtx.createGain();
+  pGain.gain.value = peak * 0.38;
+  pierce.connect(pGain);
+  pGain.connect(out);
+
+  if (delayInput) {
+    const send = audioCtx.createGain();
+    send.gain.value = 0.18;
+    out.connect(send);
+    send.connect(delayInput);
+  }
+
+  const stopAt = now + dur + 0.05;
+  roar.start(now);
+  hiss.start(now);
+  sawA.start(now);
+  sawB.start(now);
+  scream.start(now);
+  pierce.start(now);
+  roar.stop(stopAt);
+  hiss.stop(stopAt);
+  sawA.stop(stopAt);
+  sawB.stop(stopAt);
+  scream.stop(stopAt);
+  pierce.stop(stopAt);
+}
+
+function sfxCoreTeslaCharge() {
+  return;
+}
+
+const CORE_TESLA_BURST_STYLES = ['contra', 'thick', 'chord', 'coil', 'spray'];
+let coreTeslaBurstStyle = 'contra';
+
+function sfxCoreTeslaBurst() {
+  if (coreTeslaBurstStyle === 'chord') return sfxCoreTeslaBurstChord();
+  if (coreTeslaBurstStyle === 'coil') return sfxCoreTeslaBurstCoil();
+  if (coreTeslaBurstStyle === 'spray') return sfxCoreTeslaBurstSpray();
+  if (coreTeslaBurstStyle === 'fan') return sfxCoreTeslaBurstFan();
+  if (coreTeslaBurstStyle === 'thick') return sfxCoreTeslaBurstThick();
+  return sfxCoreTeslaBurstContra();
+}
+
+function playNesDutyPulse({ when, duration, freq, freqEnd, vol, duty = 0.5 }) {
+  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
+  const sr = audioCtx.sampleRate;
+  const n = Math.max(1, Math.floor(sr * duration));
+  const buf = audioCtx.createBuffer(1, n, sr);
+  const data = buf.getChannelData(0);
+  let phase = 0;
+  const ratio = Math.max(0.05, freqEnd / freq);
+  for (let i = 0; i < n; i++) {
+    const t = i / n;
+    const f = freq * Math.pow(ratio, t);
+    phase += f / sr;
+    phase -= Math.floor(phase);
+    const env = Math.pow(1 - t, 0.7);
+    const sq = phase < duty ? 1 : -1;
+    const sine = Math.sin(phase * Math.PI * 2);
+    data[i] = (sq * 0.42 + sine * 0.58) * env;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(3200, when);
+  lp.frequency.exponentialRampToValueAtTime(1400, when + duration);
+  lp.Q.value = 0.55;
+  const gain = audioCtx.createGain();
+  gain.gain.value = vol;
+  src.connect(lp);
+  lp.connect(gain);
+  gain.connect(sfxGain);
+  src.start(when);
+  src.stop(when + duration + 0.01);
+}
+
 function playNesApuNoise({ when, duration, period, periodEnd, vol }) {
   if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
   const cpu = 1789773;
@@ -2724,317 +3067,5 @@ function sfxCoreDying() {
   playNoiseBurst({ duration: 0.05, filterFreq: 3800, filterType: 'highpass', volume: 0.2, when: t0 + 0.22 });
   playNoiseBurst({ duration: 0.06, filterFreq: 3000, filterType: 'highpass', volume: 0.16, when: t0 + 0.34 });
   playNoiseBurst({ duration: 0.16, filterFreq: 280, filterEnd: 90, filterType: 'lowpass', volume: 0.32, when: t0 + 0.46 });
-}
-
-function sfxCoreDyingCollapse() {
-  playElectricCrackles({ count: 6, spacing: 0.02, volume: 0.22 });
-  playSynth({ type: 'sawtooth', freq: 90, freqEnd: 28, duration: 0.28, attack: 0.004, decay: 0.08, sustain: 0.3, release: 0.1, volume: 0.14, filterType: 'lowpass', filterFreq: 350, delaySend: 0 });
-  playNoiseBurst({ duration: 0.2, filterFreq: 1600, filterEnd: 200, filterType: 'lowpass', volume: 0.28 });
-}
-
-function sfxMiniBossReturn() {
-  playNoiseBurst({ duration: 0.16, filterFreq: 900, filterEnd: 280, filterType: 'lowpass', volume: 0.22 });
-}
-
-function sfxFireBossExit() {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
-  const t0 = audioCtx.currentTime;
-  const dur = 0.92;
-  const peakT = t0 + 0.12;
-  const endT = t0 + dur;
-  const sources = [];
-
-  const out = audioCtx.createGain();
-  out.gain.setValueAtTime(0.0001, t0);
-  out.gain.linearRampToValueAtTime(0.78, peakT);
-  out.gain.linearRampToValueAtTime(0.22, t0 + 0.48);
-  out.gain.linearRampToValueAtTime(0.0001, endT);
-
-  if (typeof audioCtx.createStereoPanner === 'function') {
-    const pan = audioCtx.createStereoPanner();
-    pan.pan.setValueAtTime(0.12, t0);
-    pan.pan.linearRampToValueAtTime(0.92, endT);
-    out.connect(pan);
-    pan.connect(sfxGain);
-  } else {
-    out.connect(sfxGain);
-  }
-
-  const air = createGlowDangerNoise();
-  const airFilt = audioCtx.createBiquadFilter();
-  airFilt.type = 'lowpass';
-  airFilt.Q.value = 0.5;
-  airFilt.frequency.setValueAtTime(1100, t0);
-  airFilt.frequency.exponentialRampToValueAtTime(180, endT);
-  const airGain = audioCtx.createGain();
-  airGain.gain.value = 0.7;
-  air.connect(airFilt);
-  airFilt.connect(airGain);
-  airGain.connect(out);
-  sources.push(air);
-
-  const rush = createGlowDangerNoise();
-  const rushFilt = audioCtx.createBiquadFilter();
-  rushFilt.type = 'bandpass';
-  rushFilt.Q.value = 0.7;
-  rushFilt.frequency.setValueAtTime(1400, t0);
-  rushFilt.frequency.exponentialRampToValueAtTime(320, endT);
-  const rushGain = audioCtx.createGain();
-  rushGain.gain.value = 0.42;
-  rush.connect(rushFilt);
-  rushFilt.connect(rushGain);
-  rushGain.connect(out);
-  sources.push(rush);
-
-  const heat = createGlowDangerNoise();
-  const heatFilt = audioCtx.createBiquadFilter();
-  heatFilt.type = 'highpass';
-  heatFilt.Q.value = 0.7;
-  heatFilt.frequency.setValueAtTime(2800, t0);
-  heatFilt.frequency.exponentialRampToValueAtTime(900, t0 + 0.4);
-  const heatGain = audioCtx.createGain();
-  heatGain.gain.setValueAtTime(0.16, t0);
-  heatGain.gain.linearRampToValueAtTime(0.0001, t0 + 0.42);
-  heat.connect(heatFilt);
-  heatFilt.connect(heatGain);
-  heatGain.connect(out);
-  sources.push(heat);
-
-  const body = audioCtx.createOscillator();
-  body.type = 'sine';
-  body.frequency.setValueAtTime(78, t0);
-  body.frequency.exponentialRampToValueAtTime(42, t0 + 0.38);
-  const bodyGain = audioCtx.createGain();
-  bodyGain.gain.setValueAtTime(0.14, t0);
-  bodyGain.gain.linearRampToValueAtTime(0.0001, t0 + 0.4);
-  body.connect(bodyGain);
-  bodyGain.connect(out);
-  sources.push(body);
-
-  sources.forEach((src) => {
-    src.start(t0);
-    src.stop(endT + 0.03);
-  });
-}
-
-function startMoltenCoreIdleSound({ preview = false } = {}) {
-  if (moltenCoreIdleNodes || !audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
-  const now = audioCtx.currentTime;
-  const out = audioCtx.createGain();
-  out.gain.setValueAtTime(0.0001, now);
-  out.gain.linearRampToValueAtTime(preview ? 0.055 : 0.04, now + 0.18);
-  out.connect(sfxGain);
-
-  const heat = createGlowDangerNoise();
-  const heatFilt = audioCtx.createBiquadFilter();
-  heatFilt.type = 'bandpass';
-  heatFilt.Q.value = 0.85;
-  heatFilt.frequency.setValueAtTime(980, now);
-  const heatGain = audioCtx.createGain();
-  heatGain.gain.value = 0.55;
-  heat.connect(heatFilt);
-  heatFilt.connect(heatGain);
-  heatGain.connect(out);
-
-  const hum = audioCtx.createOscillator();
-  hum.type = 'sine';
-  hum.frequency.setValueAtTime(50, now);
-  const humGain = audioCtx.createGain();
-  humGain.gain.value = 0.22;
-  hum.connect(humGain);
-  humGain.connect(out);
-
-  const sources = [heat, hum];
-  if (preview) {
-    const lfo = audioCtx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 60 / MINI_BOSS_FLOAT_PERIOD;
-    const lfoFilt = audioCtx.createGain();
-    lfoFilt.gain.value = 420;
-    lfo.connect(lfoFilt);
-    lfoFilt.connect(heatFilt.frequency);
-    const lfoVol = audioCtx.createGain();
-    lfoVol.gain.value = 0.018;
-    lfo.connect(lfoVol);
-    lfoVol.connect(out.gain);
-    sources.push(lfo);
-  }
-
-  sources.forEach((src) => src.start(now));
-  moltenCoreIdleNodes = { out, heatFilt, hum, sources };
-}
-
-function updateMoltenCoreIdleSound() {
-  if (!moltenCoreIdleNodes || !audioCtx || !miniBoss) return;
-  const now = audioCtx.currentTime;
-  const phase = Math.sin((frame - miniBossSpawnFrame) * (2 * Math.PI / MINI_BOSS_FLOAT_PERIOD));
-  const lift = 0.5 + 0.5 * phase;
-  moltenCoreIdleNodes.heatFilt.frequency.setTargetAtTime(760 + lift * 820, now, 0.06);
-  moltenCoreIdleNodes.out.gain.setTargetAtTime(0.028 + lift * 0.026, now, 0.06);
-  moltenCoreIdleNodes.hum.frequency.setTargetAtTime(46 + lift * 12, now, 0.06);
-}
-
-function stopMoltenCoreIdleSound() {
-  if (!moltenCoreIdleNodes) return;
-  const nodes = moltenCoreIdleNodes;
-  moltenCoreIdleNodes = null;
-  if (!audioCtx) return;
-  const now = audioCtx.currentTime;
-  try {
-    nodes.out.gain.cancelScheduledValues(now);
-    nodes.out.gain.setValueAtTime(Math.max(0.0001, nodes.out.gain.value), now);
-    nodes.out.gain.linearRampToValueAtTime(0.0001, now + 0.12);
-  } catch (e) { /* already stopped */ }
-  nodes.sources.forEach((src) => {
-    try { src.stop(now + 0.14); } catch (e) { /* already stopped */ }
-  });
-}
-
-function syncMoltenCoreIdleSound() {
-  if (typeof previewLoopId === 'string' && previewLoopId === 'coreIdle') return;
-  const th = currentTheme();
-  const active = state === 'playing'
-    && th
-    && th.isMiniBossZone
-    && th.miniBossVariant !== 'core'
-    && miniBoss
-    && !miniBossDefeated
-    && miniBossAttackState === 'floating'
-    && (frame - miniBossSpawnFrame) >= MINI_BOSS_ENTRANCE_DURATION;
-  if (!active) {
-    stopMoltenCoreIdleSound();
-    return;
-  }
-  startMoltenCoreIdleSound();
-  updateMoltenCoreIdleSound();
-}
-
-function sfxFireBossFlameWallTelegraph() {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
-  const t0 = audioCtx.currentTime;
-  playNoiseBurst({ duration: 0.95, filterFreq: 220, filterEnd: 520, filterType: 'lowpass', volume: 0.2, when: t0 });
-  playNoiseBurst({ duration: 0.85, filterFreq: 480, filterEnd: 900, filterType: 'bandpass', filterQ: 0.7, volume: 0.22, delaySend: 0.06, when: t0 + 0.06 });
-  playNoiseBurst({ duration: 0.55, filterFreq: 1400, filterEnd: 700, filterType: 'bandpass', filterQ: 1.1, volume: 0.14, when: t0 + 0.28 });
-  const pops = [0.12, 0.22, 0.31, 0.42, 0.5, 0.58, 0.66, 0.74, 0.82, 0.9];
-  pops.forEach((off, i) => {
-    playNoiseBurst({
-      duration: 0.035 + (i % 3) * 0.008,
-      filterFreq: 1600 + (i % 5) * 420,
-      filterType: 'bandpass',
-      filterQ: 2.4 + (i % 2),
-      volume: 0.12 + i * 0.012,
-      when: t0 + off,
-    });
-  });
-}
-
-function startMoltenFlameWallSound({ preview = false } = {}) {
-  if (moltenFlameWallNodes || !audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
-  const t0 = audioCtx.currentTime;
-  const out = audioCtx.createGain();
-  out.gain.setValueAtTime(0.0001, t0);
-  out.gain.linearRampToValueAtTime(preview ? 0.9 : 0.8, t0 + 0.08);
-  out.gain.linearRampToValueAtTime(preview ? 0.48 : 0.38, t0 + 0.4);
-  out.connect(sfxGain);
-
-  const roar = createGlowDangerNoise();
-  const roarFilt = audioCtx.createBiquadFilter();
-  roarFilt.type = 'lowpass';
-  roarFilt.Q.value = 0.55;
-  roarFilt.frequency.setValueAtTime(240, t0);
-  roarFilt.frequency.exponentialRampToValueAtTime(420, t0 + 0.2);
-  const roarGain = audioCtx.createGain();
-  roarGain.gain.value = 0.78;
-  roar.connect(roarFilt);
-  roarFilt.connect(roarGain);
-  roarGain.connect(out);
-
-  const billow = createGlowDangerNoise();
-  const billowFilt = audioCtx.createBiquadFilter();
-  billowFilt.type = 'bandpass';
-  billowFilt.Q.value = 0.7;
-  billowFilt.frequency.setValueAtTime(620, t0);
-  const billowGain = audioCtx.createGain();
-  billowGain.gain.value = 0.5;
-  billow.connect(billowFilt);
-  billowFilt.connect(billowGain);
-  billowGain.connect(out);
-
-  const snap = createGlowDangerNoise();
-  const snapFilt = audioCtx.createBiquadFilter();
-  snapFilt.type = 'bandpass';
-  snapFilt.Q.value = 2.8;
-  snapFilt.frequency.setValueAtTime(2200, t0);
-  const snapGain = audioCtx.createGain();
-  snapGain.gain.value = 0.16;
-  snap.connect(snapFilt);
-  snapFilt.connect(snapGain);
-  snapGain.connect(out);
-
-  const pop = createGlowDangerNoise();
-  const popFilt = audioCtx.createBiquadFilter();
-  popFilt.type = 'bandpass';
-  popFilt.Q.value = 4.2;
-  popFilt.frequency.setValueAtTime(3100, t0);
-  const popGain = audioCtx.createGain();
-  popGain.gain.value = 0.08;
-  pop.connect(popFilt);
-  popFilt.connect(popGain);
-  popGain.connect(out);
-
-  const crackleMod = createGlowDangerNoise();
-  const crackleModFilt = audioCtx.createBiquadFilter();
-  crackleModFilt.type = 'lowpass';
-  crackleModFilt.frequency.value = 22;
-  crackleModFilt.Q.value = 0.5;
-  const crackleDepth = audioCtx.createGain();
-  crackleDepth.gain.value = 0.28;
-  crackleMod.connect(crackleModFilt);
-  crackleModFilt.connect(crackleDepth);
-  crackleDepth.connect(snapGain.gain);
-
-  const popMod = createGlowDangerNoise();
-  const popModFilt = audioCtx.createBiquadFilter();
-  popModFilt.type = 'lowpass';
-  popModFilt.frequency.value = 38;
-  const popDepth = audioCtx.createGain();
-  popDepth.gain.value = 0.2;
-  popMod.connect(popModFilt);
-  popModFilt.connect(popDepth);
-  popDepth.connect(popGain.gain);
-
-  const swell = audioCtx.createOscillator();
-  swell.type = 'sine';
-  swell.frequency.value = 0.38;
-  const swellDepth = audioCtx.createGain();
-  swellDepth.gain.value = 90;
-  swell.connect(swellDepth);
-  swellDepth.connect(roarFilt.frequency);
-
-  const sources = [roar, billow, snap, pop, crackleMod, popMod, swell];
-  sources.forEach((src) => src.start(t0));
-  moltenFlameWallNodes = { out, sources };
-
-  playNoiseBurst({ duration: 0.22, filterFreq: 380, filterEnd: 140, filterType: 'lowpass', volume: 0.42, when: t0 });
-  playNoiseBurst({ duration: 0.16, filterFreq: 700, filterEnd: 320, filterType: 'bandpass', filterQ: 0.8, volume: 0.28, when: t0 });
-  playNoiseBurst({ duration: 0.05, filterFreq: 2400, filterType: 'bandpass', filterQ: 2.8, volume: 0.22, when: t0 + 0.02 });
-  playNoiseBurst({ duration: 0.04, filterFreq: 1800, filterType: 'bandpass', filterQ: 2.4, volume: 0.18, when: t0 + 0.07 });
-  playNoiseBurst({ duration: 0.045, filterFreq: 2800, filterType: 'bandpass', filterQ: 3.2, volume: 0.16, when: t0 + 0.12 });
-}
-
-function stopMoltenFlameWallSound() {
-  if (!moltenFlameWallNodes) return;
-  const nodes = moltenFlameWallNodes;
-  moltenFlameWallNodes = null;
-  if (!audioCtx) return;
-  const now = audioCtx.currentTime;
-  try {
-    nodes.out.gain.cancelScheduledValues(now);
-    nodes.out.gain.setValueAtTime(Math.max(0.0001, nodes.out.gain.value), now);
-    nodes.out.gain.linearRampToValueAtTime(0.0001, now + 0.16);
-  } catch (e) { /* already stopped */ }
-  nodes.sources.forEach((src) => {
-    try { src.stop(now + 0.18); } catch (e) { /* already stopped */ }
-  });
 }
 

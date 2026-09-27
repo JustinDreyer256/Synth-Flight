@@ -381,6 +381,12 @@
     color: rgba(205, 184, 232, 0.88);
     text-align: left;
   }
+  .settings-save-id {
+    font-family: 'Courier New', monospace;
+    letter-spacing: 2px;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 8px rgba(15, 240, 252, 0.55);
+  }
   .row-action-indicator {
     font-size: 11px;
     color: var(--neon-cyan);
@@ -2005,6 +2011,7 @@
   <div id="preview-hint">Shaded bands show the full range an obstacle can occupy (including oscillation). In Edit Mode: drag a bolt to move it, drag its corner handle to resize, click Shape to cycle its silhouette.</div>
 </div>
 
+<input type="file" id="player-save-import" accept="application/json,.json" hidden>
 <button id="sfx-toggle">SOUND TEST</button>
 <div id="sfx-tester">
   <div id="sfx-tester-toolbar">
@@ -2859,9 +2866,10 @@ const THEMES = [
   },
   {
     name: 'GRAVITY WELL',
-    skyTop: '#001a0d', skyMid: '#003320', skyBottom: '#000d05',
-    accentA: '#00ff9d', accentB: '#00c3ff',
-    barTop: '#00291a', barBottom: '#001008',
+    skyTop: '#071428', skyMid: '#0c3340', skyBottom: '#05101c',
+    accentA: '#3dffc8', accentB: '#6ec8ff',
+    wellAccent: '#e85cff',
+    barTop: '#123848', barBottom: '#071018',
     bgStyle: 'matrix',
     ampMult: 0.15, freqMult: 1.6,
     gravityMult: 1.40, liftMult: 0.8,
@@ -2898,10 +2906,9 @@ const THEMES = [
         { yFrac: 0.80, ampFrac: 0.048, freq: 0.0156, phase: 4.5, widthPx: 110, thicknessPx: 18 }
       ]}
     ],
-    // secondary layer: a spinning dust tornado, sand-colored, sweeping
-    // straight across from right to left as it scrolls through with the
-    // world -- no vertical movement, a clean horizontal sweep. instant
-    // death on contact, same as any other solid hazard
+    // secondary layer: a spinning gravity swirl (visual retint of the
+    // original dust tornado). same size, path, and hitbox -- it only
+    // looks like a well instead of sand
     extraStormPattern: [
       { baseYFrac: 0.35, r: 55, interval: 480 },
       { baseYFrac: 0.65, r: 50, interval: 520 }
@@ -3503,7 +3510,16 @@ let settingsReturnState = 'options';
 // Select). Migrates from the older, separate localStorage keys this game
 // used before, so existing players don't lose their progress.
 const PROFILE_STORAGE_KEY = 'synthFlightProfile';
-const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV12';
+const SAVE_ID_STORAGE_KEY = 'synthFlightSaveId';
+const SAVE_ID_COOKIE = 'sfid';
+const DURABLE_DB_NAME = 'synthFlightDurable';
+const DURABLE_STORE = 'profile';
+const SAVE_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+let playerSaveId = '';
+let durableWriteLock = false;
+let durableSaveTimer = 0;
+let durableHydrated = false;
+const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV13';
 const PREVIEW_STILL_W = 640;
 const PREVIEW_STILL_ASPECT = 860 / 412;
 let zoneScreenshots = {};
@@ -3901,30 +3917,38 @@ function generateAndStoreZoneStill(themeIdx) {
   if (url) storeZoneScreenshot(themeIdx, url, false);
   return url;
 }
+function normalizePlayerProfile(parsed) {
+  if (!parsed || typeof parsed !== 'object') {
+    return { best: 0, extraDifficultyUnlocked: false, unlockedZones: [0], completedZones: [], deathlessZones: [], beatenDifficulties: [], totalDistanceTraveled: 0, lifetimeDeathsByZone: new Array(13).fill(0), zoneCompletionCounts: new Array(13).fill(0), achievedRanks: [], shipTrail: 'classic', shipSkin: 'classic' };
+  }
+  const pad13 = (arr) => {
+    const out = Array.isArray(arr) ? arr.slice(0, 13) : [];
+    while (out.length < 13) out.push(0);
+    return out.map((n) => (typeof n === 'number' && n > 0 ? n : 0));
+  };
+  return {
+    best: typeof parsed.best === 'number' ? parsed.best : 0,
+    extraDifficultyUnlocked: !!parsed.extraDifficultyUnlocked,
+    unlockedZones: Array.isArray(parsed.unlockedZones) ? parsed.unlockedZones : [0],
+    completedZones: Array.isArray(parsed.completedZones) ? parsed.completedZones : [],
+    deathlessZones: Array.isArray(parsed.deathlessZones) ? parsed.deathlessZones : [],
+    beatenDifficulties: Array.isArray(parsed.beatenDifficulties) ? parsed.beatenDifficulties : [],
+    totalDistanceTraveled: typeof parsed.totalDistanceTraveled === 'number' ? parsed.totalDistanceTraveled : 0,
+    lifetimeDeathsByZone: pad13(parsed.lifetimeDeathsByZone),
+    zoneCompletionCounts: pad13(parsed.zoneCompletionCounts),
+    achievedRanks: Array.isArray(parsed.achievedRanks) ? parsed.achievedRanks : [],
+    shipTrail: typeof parsed.shipTrail === 'string' ? parsed.shipTrail : 'classic',
+    shipSkin: typeof parsed.shipSkin === 'string' ? parsed.shipSkin : 'classic',
+  };
+}
 function loadPlayerProfile() {
   try {
     const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        best: typeof parsed.best === 'number' ? parsed.best : 0,
-        extraDifficultyUnlocked: !!parsed.extraDifficultyUnlocked,
-        unlockedZones: Array.isArray(parsed.unlockedZones) ? parsed.unlockedZones : [0],
-        completedZones: Array.isArray(parsed.completedZones) ? parsed.completedZones : [],
-        deathlessZones: Array.isArray(parsed.deathlessZones) ? parsed.deathlessZones : [],
-        beatenDifficulties: Array.isArray(parsed.beatenDifficulties) ? parsed.beatenDifficulties : [],
-        totalDistanceTraveled: typeof parsed.totalDistanceTraveled === 'number' ? parsed.totalDistanceTraveled : 0,
-        lifetimeDeathsByZone: Array.isArray(parsed.lifetimeDeathsByZone) ? parsed.lifetimeDeathsByZone : new Array(13).fill(0),
-        zoneCompletionCounts: Array.isArray(parsed.zoneCompletionCounts) ? parsed.zoneCompletionCounts : new Array(13).fill(0),
-        achievedRanks: Array.isArray(parsed.achievedRanks) ? parsed.achievedRanks : [],
-        shipTrail: typeof parsed.shipTrail === 'string' ? parsed.shipTrail : 'classic',
-        shipSkin: typeof parsed.shipSkin === 'string' ? parsed.shipSkin : 'classic',
-      };
-    }
+    if (raw) return normalizePlayerProfile(JSON.parse(raw));
   } catch (e) { /* corrupted profile data -- fall through to legacy keys/defaults */ }
   const legacyBest = parseInt(localStorage.getItem('synthFlightBest') || '0', 10) || 0;
   const legacyExtra = localStorage.getItem('synthFlightExtraDifficultyUnlocked') === 'true';
-  return { best: legacyBest, extraDifficultyUnlocked: legacyExtra, unlockedZones: [0], completedZones: [], deathlessZones: [], beatenDifficulties: [], totalDistanceTraveled: 0, lifetimeDeathsByZone: new Array(13).fill(0), zoneCompletionCounts: new Array(13).fill(0), achievedRanks: [], shipTrail: 'classic', shipSkin: 'classic' };
+  return normalizePlayerProfile({ best: legacyBest, extraDifficultyUnlocked: legacyExtra, unlockedZones: [0] });
 }
 function savePlayerProfile() {
   try {
@@ -3932,6 +3956,7 @@ function savePlayerProfile() {
       best, extraDifficultyUnlocked, unlockedZones: Array.from(unlockedZones), completedZones: Array.from(completedZones), deathlessZones: Array.from(deathlessZones), beatenDifficulties: Array.from(beatenDifficulties), totalDistanceTraveled, lifetimeDeathsByZone, zoneCompletionCounts, achievedRanks: Array.from(achievedRanks), shipTrail: shipTrailStyle, shipSkin: shipSkinStyle
     }));
   } catch (e) { /* storage unavailable/full -- fail silently, never crash the game over this */ }
+  if (!durableWriteLock) queueDurableSave();
 }
 function resetPlayerProfile() {
   best = 0;
@@ -4801,6 +4826,9 @@ const BOLT_SHAPES = {
 // accurate polygon-vs-rectangle collision, used so hitboxes match the
 // visible jagged bolt silhouette instead of its full bounding box (which
 // is much wider than thin shapes like E5/E6 actually render)
+
+</script>
+<script>
 function pointInPolygon(px, py, poly) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -4822,9 +4850,6 @@ function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
     ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
 }
 
-
-</script>
-<script>
 function rectIntersectsPolygon(left, top, right, bottom, poly) {
   const corners = [[left, top], [right, top], [right, bottom], [left, bottom]];
   for (const [cx, cy] of corners) {
@@ -6993,13 +7018,16 @@ function initBackgroundParticles(theme) {
   bgParticles = [];
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
   if (theme.bgStyle === 'matrix') {
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 64; i++) {
+      const tint = i % 3;
       bgParticles.push({
         x: Math.random() * W,
         y: PLAY_TOP + Math.random() * playHeight,
-        speed: 1.5 + Math.random() * 3.5,
-        len: 20 + Math.random() * 50,
-        alpha: 0.3 + Math.random() * 0.6
+        speed: 1.2 + Math.random() * 3.2,
+        len: 16 + Math.random() * 46,
+        alpha: 0.22 + Math.random() * 0.5,
+        drift: (Math.random() - 0.5) * 0.35,
+        tint
       });
     }
   } else if (theme.bgStyle === 'stars') {
@@ -7589,6 +7617,12 @@ function handleOverlayActivate(e) {
     else if (action === 'trail-next') cycleShipTrail(1);
     else if (action === 'skin-prev') cycleShipSkin(-1);
     else if (action === 'skin-next') cycleShipSkin(1);
+    else if (action === 'copy-save-id') copySaveIdToClipboard();
+    else if (action === 'export-save') exportPlayerSaveFile();
+    else if (action === 'import-save') {
+      const input = document.getElementById('player-save-import');
+      if (input) input.click();
+    } else if (action === 'restore-save-id') promptRestoreSaveId();
   } else if ((state === 'achievements' || state === 'zone-select' || state === 'statistics') && action === 'back-to-options') {
     state = 'options';
   } else if (state === 'statistics' && action === 'confirm-reset-stats') {
@@ -7676,6 +7710,9 @@ function updateBackgroundParticles(theme) {
   if (theme.bgStyle === 'matrix') {
     for (let p of bgParticles) {
       p.y += p.speed;
+      p.x += p.drift || 0;
+      if (p.x < -8) p.x = W + 8;
+      if (p.x > W + 8) p.x = -8;
       if (p.y - p.len > PLAY_BOTTOM) {
         p.y = PLAY_TOP - p.len;
         p.x = Math.random() * W;
@@ -10114,6 +10151,7 @@ function saveAudioSettings() {
       respawn: audioSettings.respawn,
     }));
   } catch (e) { /* storage unavailable -- fail silently, never crash the game over a preference */ }
+  if (!durableWriteLock) queueDurableSave();
 }
 const __loadedAudioSettings = loadAudioSettings();
 
@@ -10137,6 +10175,308 @@ function applyAudioSettings() {
   masterGain.gain.value = audioSettings.muted ? 0 : audioSettings.masterVolume;
   sfxGain.gain.value = audioSettings.sfxEnabled ? audioSettings.sfxVolume : 0;
   bgmGain.gain.value = audioSettings.bgmEnabled ? audioSettings.bgmVolume : 0;
+}
+
+function normalizeSaveId(raw) {
+  const id = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return id.length >= 6 && id.length <= 16 ? id : '';
+}
+function generateSaveId() {
+  let id = '';
+  const cryptoObj = typeof crypto !== 'undefined' ? crypto : null;
+  for (let i = 0; i < 8; i++) {
+    let n = 0;
+    if (cryptoObj && cryptoObj.getRandomValues) {
+      const buf = new Uint8Array(1);
+      cryptoObj.getRandomValues(buf);
+      n = buf[0] % SAVE_ID_ALPHABET.length;
+    } else {
+      n = Math.floor(Math.random() * SAVE_ID_ALPHABET.length);
+    }
+    id += SAVE_ID_ALPHABET[n];
+  }
+  return id;
+}
+function readSaveIdCookie() {
+  try {
+    const parts = String(document.cookie || '').split(';');
+    for (let i = 0; i < parts.length; i++) {
+      const piece = parts[i].trim();
+      if (piece.indexOf(SAVE_ID_COOKIE + '=') === 0) return normalizeSaveId(piece.slice(SAVE_ID_COOKIE.length + 1));
+    }
+  } catch (e) { /* cookies blocked */ }
+  return '';
+}
+function persistSaveId(id) {
+  playerSaveId = normalizeSaveId(id) || playerSaveId || generateSaveId();
+  try { localStorage.setItem(SAVE_ID_STORAGE_KEY, playerSaveId); } catch (e) { /* storage blocked */ }
+  try { document.cookie = SAVE_ID_COOKIE + '=' + playerSaveId + '; Max-Age=63072000; Path=/; SameSite=Lax'; } catch (e) { /* cookies blocked */ }
+  try {
+    const nextHash = '#sf=' + playerSaveId;
+    if (location.hash !== nextHash) history.replaceState(null, '', location.pathname + location.search + nextHash);
+  } catch (e) { /* file:// or locked history */ }
+  return playerSaveId;
+}
+function ensurePlayerSaveId() {
+  if (playerSaveId) return persistSaveId(playerSaveId);
+  const fromHash = normalizeSaveId((location.hash.match(/sf=([A-Za-z0-9]+)/) || [])[1]);
+  let fromStore = '';
+  try { fromStore = normalizeSaveId(localStorage.getItem(SAVE_ID_STORAGE_KEY)); } catch (e) { fromStore = ''; }
+  return persistSaveId(fromHash || fromStore || readSaveIdCookie() || generateSaveId());
+}
+function collectDurableSave() {
+  return {
+    v: 1,
+    saveId: ensurePlayerSaveId(),
+    savedAt: Date.now(),
+    profile: {
+      best,
+      extraDifficultyUnlocked,
+      unlockedZones: Array.from(unlockedZones),
+      completedZones: Array.from(completedZones),
+      deathlessZones: Array.from(deathlessZones),
+      beatenDifficulties: Array.from(beatenDifficulties),
+      totalDistanceTraveled,
+      lifetimeDeathsByZone: lifetimeDeathsByZone.slice(),
+      zoneCompletionCounts: zoneCompletionCounts.slice(),
+      achievedRanks: Array.from(achievedRanks),
+      shipTrail: shipTrailStyle,
+      shipSkin: shipSkinStyle,
+    },
+    audio: {
+      sfxEnabled: audioSettings.sfxEnabled,
+      bgmEnabled: audioSettings.bgmEnabled,
+      chargeTelegraph: audioSettings.chargeTelegraph,
+      glowDanger: audioSettings.glowDanger,
+      lifeLost: audioSettings.lifeLost,
+      respawn: audioSettings.respawn,
+    },
+  };
+}
+function durableProgressScore(blob) {
+  if (!blob || !blob.profile) return 0;
+  const p = normalizePlayerProfile(blob.profile);
+  const deaths = p.lifetimeDeathsByZone.reduce((a, b) => a + b, 0);
+  const clears = p.zoneCompletionCounts.reduce((a, b) => a + b, 0);
+  return p.best + p.totalDistanceTraveled + deaths + clears * 10 + p.unlockedZones.length + p.completedZones.length + (p.extraDifficultyUnlocked ? 1000 : 0);
+}
+function mergeDurableSaves(blobs) {
+  const live = [];
+  for (let i = 0; i < blobs.length; i++) {
+    if (blobs[i] && blobs[i].profile) live.push(blobs[i]);
+  }
+  if (!live.length) return collectDurableSave();
+  live.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  const newest = live[0];
+  const profiles = live.map((b) => normalizePlayerProfile(b.profile));
+  const union = (key) => {
+    const set = new Set();
+    profiles.forEach((p) => (p[key] || []).forEach((v) => set.add(v)));
+    return Array.from(set);
+  };
+  const maxArr = (key) => {
+    const out = new Array(13).fill(0);
+    profiles.forEach((p) => {
+      const arr = p[key] || [];
+      for (let i = 0; i < 13; i++) out[i] = Math.max(out[i], arr[i] || 0);
+    });
+    return out;
+  };
+  const newestProfile = normalizePlayerProfile(newest.profile);
+  const newestAudio = newest.audio || {};
+  return {
+    v: 1,
+    saveId: ensurePlayerSaveId(),
+    savedAt: Date.now(),
+    profile: {
+      best: Math.max.apply(null, profiles.map((p) => p.best || 0)),
+      extraDifficultyUnlocked: profiles.some((p) => p.extraDifficultyUnlocked),
+      unlockedZones: union('unlockedZones').length ? union('unlockedZones') : [0],
+      completedZones: union('completedZones'),
+      deathlessZones: union('deathlessZones'),
+      beatenDifficulties: union('beatenDifficulties'),
+      totalDistanceTraveled: Math.max.apply(null, profiles.map((p) => p.totalDistanceTraveled || 0)),
+      lifetimeDeathsByZone: maxArr('lifetimeDeathsByZone'),
+      zoneCompletionCounts: maxArr('zoneCompletionCounts'),
+      achievedRanks: union('achievedRanks'),
+      shipTrail: newestProfile.shipTrail,
+      shipSkin: newestProfile.shipSkin,
+    },
+    audio: {
+      sfxEnabled: typeof newestAudio.sfxEnabled === 'boolean' ? newestAudio.sfxEnabled : audioSettings.sfxEnabled,
+      bgmEnabled: typeof newestAudio.bgmEnabled === 'boolean' ? newestAudio.bgmEnabled : audioSettings.bgmEnabled,
+      chargeTelegraph: typeof newestAudio.chargeTelegraph === 'string' ? newestAudio.chargeTelegraph : audioSettings.chargeTelegraph,
+      glowDanger: typeof newestAudio.glowDanger === 'string' ? newestAudio.glowDanger : audioSettings.glowDanger,
+      lifeLost: typeof newestAudio.lifeLost === 'string' ? newestAudio.lifeLost : audioSettings.lifeLost,
+      respawn: typeof newestAudio.respawn === 'string' ? newestAudio.respawn : audioSettings.respawn,
+    },
+  };
+}
+function applyDurableSave(blob) {
+  if (!blob || !blob.profile) return;
+  const p = normalizePlayerProfile(blob.profile);
+  durableWriteLock = true;
+  best = p.best;
+  extraDifficultyUnlocked = p.extraDifficultyUnlocked;
+  unlockedZones = new Set(p.unlockedZones.length ? p.unlockedZones : [0]);
+  completedZones = new Set(p.completedZones);
+  deathlessZones = new Set(p.deathlessZones);
+  beatenDifficulties = new Set(p.beatenDifficulties);
+  totalDistanceTraveled = p.totalDistanceTraveled;
+  lifetimeDeathsByZone = p.lifetimeDeathsByZone;
+  zoneCompletionCounts = p.zoneCompletionCounts;
+  achievedRanks = new Set(p.achievedRanks);
+  if (typeof SHIP_TRAILS !== 'undefined' && SHIP_TRAILS.some((t) => t.id === p.shipTrail)) shipTrailStyle = p.shipTrail;
+  if (typeof SHIP_SKINS !== 'undefined' && SHIP_SKINS.some((s) => s.id === p.shipSkin)) shipSkinStyle = p.shipSkin;
+  if (blob.audio) {
+    if (typeof blob.audio.sfxEnabled === 'boolean') audioSettings.sfxEnabled = blob.audio.sfxEnabled;
+    if (typeof blob.audio.bgmEnabled === 'boolean') audioSettings.bgmEnabled = blob.audio.bgmEnabled;
+    if (typeof blob.audio.chargeTelegraph === 'string' && blob.audio.chargeTelegraph !== 'xCharge') audioSettings.chargeTelegraph = blob.audio.chargeTelegraph;
+    if (typeof blob.audio.glowDanger === 'string') audioSettings.glowDanger = blob.audio.glowDanger;
+    if (typeof blob.audio.lifeLost === 'string') audioSettings.lifeLost = blob.audio.lifeLost;
+    if (typeof blob.audio.respawn === 'string') audioSettings.respawn = blob.audio.respawn;
+  }
+  savePlayerProfile();
+  saveAudioSettings();
+  applyAudioSettings();
+  durableWriteLock = false;
+}
+function openDurableDb() {
+  return new Promise((resolve) => {
+    if (!window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    const req = indexedDB.open(DURABLE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(DURABLE_STORE)) db.createObjectStore(DURABLE_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+async function readIndexedDbSave() {
+  try {
+    const db = await openDurableDb();
+    if (!db) return null;
+    return await new Promise((resolve) => {
+      const tx = db.transaction(DURABLE_STORE, 'readonly');
+      const get = tx.objectStore(DURABLE_STORE).get('current');
+      get.onsuccess = () => resolve(get.result || null);
+      get.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+async function writeIndexedDbSave(blob) {
+  try {
+    const db = await openDurableDb();
+    if (!db) return;
+    await new Promise((resolve) => {
+      const tx = db.transaction(DURABLE_STORE, 'readwrite');
+      tx.objectStore(DURABLE_STORE).put(blob, 'current');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch (e) { /* private mode / quota */ }
+}
+async function fetchServerSave(id) {
+  const saveId = normalizeSaveId(id);
+  if (!saveId || location.protocol === 'file:') return null;
+  try {
+    const res = await fetch('/api/player-save/' + saveId, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const blob = await res.json();
+    return blob && blob.profile ? blob : null;
+  } catch (e) {
+    return null;
+  }
+}
+async function putServerSave(blob) {
+  if (!blob || location.protocol === 'file:') return;
+  try {
+    await fetch('/api/player-save/' + ensurePlayerSaveId(), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(blob),
+    });
+  } catch (e) { /* offline or static host */ }
+}
+async function writeAllDurableLayers(blob) {
+  const payload = blob || collectDurableSave();
+  payload.saveId = ensurePlayerSaveId();
+  payload.savedAt = Date.now();
+  durableWriteLock = true;
+  savePlayerProfile();
+  saveAudioSettings();
+  durableWriteLock = false;
+  await writeIndexedDbSave(payload);
+  await putServerSave(payload);
+}
+function queueDurableSave() {
+  if (durableWriteLock) return;
+  clearTimeout(durableSaveTimer);
+  durableSaveTimer = setTimeout(() => {
+    writeAllDurableLayers(collectDurableSave());
+  }, 700);
+}
+async function hydrateDurableSave() {
+  ensurePlayerSaveId();
+  const local = collectDurableSave();
+  const [idb, server] = await Promise.all([readIndexedDbSave(), fetchServerSave(playerSaveId)]);
+  const merged = mergeDurableSaves([idb, server, local]);
+  if (durableProgressScore(merged) >= durableProgressScore(local) || (server && durableProgressScore(server) > 0) || (idb && durableProgressScore(idb) > durableProgressScore(local))) {
+    applyDurableSave(merged);
+  }
+  await writeAllDurableLayers(collectDurableSave());
+  durableHydrated = true;
+  if (state === 'settings' || state === 'options' || state === 'home' || state === 'statistics' || state === 'achievements') updateOverlay();
+}
+function exportPlayerSaveFile() {
+  const blob = collectDurableSave();
+  const text = JSON.stringify(blob, null, 2);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.download = 'synth-flight-save-' + blob.saveId + '.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 500);
+  writeAllDurableLayers(blob);
+}
+async function importPlayerSaveObject(parsed) {
+  if (!parsed || typeof parsed !== 'object' || !parsed.profile) throw new Error('Not a Synth Flight save');
+  if (parsed.saveId) persistSaveId(parsed.saveId);
+  applyDurableSave(mergeDurableSaves([parsed, collectDurableSave()]));
+  await writeAllDurableLayers(collectDurableSave());
+  updateOverlay();
+}
+function promptRestoreSaveId() {
+  const next = normalizeSaveId(window.prompt('Enter your SAVE ID to restore this profile (from another device or after clearing site data).', playerSaveId));
+  if (!next) return;
+  persistSaveId(next);
+  fetchServerSave(next).then(async (server) => {
+    const idb = await readIndexedDbSave();
+    if (!server && !idb) {
+      window.alert('No cloud save found for ' + next + '. Import a backup file, or keep playing to create a new save under this ID.');
+      return;
+    }
+    applyDurableSave(mergeDurableSaves([server, idb, collectDurableSave()]));
+    await writeAllDurableLayers(collectDurableSave());
+    updateOverlay();
+  });
+}
+function copySaveIdToClipboard() {
+  const id = ensurePlayerSaveId();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(id).catch(() => { window.alert('SAVE ID: ' + id); });
+  } else {
+    window.alert('SAVE ID: ' + id);
+  }
 }
 
 function toggleSfxEnabled() {
@@ -10752,6 +11092,9 @@ function playChargeHeartbeat({ duration = 2, size = 1, isSuperBeam = false } = {
   megaManChargeCtl = { master, nodes: [osc, body, pulse] };
 }
 
+
+</script>
+<script>
 function playChargeStatic({ duration = 2, size = 1, isSuperBeam = false } = {}) {
   if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
   stopMegaManCharge(0.02);
@@ -11095,9 +11438,6 @@ function playNesDutyPulse({ when, duration, freq, freqEnd, vol, duty = 0.5 }) {
   src.stop(when + duration + 0.01);
 }
 
-
-</script>
-<script>
 function playNesApuNoise({ when, duration, period, periodEnd, vol }) {
   if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
   const cpu = 1789773;
@@ -13826,6 +14166,9 @@ function sfxCoreDying() {
   playNoiseBurst({ duration: 0.16, filterFreq: 280, filterEnd: 90, filterType: 'lowpass', volume: 0.32, when: t0 + 0.46 });
 }
 
+
+</script>
+<script>
 function sfxCoreDyingCollapse() {
   playElectricCrackles({ count: 6, spacing: 0.02, volume: 0.22 });
   playSynth({ type: 'sawtooth', freq: 90, freqEnd: 28, duration: 0.28, attack: 0.004, decay: 0.08, sustain: 0.3, release: 0.1, volume: 0.14, filterType: 'lowpass', filterFreq: 350, delaySend: 0 });
@@ -14138,9 +14481,6 @@ function stopMoltenFlameWallSound() {
   });
 }
 
-
-</script>
-<script>
 function syncMoltenFlameWallSound() {
   if (typeof previewLoopId === 'string' && previewLoopId === 'coreFlame') return;
   const th = currentTheme();
@@ -15903,7 +16243,7 @@ const BGM_FILE_TRACKS = [
   { id: 'bgm-06-storm-skies', src: 'audio/bgm/bgm-06-storm-skies.mp3', themeIndex: 5, start: 0, loopStart: 0 },
   { id: 'bgm-07-ancient-ruins', src: 'audio/bgm/bgm-07-ancient-ruins.ogg', themeIndex: 6, start: 0, loopStart: 0 },
   { id: 'bgm-08-toxic-wasteland', src: 'audio/bgm/bgm-08-toxic-wasteland.mp3', themeIndex: 7, start: 0, loopStart: 0, loopEnd: 46 },
-  { id: 'bgm-09-derelict-station', src: 'audio/bgm/bgm-09-derelict-station.mp3', themeIndex: 8, start: 0, loopStart: 0 },
+  { id: 'bgm-09-derelict-station', src: 'audio/bgm/bgm-09-derelict-station.mp3?v=snes270', themeIndex: 8, start: 0, loopStart: 0 },
   { id: 'bgm-10-reactor-core-p1', src: 'audio/bgm/bgm-10-reactor-core-p1.mp3', themeIndex: 9, phaseMin: 1, phaseMax: 7, start: 0, loopStart: 0 },
   { id: 'bgm-10-reactor-core-p8', src: 'audio/bgm/bgm-10-reactor-core-p8.mp3?v=snes267', themeIndex: 9, phaseMin: 8, phaseMax: 99, start: 50, loopStart: 50 },
   { id: 'bgm-11-the-void', src: 'audio/bgm/bgm-11-the-void.mp3', themeIndex: 10, start: 1, loopStart: 1, loopEnd: 38 },
@@ -16507,6 +16847,9 @@ const SFX_CATALOG = [
   { id: 'bgm13c', section: '6. Background Music', name: '13 The Signal (phase 5)', kind: 'bgm', trackId: 'bgm-13-the-signal-p5', play: () => {} },
 ];
 
+
+</script>
+<script>
 function buildSfxTesterUi() {
   const list = document.getElementById('sfx-tester-list');
   if (!list) return;
@@ -16796,9 +17139,6 @@ function drawBossCracks(bx, by, r, framesSincePhase4) {
 // 3D shading, factored out so the phase 5 transformation can render
 // an exact match before morphing, instead of a simplified stand-in
 // that visibly pops the moment the sequence begins
-
-</script>
-<script>
 function drawBossStandardSphere(bx, by, r, effAccentA, effAccentB, effSkyTop) {
   ctx.save();
   const grad = ctx.createLinearGradient(0, by - r, 0, by + r);
@@ -19092,13 +19432,16 @@ function drawBackground(theme) {
     ctx.restore();
     }
   } else if (theme.bgStyle === 'matrix') {
+    drawGravityWellBackdrop(theme);
+    const tints = [theme.accentA, theme.accentB, theme.wellAccent || '#e85cff'];
     for (let p of bgParticles) {
+      const col = tints[p.tint] || theme.accentA;
       const grad = ctx.createLinearGradient(p.x, p.y - p.len, p.x, p.y);
       grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, theme.accentA);
+      grad.addColorStop(1, col);
       ctx.strokeStyle = grad;
       ctx.globalAlpha = p.alpha;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = p.tint === 2 ? 1.5 : 2;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y - p.len);
       ctx.lineTo(p.x, p.y);
@@ -19632,6 +19975,9 @@ function drawLensingZone(g, theme) {
 
 // telegraph: a growing preview line at the locked height, plus a
 // building charge glow and converging sparks at the boss itself
+
+</script>
+<script>
 function drawBossChargeBeamTelegraph(g, theme) {
   const elapsed = frame - g.spawnFrame;
   const progress = Math.min(1, elapsed / g.warningFrames);
@@ -20031,9 +20377,6 @@ function drawEmp(g, theme) {
   ctx.restore();
 }
 
-
-</script>
-<script>
 function drawSignalCorruption(g, theme) {
   ctx.save();
 
@@ -20504,38 +20847,36 @@ function drawZone2Storm(g, theme) {
 
   // outer layer -- darkest, largest, sets the overall silhouette
   scallopedPath(g.r * 0.8 * pulse1, 9, g.r * 0.2, phase1);
-  ctx.fillStyle = '#6b5a38';
+  ctx.fillStyle = '#1a2858';
   ctx.fill();
 
-  // mid layer -- main tone
+  // mid layer -- cyan well mass
   scallopedPath(g.r * 0.62 * pulse2, 8, g.r * 0.16, phase2);
-  ctx.fillStyle = '#c4a86a';
+  ctx.fillStyle = theme.accentB || '#6ec8ff';
+  ctx.globalAlpha = 0.92;
   ctx.fill();
+  ctx.globalAlpha = 1;
 
-  // inner layer -- lightest, brightest, gives the sense of a glowing core
+  // inner layer -- magenta/white core
   scallopedPath(g.r * 0.38 * pulse3, 7, g.r * 0.1, phase3);
-  ctx.fillStyle = '#e8dcb8';
+  ctx.fillStyle = theme.wellAccent || '#e85cff';
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath();
+  ctx.arc(0, 0, g.r * 0.16, 0, Math.PI * 2);
   ctx.fill();
 
-  // burst spike lines radiating from a few fixed points around the edge,
-  // matching the reference image's cartoon dust-poof look
-  const spikeAngles = [-2.1, -0.6, 1.2, 2.6];
-  spikeAngles.forEach((baseAng) => {
-    const ang = baseAng + phase1 * 0.3;
-    const r1 = g.r * 0.78;
-    const r2 = g.r * 1.05;
-    const perpAng = ang + Math.PI / 2;
-    const spread = g.r * 0.1;
-    ctx.strokeStyle = '#c4a86a';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
+  ctx.strokeStyle = theme.accentA || '#3dffc8';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.globalAlpha = 0.7;
+  for (let i = 0; i < 5; i++) {
+    const ang = phase1 + i * (Math.PI * 2 / 5);
     ctx.beginPath();
-    ctx.moveTo(Math.cos(ang) * r1 + Math.cos(perpAng) * spread, Math.sin(ang) * r1 + Math.sin(perpAng) * spread);
-    ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
-    ctx.moveTo(Math.cos(ang) * r1 - Math.cos(perpAng) * spread, Math.sin(ang) * r1 - Math.sin(perpAng) * spread);
-    ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
+    ctx.arc(0, 0, g.r * (0.45 + (i % 2) * 0.12), ang, ang + 1.1);
     ctx.stroke();
-  });
+  }
+  ctx.globalAlpha = 1;
 
   ctx.restore();
 }
@@ -20817,19 +21158,60 @@ function drawFireball(g, theme) {
   ctx.restore();
 }
 
+function drawGravityWellBackdrop(theme) {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const cx = W * 0.72;
+  const cy = PLAY_TOP + playHeight * 0.48;
+  const magenta = theme.wellAccent || '#e85cff';
+  ctx.save();
+  const well = ctx.createRadialGradient(cx, cy, 8, cx, cy, playHeight * 0.95);
+  well.addColorStop(0, 'rgba(232, 92, 255, 0.18)');
+  well.addColorStop(0.28, 'rgba(110, 200, 255, 0.10)');
+  well.addColorStop(0.62, 'rgba(61, 255, 200, 0.05)');
+  well.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = well;
+  ctx.fillRect(0, PLAY_TOP, W, playHeight);
+
+  ctx.strokeStyle = magenta;
+  ctx.globalAlpha = 0.16;
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 6; i++) {
+    const wobble = 1 + Math.sin(frame * 0.012 + i * 0.7) * 0.04;
+    const rx = (70 + i * 42) * wobble;
+    const ry = (38 + i * 22) * wobble;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0.18, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.16 - i * 0.018;
+  }
+
+  ctx.globalAlpha = 0.55;
+  const core = ctx.createRadialGradient(cx - 6, cy - 6, 2, cx, cy, 22);
+  core.addColorStop(0, '#ffffff');
+  core.addColorStop(0.35, magenta);
+  core.addColorStop(1, 'rgba(12, 24, 40, 0)');
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawHBar(g, theme) {
   const y = liveGateCenter(g);
   const left = g.x - g.width / 2;
   const top = y - g.thickness / 2;
+  const magenta = theme.wellAccent || '#e85cff';
+  const palettes = [
+    { rim: theme.accentA, body: '#102a28', gem: '#d4ff8a' },
+    { rim: theme.accentB, body: '#0c2438', gem: '#9ee7ff' },
+    { rim: magenta, body: '#24102e', gem: '#ffb3e8' }
+  ];
+  const pal = palettes[Math.abs(Math.floor((g.phase || 0) * 8)) % palettes.length];
 
   ctx.save();
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 12;
-  const grad = ctx.createLinearGradient(left, top, left + g.width, top + g.thickness);
-  grad.addColorStop(0, theme.accentA);
-  grad.addColorStop(1, theme.accentB);
-  ctx.fillStyle = grad;
-
+  ctx.shadowColor = pal.rim;
+  ctx.shadowBlur = 14;
   const r = Math.min(6, g.thickness / 2);
   ctx.beginPath();
   ctx.moveTo(left + r, top);
@@ -20842,12 +21224,27 @@ function drawHBar(g, theme) {
   ctx.lineTo(left, top + r);
   ctx.quadraticCurveTo(left, top, left + r, top);
   ctx.closePath();
+  const body = ctx.createLinearGradient(left, top, left, top + g.thickness);
+  body.addColorStop(0, pal.rim);
+  body.addColorStop(0.35, pal.body);
+  body.addColorStop(0.65, pal.body);
+  body.addColorStop(1, pal.rim);
+  ctx.fillStyle = body;
   ctx.fill();
-
-  ctx.strokeStyle = theme.accentB;
-  ctx.lineWidth = 1.5;
-  ctx.globalAlpha = 0.7;
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = pal.rim;
+  ctx.lineWidth = 1.6;
+  ctx.globalAlpha = 0.85;
   ctx.stroke();
+
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = pal.gem;
+  const gemH = Math.max(3, g.thickness * 0.28);
+  ctx.fillRect(left + 10, y - gemH / 2, g.width - 20, gemH);
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.arc(g.x, y, Math.min(4.5, g.thickness * 0.28), 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -23356,6 +23753,24 @@ function updateOverlay() {
             </div>
           </div>
           <div class="settings-trail-hint">${currentShipSkin().hint} &middot; ${unlockedShipSkins().length} / ${SHIP_SKINS.length} unlocked</div>
+          <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
+          <div class="menu-btn-row" data-action="copy-save-id">
+            <span class="menu-btn-label">SAVE ID</span>
+            <span class="row-action-indicator settings-save-id">${ensurePlayerSaveId()}</span>
+          </div>
+          <div class="settings-trail-hint">Keep this ID or bookmark the page (the address ends with #sf=${ensurePlayerSaveId()}). Clearing cache does not erase a server save. Export a file for a copy that lives outside the browser.</div>
+          <div class="menu-btn-row" data-action="export-save">
+            <span class="menu-btn-label">EXPORT SAVE</span>
+            <span class="row-action-indicator">FILE &#9660;</span>
+          </div>
+          <div class="menu-btn-row" data-action="import-save">
+            <span class="menu-btn-label">IMPORT SAVE</span>
+            <span class="row-action-indicator">FILE &#9654;</span>
+          </div>
+          <div class="menu-btn-row" data-action="restore-save-id">
+            <span class="menu-btn-label">RESTORE ID</span>
+            <span class="row-action-indicator">LOAD &#9654;</span>
+          </div>
           <div class="achievement-section-header" style="margin-top:14px;">DIFFICULTY DETAILS</div>
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-easy">EASY</div>
@@ -27247,12 +27662,32 @@ function loop() {
 window.addEventListener('resize', checkOrientation);
 window.addEventListener('orientationchange', checkOrientation);
 
+(function bindPlayerSaveImport() {
+  const input = document.getElementById('player-save-import');
+  if (!input) return;
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        importPlayerSaveObject(JSON.parse(String(reader.result || '')));
+      } catch (err) {
+        window.alert('Could not import that file. Use a Synth Flight export JSON.');
+      }
+    };
+    reader.readAsText(file);
+  });
+})();
+
 try {
   checkOrientation();
   resetGame();
   state = 'home';
   updateOverlay();
   window.SYNTH_FLIGHT_BOOTED = true;
+  hydrateDurableSave();
   loop();
 } catch (e) {
   window.SYNTH_FLIGHT_BOOTED = true;

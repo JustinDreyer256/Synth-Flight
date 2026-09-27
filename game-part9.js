@@ -118,9 +118,9 @@ function loop() {
       if (elapsed > 100) elapsed = 100;
 
       if (state === 'playing' || state === 'victory') {
-        // One tick per paint so a 120/144Hz Cursor panel stays at the
-        // speed this game was tuned for. Extra ticks only when a frame
-        // actually ran long (typical ~30fps fullscreen Chrome).
+        // One tick per paint so a 120/144Hz panel stays at the speed this
+        // game was tuned for. Extra ticks only when a frame actually ran
+        // long (dropped frames), not to "catch up" Chrome 60Hz vsync.
         let steps = 1;
         if (elapsed > 20) {
           steps = Math.min(MAX_SIM_STEPS, Math.round(elapsed / SIM_STEP_MS));
@@ -144,12 +144,32 @@ function loop() {
 window.addEventListener('resize', checkOrientation);
 window.addEventListener('orientationchange', checkOrientation);
 
+(function bindPlayerSaveImport() {
+  const input = document.getElementById('player-save-import');
+  if (!input) return;
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        importPlayerSaveObject(JSON.parse(String(reader.result || '')));
+      } catch (err) {
+        window.alert('Could not import that file. Use a Synth Flight export JSON.');
+      }
+    };
+    reader.readAsText(file);
+  });
+})();
+
 try {
   checkOrientation();
   resetGame();
   state = 'home';
   updateOverlay();
   window.SYNTH_FLIGHT_BOOTED = true;
+  hydrateDurableSave();
   loop();
 } catch (e) {
   window.SYNTH_FLIGHT_BOOTED = true;

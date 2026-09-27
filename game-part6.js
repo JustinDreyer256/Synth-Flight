@@ -1,3 +1,292 @@
+function buildSfxTesterUi() {
+  const list = document.getElementById('sfx-tester-list');
+  if (!list) return;
+  const bySection = [];
+  for (const entry of SFX_CATALOG) {
+    let group = bySection.find((g) => g.title === entry.section);
+    if (!group) {
+      group = { title: entry.section, entries: [] };
+      bySection.push(group);
+    }
+    group.entries.push(entry);
+  }
+  list.innerHTML = bySection.map((group) => {
+    const buttons = group.entries.map((entry) => {
+      const kindLabel = entry.kind === 'loop' ? 'LOOP — click again to stop' : entry.kind === 'bgm' ? 'MUSIC — click again to stop' : 'ONE-SHOT';
+      if (entry.id === 'shipGlowDanger') {
+        return `<div class="sfx-glow-row">
+          <button type="button" class="sfx-glow-arrow" data-glow-danger-dir="-1" aria-label="Previous glow danger">&#9664;</button>
+          <button type="button" class="sfx-btn" data-sfx-id="${entry.id}">${entry.name}<span class="sfx-kind" id="sfx-glow-danger-kind">LOOP — ${currentGlowDangerLabel()} — arrows change style</span></button>
+          <button type="button" class="sfx-glow-arrow" data-glow-danger-dir="1" aria-label="Next glow danger">&#9654;</button>
+        </div>`;
+      }
+      if (entry.id === 'shipRespawn') {
+        return `<div class="sfx-glow-row">
+          <button type="button" class="sfx-glow-arrow" data-respawn-dir="-1" aria-label="Previous respawn">&#9664;</button>
+          <button type="button" class="sfx-btn" data-sfx-id="${entry.id}">${entry.name}<span class="sfx-kind" id="sfx-respawn-kind">ONE-SHOT — ${currentRespawnLabel()} — arrows change style</span></button>
+          <button type="button" class="sfx-glow-arrow" data-respawn-dir="1" aria-label="Next respawn">&#9654;</button>
+        </div>`;
+      }
+      if (entry.id === 'shipLifeLost') {
+        return `<div class="sfx-glow-row">
+          <button type="button" class="sfx-glow-arrow" data-life-lost-dir="-1" aria-label="Previous life lost">&#9664;</button>
+          <button type="button" class="sfx-btn" data-sfx-id="${entry.id}">${entry.name}<span class="sfx-kind" id="sfx-life-lost-kind">ONE-SHOT — ${currentLifeLostLabel()} — arrows change style</span></button>
+          <button type="button" class="sfx-glow-arrow" data-life-lost-dir="1" aria-label="Next life lost">&#9654;</button>
+        </div>`;
+      }
+      return `<button type="button" class="sfx-btn" data-sfx-id="${entry.id}">${entry.name}<span class="sfx-kind">${kindLabel}</span></button>`;
+    }).join('');
+    return `<div class="sfx-section-title">${group.title}</div><div class="sfx-grid">${buttons}</div>`;
+  }).join('');
+}
+
+function setSfxTesterPlaying(id) {
+  document.querySelectorAll('.sfx-btn.playing').forEach((btn) => btn.classList.remove('playing'));
+  if (!id) return;
+  const btn = document.querySelector(`.sfx-btn[data-sfx-id="${id}"]`);
+  if (btn) btn.classList.add('playing');
+}
+
+function initSfxTester() {
+  const overlay = document.getElementById('sfx-tester');
+  const toggle = document.getElementById('sfx-toggle');
+  const closeBtn = document.getElementById('sfx-tester-close');
+  const stopBtn = document.getElementById('sfx-tester-stop');
+  const list = document.getElementById('sfx-tester-list');
+  if (!overlay || !toggle || !list) return;
+  buildSfxTesterUi();
+  toggle.addEventListener('click', () => {
+    overlay.classList.add('active');
+    unlockAudio();
+  });
+  closeBtn.addEventListener('click', () => {
+    overlay.classList.remove('active');
+    stopAllSoundTesterAudio();
+    setSfxTesterPlaying(null);
+  });
+  stopBtn.addEventListener('click', () => {
+    stopAllSoundTesterAudio();
+    setSfxTesterPlaying(null);
+  });
+  list.addEventListener('click', (e) => {
+    const respawnStep = e.target.closest('[data-respawn-dir]');
+    if (respawnStep) {
+      unlockAudio();
+      initAudio();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      cycleRespawn(Number(respawnStep.dataset.respawnDir));
+      setSfxTesterPlaying('shipRespawn');
+      return;
+    }
+    const lifeLostStep = e.target.closest('[data-life-lost-dir]');
+    if (lifeLostStep) {
+      unlockAudio();
+      initAudio();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      cycleLifeLost(Number(lifeLostStep.dataset.lifeLostDir));
+      setSfxTesterPlaying('shipLifeLost');
+      return;
+    }
+    const step = e.target.closest('[data-glow-danger-dir]');
+    if (step) {
+      unlockAudio();
+      initAudio();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      cycleGlowDanger(Number(step.dataset.glowDangerDir));
+      setSfxTesterPlaying('shipGlowDanger');
+      return;
+    }
+    const btn = e.target.closest('[data-sfx-id]');
+    if (!btn) return;
+    const entry = SFX_CATALOG.find((item) => item.id === btn.dataset.sfxId);
+    if (!entry) return;
+    const playing = playSfxCatalogEntry(entry);
+    setSfxTesterPlaying(playing ? entry.id : null);
+  });
+}
+
+initSfxTester();
+
+// ---- Drawing ----
+function lerpHexColor(hexA, hexB, t) {
+  const a = parseInt(hexA.slice(1), 16);
+  const b = parseInt(hexB.slice(1), 16);
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+
+function getBossColorProgress() {
+  // 0 = original phase 1-2 colors, 1 = full phase 3 colors -- smoothly
+  // animated only during the phase 2->3 transition specifically.
+  // phases 3+ always stay at full color, including during the later
+  // phase 4->5 transformation, which reuses the same bossTransitioning
+  // flag for a different purpose and must not re-trigger this ramp
+  if (bossTransitioning && bossTransitionTargetPhase === 3) {
+    return Math.min(1, (frame - bossTransitionStartFrame) / BOSS_TRANSITION_DURATION);
+  }
+  if (bossPhase >= 3) return 1;
+  return 0;
+}
+
+function getPhase5BackgroundProgress() {
+  // 0 = phase 3/4 grid background, 1 = full volcanic ash background --
+  // animates in lockstep with the phase 4->5 transformation
+  if (bossTransitioning && bossTransitionTargetPhase === 5) {
+    return Math.min(1, (frame - bossTransitionStartFrame) / BOSS_PHASE5_TRANSITION_DURATION);
+  }
+  if (bossPhase >= 5) return 1;
+  return 0;
+}
+
+function drawBossCharge(theme, stageProgress) {
+  // stage 1: glitch static intensifying around the spawn point, plus a
+  // pulsing point of light building up -- no solid orb yet
+  ctx.save();
+  for (let i = 0; i < 12; i++) {
+    const flicker = Math.sin(frame * 0.5 + i * 3.1);
+    if (flicker > 0.2) {
+      const ang = i * 2.4;
+      const dist = 40 + 60 * stageProgress * (0.5 + 0.5 * Math.sin(i * 1.3));
+      const x = boss.x + Math.cos(ang) * dist;
+      const y = boss.y + Math.sin(ang) * dist;
+      ctx.fillStyle = i % 2 === 0 ? theme.accentA : theme.accentB;
+      ctx.globalAlpha = 0.4 * stageProgress;
+      ctx.fillRect(x - 3, y - 3, 6, 6);
+    }
+  }
+  const pulse = 0.6 + 0.4 * Math.sin(frame * 0.4);
+  const coreR = 8 + 30 * stageProgress * pulse;
+  ctx.shadowColor = theme.accentB;
+  ctx.shadowBlur = 15 + 15 * stageProgress;
+  ctx.fillStyle = '#ffffff';
+  ctx.globalAlpha = 0.5 + 0.5 * stageProgress;
+  ctx.beginPath();
+  ctx.arc(boss.x, boss.y, coreR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBossFragments(theme, stageProgress) {
+  // stage 2: shards converge from a ring around the final position,
+  // accelerating inward, with a faint central glow building as they approach
+  ctx.save();
+  const eased = stageProgress * stageProgress;
+  for (const frag of boss.fragments) {
+    const fx = frag.startX + (boss.x - frag.startX) * eased;
+    const fy = frag.startY + (boss.y - frag.startY) * eased;
+    ctx.shadowColor = theme.accentA;
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = theme.accentB;
+    ctx.globalAlpha = 0.5 + 0.5 * stageProgress;
+    ctx.beginPath();
+    ctx.arc(fx, fy, frag.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.shadowBlur = 20;
+  ctx.fillStyle = '#ffffff';
+  ctx.globalAlpha = 0.3 * stageProgress;
+  ctx.beginPath();
+  ctx.arc(boss.x, boss.y, 20 + 30 * stageProgress, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBossSnapEffect(theme, stageProgress) {
+  // stage 3: bright flash fading quickly, plus an expanding shockwave
+  // ring -- layered on top of the now-fully-formed orb underneath
+  ctx.save();
+  const flashAlpha = Math.max(0, 1 - stageProgress * 3);
+  if (flashAlpha > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${flashAlpha * 0.7})`;
+    ctx.beginPath();
+    ctx.arc(boss.x, boss.y, boss.maxR * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const ringR = boss.maxR * (1 + stageProgress * 2.5);
+  const ringAlpha = Math.max(0, 1 - stageProgress * 1.2);
+  ctx.strokeStyle = theme.accentB;
+  ctx.lineWidth = 4 * (1 - stageProgress) + 1;
+  ctx.globalAlpha = ringAlpha;
+  ctx.beginPath();
+  ctx.arc(boss.x, boss.y, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBossTransitionCompleteEffect(theme, stageProgress) {
+  // punctuates the moment the new form locks in -- same visual language
+  // as the entrance snap, but in the new phase-3 colors
+  ctx.save();
+  const flashAlpha = Math.max(0, 1 - stageProgress * 2.5);
+  if (flashAlpha > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${flashAlpha * 0.8})`;
+    ctx.beginPath();
+    ctx.arc(boss.x, boss.y, boss.maxR * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const ringR = boss.maxR * (1 + stageProgress * 2.8);
+  const ringAlpha = Math.max(0, 1 - stageProgress * 1.1);
+  ctx.strokeStyle = theme.phase3AccentB;
+  ctx.lineWidth = 5 * (1 - stageProgress) + 1;
+  ctx.globalAlpha = ringAlpha;
+  ctx.beginPath();
+  ctx.arc(boss.x, boss.y, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// phase 4 "wear and tear" -- jagged cracks spreading gradually across
+// the boss's surface as phase 4 progresses, echoing the same glowing
+// cyan crack language already used on the homing fragment's cracked
+// core. drawn inside the boss's own clip so they're automatically
+// bounded to its circular silhouette; each crack fades in individually
+// at a staggered offset so they visibly spread over time rather than
+// all appearing at once
+const BOSS_CRACK_PATHS = [
+  [[-0.5, -0.6], [-0.2, -0.3], [-0.4, -0.1], [-0.15, 0.05]],
+  [[0.4, -0.4], [0.55, -0.15], [0.35, 0.1], [0.5, 0.3]],
+  [[-0.3, 0.2], [-0.5, 0.4], [-0.25, 0.55]],
+  [[0.1, -0.7], [0.25, -0.5], [0.05, -0.35], [0.2, -0.15]],
+  [[0.2, 0.4], [0.4, 0.55], [0.15, 0.7]],
+  [[-0.1, -0.2], [0.1, 0.0], [-0.05, 0.25], [0.15, 0.45]]
+];
+const BOSS_CRACK_APPEAR_OFFSETS = [0, 150, 300, 500, 700, 900];
+const BOSS_CRACK_FADE_IN_DURATION = 120;
+
+function drawBossCracks(bx, by, r, framesSincePhase4) {
+  if (framesSincePhase4 < 0) return;
+  ctx.save();
+  for (let i = 0; i < BOSS_CRACK_PATHS.length; i++) {
+    const sinceAppear = framesSincePhase4 - BOSS_CRACK_APPEAR_OFFSETS[i];
+    if (sinceAppear < 0) continue;
+    const fadeIn = Math.min(1, sinceAppear / BOSS_CRACK_FADE_IN_DURATION);
+    const pulse = 0.7 + 0.3 * Math.sin(frame * 0.15 + i * 1.9);
+    ctx.strokeStyle = '#00e0ff';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = fadeIn * pulse * 0.85;
+    ctx.shadowColor = '#00e0ff';
+    ctx.shadowBlur = 5;
+    ctx.beginPath();
+    BOSS_CRACK_PATHS[i].forEach(([px, py], j) => {
+      const x = bx + px * r, y = by + py * r;
+      j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// phase 5 final form -- a total-eclipse look: dark core, irregular
+// flaring corona (not a smooth ring, jagged flare-like protrusions),
+// and a single bright "diamond ring" highlight point near the rim
+// the boss's standard sphere appearance -- gradient, scanlines, and
+// 3D shading, factored out so the phase 5 transformation can render
+// an exact match before morphing, instead of a simplified stand-in
+// that visibly pops the moment the sequence begins
 function drawBossStandardSphere(bx, by, r, effAccentA, effAccentB, effSkyTop) {
   ctx.save();
   const grad = ctx.createLinearGradient(0, by - r, 0, by + r);
@@ -533,10 +822,7 @@ function drawReactorCoreAttacks(theme) {
   const state = miniBossAttackState;
   ctx.save();
 
-  if (coreBossPhase === 6 && (state === 'coreCrossfireTelegraph' ||
-      state === 'coreCrossfireActive' || state === 'coreCrossfireGap')) {
-    drawCoreSparks();
-  }
+  if (coreSparks.length) drawCoreSparks();
 
   if (state === 'coreLaserTelegraph') {
     const stateElapsed = frame - miniBossAttackStateStartFrame;
@@ -618,7 +904,6 @@ function drawReactorCoreAttacks(theme) {
       }
     }
   } else if (state === 'coreSparkDeploy') {
-    drawCoreSparks();
     // beam volleys, drawn on top of the sparks when active
     if (coreP3BeamState === 'telegraph') {
       const stateElapsed = frame - coreP3BeamStateStartFrame;
@@ -2218,6 +2503,196 @@ function drawMenuBackground() {
   drawSynthwaveScene(PLAY_TOP, PLAY_BOTTOM);
 }
 
+function drawInfernoHeatBackdrop(theme) {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+
+  const floorGlow = ctx.createLinearGradient(0, PLAY_BOTTOM - playHeight * 0.28, 0, PLAY_BOTTOM);
+  floorGlow.addColorStop(0, 'rgba(255, 40, 0, 0)');
+  floorGlow.addColorStop(0.55, 'rgba(255, 70, 10, 0.10)');
+  floorGlow.addColorStop(1, 'rgba(255, 140, 20, 0.22)');
+  ctx.fillStyle = floorGlow;
+  ctx.fillRect(0, PLAY_BOTTOM - playHeight * 0.28, W, playHeight * 0.28);
+
+  const roofGlow = ctx.createLinearGradient(0, PLAY_TOP, 0, PLAY_TOP + playHeight * 0.16);
+  roofGlow.addColorStop(0, 'rgba(255, 80, 20, 0.14)');
+  roofGlow.addColorStop(1, 'rgba(255, 40, 0, 0)');
+  ctx.fillStyle = roofGlow;
+  ctx.fillRect(0, PLAY_TOP, W, playHeight * 0.16);
+
+  ctx.strokeStyle = 'rgba(255, 90, 20, 0.18)';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < bgParticles.length; i++) {
+    const p = bgParticles[i];
+    ctx.beginPath();
+    ctx.moveTo(p.x + (p.len || 12), p.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+}
+
+function drawToxicWastelandBackdrop(theme) {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const scroll = frame * 0.22;
+
+  const sunX = W * 0.78;
+  const sunY = PLAY_TOP + playHeight * 0.28;
+  const sunR = playHeight * 0.34;
+  const sun = ctx.createRadialGradient(sunX, sunY, sunR * 0.12, sunX, sunY, sunR);
+  sun.addColorStop(0, 'rgba(210, 190, 70, 0.16)');
+  sun.addColorStop(0.35, 'rgba(120, 130, 40, 0.08)');
+  sun.addColorStop(1, 'rgba(40, 50, 10, 0)');
+  ctx.fillStyle = sun;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, PLAY_TOP, W, playHeight);
+  ctx.clip();
+
+  for (let i = 0; i < 3; i++) {
+    const fy = PLAY_TOP + playHeight * (0.22 + i * 0.2);
+    const fx = ((W * 0.45 * i - scroll * (0.4 + i * 0.12)) % (W + 320)) - 160;
+    const haze = ctx.createRadialGradient(fx, fy, 0, fx, fy, 220);
+    haze.addColorStop(0, `rgba(140, 150, 55, ${0.07 - i * 0.015})`);
+    haze.addColorStop(1, 'rgba(40, 50, 15, 0)');
+    ctx.fillStyle = haze;
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, 240, 36 + i * 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = 'rgba(10, 16, 6, 0.38)';
+  ctx.beginPath();
+  ctx.moveTo(0, PLAY_BOTTOM);
+  const hillScroll = (scroll * 0.45) % 90;
+  for (let hx = -hillScroll; hx <= W + 90; hx += 18) {
+    const hill = 28 + Math.sin(hx * 0.018 + 0.4) * 18 + Math.sin(hx * 0.05) * 8;
+    ctx.lineTo(hx, PLAY_BOTTOM - hill);
+  }
+  ctx.lineTo(W, PLAY_BOTTOM);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(18, 28, 10, 0.55)';
+  ctx.beginPath();
+  ctx.moveTo(0, PLAY_BOTTOM);
+  const bermStep = 48;
+  const bermScroll = scroll % bermStep;
+  for (let bx = -bermScroll; bx <= W + bermStep; bx += bermStep) {
+    const hump = 16 + (Math.sin(bx * 0.035 + frame * 0.01) * 0.5 + 0.5) * 14;
+    ctx.lineTo(bx, PLAY_BOTTOM - hump);
+  }
+  ctx.lineTo(W, PLAY_BOTTOM);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(22, 32, 12, 0.4)';
+  ctx.beginPath();
+  ctx.moveTo(0, PLAY_TOP);
+  for (let tx = -((scroll * 0.6) % 40); tx <= W + 40; tx += 40) {
+    const hang = 8 + Math.abs(Math.sin(tx * 0.08 + 1.2)) * 11;
+    ctx.lineTo(tx, PLAY_TOP + hang);
+  }
+  ctx.lineTo(W, PLAY_TOP);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  for (let p of bgParticles) {
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = '#6d7c38';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.r * (p.stretch || 1), p.r, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Zone 1's decorative sun is the same orb that later becomes The Signal.
+// At 900 m it glitches, shrinks, and leaves the sky so the last stretch
+// of Synthwave plays without it -- purely visual, no gameplay change.
+function getSynthwaveSunVanishT(theme) {
+  if (!theme || theme.name !== 'SYNTHWAVE' || theme.isBossZone) return 0;
+  const t = (distance - zoneStartDistance - SYNTHWAVE_SUN_VANISH_START) / SYNTHWAVE_SUN_VANISH_DURATION;
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t;
+}
+
+function drawSynthwaveBackdropSun(theme) {
+  const vanishT = getSynthwaveSunVanishT(theme);
+  if (vanishT >= 1) return;
+
+  const ease = vanishT * vanishT * (3 - 2 * vanishT);
+  const playH = PLAY_BOTTOM - PLAY_TOP;
+  const baseCX = W * 0.78;
+  const baseCY = PLAY_TOP + playH * 0.32;
+  const baseR = playH * 0.22;
+  const jitter = vanishT > 0 ? Math.sin(frame * 0.55 + vanishT * 14) * ease * 7 : 0;
+  const sunCX = baseCX + jitter;
+  const sunCY = baseCY - ease * baseR * 0.42;
+  const sunR = baseR * (1 - ease * 0.9);
+  const alpha = 1 - Math.pow(ease, 1.25);
+  if (sunR < 1 || alpha <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (vanishT > 0 && vanishT < 0.62) {
+    const bloomPulse = 0.28 * (1 - vanishT / 0.62);
+    const bloom = ctx.createRadialGradient(sunCX, sunCY, sunR * 0.18, sunCX, sunCY, sunR * (1.75 + vanishT * 0.8));
+    bloom.addColorStop(0, 'rgba(255, 210, 63, ' + bloomPulse + ')');
+    bloom.addColorStop(0.45, 'rgba(255, 32, 121, ' + (bloomPulse * 0.45) + ')');
+    bloom.addColorStop(1, 'rgba(15, 240, 252, 0)');
+    ctx.fillStyle = bloom;
+    ctx.beginPath();
+    ctx.arc(sunCX, sunCY, sunR * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const drawSunBody = (cx, cy, bodyAlpha) => {
+    ctx.save();
+    ctx.globalAlpha = alpha * bodyAlpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, sunR, 0, Math.PI * 2);
+    ctx.clip();
+    const sunGrad = ctx.createLinearGradient(0, cy - sunR, 0, cy + sunR);
+    sunGrad.addColorStop(0, '#ffd23f');
+    sunGrad.addColorStop(0.5, theme.accentA);
+    sunGrad.addColorStop(1, theme.accentB);
+    ctx.fillStyle = sunGrad;
+    ctx.fillRect(cx - sunR, cy - sunR, sunR * 2, sunR * 2);
+    ctx.fillStyle = theme.skyTop;
+    const bandCount = 5 + Math.floor(ease * 8);
+    const bandGap = sunR * (0.15 + ease * 0.08);
+    for (let i = 0; i < bandCount; i++) {
+      const y = cy + bandGap * i - sunR * 0.08 - ease * sunR * 0.2;
+      ctx.fillRect(cx - sunR, y, sunR * 2, (3 + i) * (1 + ease * 2.4));
+    }
+    ctx.restore();
+  };
+
+  if (vanishT > 0.08 && vanishT < 0.88) {
+    const split = ease * 10;
+    drawSunBody(sunCX - split, sunCY, 0.28);
+    drawSunBody(sunCX + split, sunCY + split * 0.25, 0.22);
+  }
+  drawSunBody(sunCX, sunCY, 1);
+
+  if (vanishT > 0.2 && vanishT < 0.95) {
+    ctx.globalAlpha = alpha * 0.55 * (1 - Math.abs(vanishT - 0.55) * 1.6);
+    ctx.strokeStyle = theme.accentB;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(sunCX, sunCY, sunR * (1.12 + vanishT * 0.8), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawBackground(theme) {
   const colorProgress = theme.isBossZone ? getBossColorProgress() : 0;
   const phase5Progress = theme.isBossZone ? getPhase5BackgroundProgress() : 0;
@@ -2243,25 +2718,7 @@ function drawBackground(theme) {
 
   if (theme.bgStyle === 'grid') {
     if (!theme.isBossZone) {
-    const sunCX = W * 0.78;
-    const sunCY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.32;
-    const sunR = (PLAY_BOTTOM - PLAY_TOP) * 0.22;
-    const sunGrad = ctx.createLinearGradient(0, sunCY - sunR, 0, sunCY + sunR);
-    sunGrad.addColorStop(0, '#ffd23f');
-    sunGrad.addColorStop(0.5, theme.accentA);
-    sunGrad.addColorStop(1, theme.accentB);
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(sunCX, sunCY, sunR, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.fillStyle = sunGrad;
-    ctx.fillRect(sunCX - sunR, sunCY - sunR, sunR * 2, sunR * 2);
-    ctx.fillStyle = theme.skyTop;
-    for (let i = 0; i < 5; i++) {
-      const y = sunCY + sunR * 0.15 * i - 2;
-      ctx.fillRect(sunCX - sunR, y, sunR * 2, 3 + i);
-    }
-    ctx.restore();
+      drawSynthwaveBackdropSun(theme);
     }
 
     // the perspective grid fully replaces this one in boss zones once
@@ -2275,29 +2732,34 @@ function drawBackground(theme) {
     ctx.lineWidth = 1;
     ctx.globalAlpha = bossGridFadeEnabled ? 1 - colorProgress : 1;
     const gridSpacing = 40;
-    const offset = (frame * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing;
+    const offset = Math.round((frame * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing);
     for (let x = -offset; x < W; x += gridSpacing) {
+      const px = Math.round(x) + 0.5;
       ctx.beginPath();
-      ctx.moveTo(x, PLAY_TOP);
-      ctx.lineTo(x, PLAY_BOTTOM);
+      ctx.moveTo(px, PLAY_TOP);
+      ctx.lineTo(px, PLAY_BOTTOM);
       ctx.stroke();
     }
     for (let y = PLAY_TOP; y < PLAY_BOTTOM; y += gridSpacing) {
+      const py = Math.round(y) + 0.5;
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(W, y);
+      ctx.moveTo(0, py);
+      ctx.lineTo(W, py);
       ctx.stroke();
     }
     ctx.restore();
     }
   } else if (theme.bgStyle === 'matrix') {
+    drawGravityWellBackdrop(theme);
+    const tints = [theme.accentA, theme.accentB, theme.wellAccent || '#e85cff'];
     for (let p of bgParticles) {
+      const col = tints[p.tint] || theme.accentA;
       const grad = ctx.createLinearGradient(p.x, p.y - p.len, p.x, p.y);
       grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, theme.accentA);
+      grad.addColorStop(1, col);
       ctx.strokeStyle = grad;
       ctx.globalAlpha = p.alpha;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = p.tint === 2 ? 1.5 : 2;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y - p.len);
       ctx.lineTo(p.x, p.y);
@@ -2314,14 +2776,7 @@ function drawBackground(theme) {
     }
     ctx.globalAlpha = 1;
   } else if (theme.bgStyle === 'embers') {
-    for (let p of bgParticles) {
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle = theme.accentA;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    drawInfernoHeatBackdrop(theme);
   } else if (theme.bgStyle === 'ruins') {
     const playHeight = PLAY_BOTTOM - PLAY_TOP;
 
@@ -2392,44 +2847,7 @@ function drawBackground(theme) {
     }
     ctx.globalAlpha = 1;
   } else if (theme.bgStyle === 'toxic') {
-    const playHeight = PLAY_BOTTOM - PLAY_TOP;
-
-    // drifting toxic fog banks
-    for (let i = 0; i < 4; i++) {
-      const fx = ((W * 0.3 * i - frame * 0.25) % (W + 260)) - 130;
-      const fy = PLAY_TOP + playHeight * (0.15 + i * 0.22);
-      const fgrad = ctx.createRadialGradient(fx, fy, 0, fx, fy, 150);
-      fgrad.addColorStop(0, 'rgba(138,255,77,0.12)');
-      fgrad.addColorStop(1, 'rgba(138,255,77,0)');
-      ctx.fillStyle = fgrad;
-      ctx.beginPath();
-      ctx.ellipse(fx, fy, 150, 45, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // sickly bubbling ground texture near top and bottom edges
-    ctx.fillStyle = 'rgba(60,80,20,0.35)';
-    const oozeSpacing = 60;
-    const oozeOffset = (frame * 0.7) % oozeSpacing;
-    for (let ox = -oozeOffset; ox < W + oozeSpacing; ox += oozeSpacing) {
-      const bob = Math.sin(frame * 0.05 + ox * 0.05) * 4;
-      ctx.beginPath();
-      ctx.arc(ox, PLAY_TOP + 6 + bob, 10, 0, Math.PI);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(ox + oozeSpacing / 2, PLAY_BOTTOM - 6 - bob, 10, Math.PI, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // rising toxic bubbles/spores
-    for (let p of bgParticles) {
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle = theme.accentA;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    drawToxicWastelandBackdrop(theme);
   } else if (theme.bgStyle === 'station') {
     const playHeight = PLAY_BOTTOM - PLAY_TOP;
 
@@ -2730,502 +3148,6 @@ function drawSupernovaPlanet(g, theme) {
   ctx.arc(0, 0, g.planetR, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
-
-  ctx.restore();
-}
-
-function drawSupernovaFlash(g, theme) {
-  const t = Math.min(1, (frame - g.detonationFrame) / 20);
-  ctx.save();
-  ctx.translate(g.x, g.y);
-  const flashR = g.planetR * (1 + t * 2);
-  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, flashR);
-  grad.addColorStop(0, `rgba(255,255,255,${1 - t})`);
-  grad.addColorStop(0.4, `rgba(255,220,150,${(1 - t) * 0.6})`);
-  grad.addColorStop(1, 'rgba(255,180,100,0)');
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(0, 0, flashR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawSupernovaDebris(g, theme) {
-  const pos = liveProjectilePos(g);
-  ctx.save();
-  ctx.shadowColor = '#ff8844';
-  ctx.shadowBlur = 10;
-  const grad = ctx.createRadialGradient(pos.x - g.r * 0.3, pos.y - g.r * 0.3, g.r * 0.1, pos.x, pos.y, g.r);
-  grad.addColorStop(0, '#fff3c4');
-  grad.addColorStop(0.5, '#e8703a');
-  grad.addColorStop(1, '#3a1a10');
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(pos.x, pos.y, g.r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawLensingZone(g, theme) {
-  ctx.save();
-  ctx.translate(g.x, g.y);
-
-  // concentric rippling distortion rings, like heat-haze or water ripples
-  const ringCount = 5;
-  for (let i = 1; i <= ringCount; i++) {
-    const baseR = (g.zoneRadius / ringCount) * i;
-    const wobbleAmt = 6 + i * 1.5;
-    const phase = frame * 0.02 + g.rotSeed + i * 0.8;
-    ctx.beginPath();
-    const segments = 40;
-    for (let s = 0; s <= segments; s++) {
-      const ang = (s / segments) * Math.PI * 2;
-      const wobble = Math.sin(ang * 4 + phase) * wobbleAmt * (i / ringCount);
-      const r = baseR + wobble;
-      const px = Math.cos(ang) * r, py = Math.sin(ang) * r;
-      if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.strokeStyle = theme.accentA;
-    ctx.globalAlpha = 0.12 * (1 - i / (ringCount + 2));
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-
-  // subtle rotating swirl streaks
-  ctx.save();
-  ctx.rotate(frame * 0.008 + g.rotSeed);
-  for (let i = 0; i < 3; i++) {
-    const swirlAngle = (i / 3) * Math.PI * 2;
-    ctx.strokeStyle = theme.accentB;
-    ctx.globalAlpha = 0.15;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let s = 0; s <= 20; s++) {
-      const t = s / 20;
-      const ang = swirlAngle + t * Math.PI * 1.5;
-      const r = t * g.zoneRadius * 0.85;
-      ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
-    }
-    ctx.stroke();
-  }
-  ctx.restore();
-  ctx.globalAlpha = 1;
-
-  // small lethal core, partially camouflaged in the shimmer -- genuinely
-  // findable (pulses toward full brightness periodically), just easy to
-  // overlook amid the surrounding visual noise
-  const corePulse = 0.5 + 0.5 * Math.sin(frame * 0.15 + g.rotSeed);
-  ctx.shadowColor = theme.accentA;
-  ctx.shadowBlur = 6 + 4 * corePulse;
-  ctx.fillStyle = theme.accentA;
-  ctx.globalAlpha = 0.55 + 0.25 * corePulse;
-  ctx.beginPath();
-  ctx.arc(0, 0, g.coreR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  ctx.restore();
-}
-
-// telegraph: a growing preview line at the locked height, plus a
-// building charge glow and converging sparks at the boss itself
-function drawBossChargeBeamTelegraph(g, theme) {
-  const elapsed = frame - g.spawnFrame;
-  const progress = Math.min(1, elapsed / g.warningFrames);
-  ctx.save();
-  const pulse = 0.7 + 0.3 * Math.sin(frame * 0.3);
-  ctx.strokeStyle = '#ffd23f';
-  ctx.lineWidth = 2 + progress * 3;
-  ctx.globalAlpha = (0.15 + progress * 0.5) * pulse;
-  ctx.shadowColor = '#ff6020';
-  ctx.shadowBlur = 6 + progress * 10;
-  ctx.beginPath();
-  ctx.moveTo(boss ? boss.x : 0, g.lockedY);
-  ctx.lineTo(0, g.lockedY);
-  ctx.stroke();
-
-  if (boss) {
-    ctx.globalAlpha = progress * 0.7;
-    ctx.fillStyle = '#fff5cc';
-    ctx.shadowColor = '#ffd23f';
-    ctx.shadowBlur = 15 * progress;
-    ctx.beginPath();
-    ctx.arc(boss.x, boss.y, boss.maxR * 0.25 * progress, 0, Math.PI * 2);
-    ctx.fill();
-
-    for (let i = 0; i < 6; i++) {
-      const ang = i * 1.047 + frame * 0.04;
-      const dist = boss.maxR * (1.5 - progress * 0.8);
-      const sx = boss.x + Math.cos(ang) * dist, sy = boss.y + Math.sin(ang) * dist;
-      ctx.globalAlpha = progress * 0.6;
-      ctx.fillStyle = '#ffd23f';
-      ctx.shadowBlur = 4;
-      ctx.beginPath();
-      ctx.arc(sx, sy, 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  ctx.restore();
-}
-
-// fired beam: layered glow, mid orange body, and a flickering
-// white-hot core, spanning the full width at the locked height
-function drawBossChargeBeam(g, theme) {
-  const elapsed = frame - g.spawnFrame;
-  const progress = elapsed / (g.fireDuration || BOSS_CHARGE_BEAM_FIRE_DURATION);
-  const fadeOut = progress > 0.8 ? Math.max(0, 1 - (progress - 0.8) / 0.2) : 1;
-  const beamThickness = g.thickness || BOSS_CHARGE_BEAM_THICKNESS;
-  ctx.save();
-
-  ctx.strokeStyle = '#ff2010';
-  ctx.lineWidth = beamThickness;
-  ctx.shadowColor = '#ff2010';
-  ctx.shadowBlur = 25;
-  ctx.globalAlpha = fadeOut * 0.5;
-  ctx.beginPath();
-  ctx.moveTo(boss ? boss.x : 0, g.lockedY);
-  ctx.lineTo(0, g.lockedY);
-  ctx.stroke();
-
-  ctx.strokeStyle = '#ff8020';
-  ctx.lineWidth = beamThickness * 0.55;
-  ctx.shadowBlur = 0;
-  ctx.globalAlpha = fadeOut * 0.8;
-  ctx.beginPath();
-  ctx.moveTo(boss ? boss.x : 0, g.lockedY);
-  ctx.lineTo(0, g.lockedY);
-  ctx.stroke();
-
-  const flicker = 0.85 + 0.15 * Math.sin(frame * 0.8);
-  ctx.strokeStyle = '#fff5cc';
-  ctx.lineWidth = beamThickness * 0.2 * flicker;
-  ctx.globalAlpha = fadeOut;
-  ctx.beginPath();
-  ctx.moveTo(boss ? boss.x : 0, g.lockedY);
-  ctx.lineTo(0, g.lockedY);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-function drawBossAshCloud(g, theme) {
-  ctx.save();
-  const puffs = [
-    { dx: 0, dy: 0, r: g.r },
-    { dx: -g.r * 0.5, dy: g.r * 0.2, r: g.r * 0.65 },
-    { dx: g.r * 0.45, dy: -g.r * 0.15, r: g.r * 0.6 },
-    { dx: g.r * 0.1, dy: g.r * 0.35, r: g.r * 0.5 }
-  ];
-  for (const p of puffs) {
-    const cx = g.x + p.dx, cy = g.y + p.dy;
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, p.r);
-    grad.addColorStop(0, 'rgba(50,48,50,0.55)');
-    grad.addColorStop(1, 'rgba(50,48,50,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, p.r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-function drawBossEmber(g, theme) {
-  ctx.save();
-  const pulse = 0.7 + 0.3 * Math.sin(frame * 0.3 + g.rotSeed);
-  ctx.globalAlpha = pulse;
-  ctx.fillStyle = '#ff5020';
-  ctx.shadowColor = '#ff5020';
-  ctx.shadowBlur = 8;
-  ctx.beginPath();
-  ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#fff5cc';
-  ctx.globalAlpha = pulse * 0.8;
-  ctx.beginPath();
-  ctx.arc(g.x, g.y, g.r * 0.35, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawBossVolleyTelegraph(g, theme) {
-  if (!boss) return;
-  const elapsed = frame - g.spawnFrame;
-  const progress = Math.min(1, elapsed / g.warningFrames);
-
-  ctx.save();
-  ctx.strokeStyle = '#ff3050';
-  ctx.lineWidth = 2 + 3 * progress;
-  ctx.globalAlpha = 0.3 + 0.5 * progress;
-  ctx.setLineDash([8, 6]);
-  ctx.beginPath();
-  ctx.moveTo(boss.x, boss.y);
-  ctx.lineTo(ship.x, ship.y);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  const pulse = 0.5 + 0.5 * Math.sin(frame * 0.4);
-  ctx.fillStyle = '#ff3050';
-  ctx.globalAlpha = progress;
-  ctx.beginPath();
-  ctx.arc(boss.x, boss.y, 8 + 4 * pulse, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.restore();
-}
-
-function drawBossRagePulse(g, theme) {
-  const liveR = liveRagePulseRadius(g);
-  if (liveR <= 0) return;
-  ctx.save();
-  const alpha = Math.max(0, 1 - (liveR / BOSS_RAGE_PULSE_MAX_R) * 0.8);
-
-  const vRadius = BOSS_RAGE_PULSE_THICKNESS / 2;
-  const ringColors = ['#fff5cc', '#ffd23f', '#ffb020', theme.phase3AccentA, '#a01000'];
-
-  // one continuous ring, centered on wherever the boss was at the
-  // exact moment it originated, growing outward as a whole (like the
-  // reference image's ring bursting outward) -- starts tight around
-  // that origin point and expands horizontally in both directions,
-  // without tracking any further boss movement afterward. the
-  // outermost band is the brightest, reading clearly as the true
-  // collision edge without needing a separate straight-line marker
-  // that broke the ring's silhouette
-  for (let i = 0; i < ringColors.length; i++) {
-    const hRadius = Math.max(0, liveR - i * 9);
-    const vR = vRadius * (1 - i * 0.12);
-    ctx.strokeStyle = ringColors[i];
-    ctx.lineWidth = i === 0 ? 5 : 3 + (ringColors.length - i);
-    ctx.globalAlpha = alpha * (i === 0 ? 0.95 : 0.7 - i * 0.09);
-    ctx.shadowColor = ringColors[i];
-    ctx.shadowBlur = i === 0 ? 18 : 10;
-    ctx.beginPath();
-    ctx.ellipse(g.x, g.y, hRadius, vR, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
-function drawBossDiagonalRings(g, theme) {
-  const liveR = liveDiagonalRingRadius(g);
-  if (liveR <= 0) return;
-  ctx.save();
-  const alpha = Math.max(0, 1 - (liveR / BOSS_DIAGONAL_RING_MAX_R) * 0.8);
-  const vRadius = BOSS_DIAGONAL_RING_THICKNESS / 2;
-  const ringColors = ['#e0faff', '#4fd3ff', '#1a9fe0', '#0a5fb0', '#052a60'];
-  const angle = Math.atan(BOSS_DIAGONAL_RING_SLOPE);
-
-  // two rings, tilted at opposite angles, crossing in an X -- same
-  // nested-ellipse technique as the phase 3 ring, distinct cool
-  // blue palette to read as a different attack
-  for (const rotSign of [1, -1]) {
-    for (let i = 0; i < ringColors.length; i++) {
-      const hRadius = Math.max(0, liveR - i * 9);
-      const vR = vRadius * (1 - i * 0.12);
-      ctx.strokeStyle = ringColors[i];
-      ctx.lineWidth = i === 0 ? 5 : 3 + (ringColors.length - i);
-      ctx.globalAlpha = alpha * (i === 0 ? 0.95 : 0.7 - i * 0.09);
-      ctx.shadowColor = ringColors[i];
-      ctx.shadowBlur = i === 0 ? 18 : 10;
-      ctx.beginPath();
-      ctx.ellipse(g.x, g.y, hRadius, vR, rotSign * angle, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-
-  ctx.restore();
-}
-
-function drawBossAttack(g, theme) {
-  ctx.save();
-  ctx.translate(g.x, g.y);
-  ctx.shadowColor = theme.accentA;
-  ctx.shadowBlur = 10;
-  ctx.fillStyle = '#ffd23f';
-  ctx.beginPath();
-  ctx.arc(0, 0, g.r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = theme.accentB;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawBoomerang(g, theme) {
-  const pos = liveBoomerangPos(g);
-  ctx.save();
-  ctx.translate(pos.x, pos.y);
-  ctx.rotate(frame * 0.3);
-
-  ctx.shadowColor = theme.accentA;
-  ctx.shadowBlur = 10;
-  ctx.fillStyle = theme.accentB;
-  ctx.strokeStyle = theme.accentA;
-  ctx.lineWidth = 2;
-
-  for (let i = 0; i < 2; i++) {
-    ctx.save();
-    ctx.rotate(i * Math.PI / 2);
-    ctx.beginPath();
-    ctx.ellipse(0, 0, g.r * 1.6, g.r * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  ctx.shadowBlur = 0;
-  ctx.restore();
-}
-
-function drawPulsingOrb(g, theme) {
-  const liveR = livePulsingOrbRadius(g);
-  ctx.save();
-  ctx.translate(g.x, g.y);
-
-  const grad = ctx.createRadialGradient(-liveR * 0.3, -liveR * 0.3, liveR * 0.1, 0, 0, liveR);
-  grad.addColorStop(0, '#ffffff');
-  grad.addColorStop(0.4, theme.accentA);
-  grad.addColorStop(1, theme.accentB);
-  ctx.fillStyle = grad;
-  ctx.shadowColor = theme.accentA;
-  ctx.shadowBlur = 15;
-  ctx.beginPath();
-  ctx.arc(0, 0, liveR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  ctx.strokeStyle = theme.accentB;
-  ctx.lineWidth = 2;
-  ctx.globalAlpha = 0.7;
-  ctx.beginPath();
-  ctx.arc(0, 0, liveR, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-
-  ctx.restore();
-}
-
-function drawEchoTrail(g, theme) {
-  ctx.save();
-
-  const zoneLeft = g.x - g.zoneWidth / 2;
-  const zoneRight = g.x + g.zoneWidth / 2;
-
-  ctx.strokeStyle = theme.accentA;
-  ctx.lineWidth = 3;
-  ctx.shadowColor = theme.accentA;
-  ctx.shadowBlur = 8;
-  ctx.globalAlpha = 0.6;
-  ctx.beginPath();
-  ctx.moveTo(zoneLeft, PLAY_TOP);
-  ctx.lineTo(zoneLeft, PLAY_BOTTOM);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(zoneRight, PLAY_TOP);
-  ctx.lineTo(zoneRight, PLAY_BOTTOM);
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.globalAlpha = 1;
-
-  if (Math.abs(ship.x - g.x) < g.zoneWidth / 2) {
-    const histIdx = shipYHistory.length - 1 - g.delayFrames;
-    if (histIdx >= 0) {
-      const historicalY = shipYHistory[histIdx];
-      const dist = Math.abs(ship.y - historicalY);
-      const danger = dist < g.dangerThreshold * 2;
-
-      ctx.save();
-      ctx.translate(ship.x, historicalY);
-      ctx.globalAlpha = danger ? 0.7 : 0.35;
-      ctx.fillStyle = danger ? '#ff3050' : theme.accentB;
-      ctx.shadowColor = danger ? '#ff3050' : theme.accentB;
-      ctx.shadowBlur = 8;
-      ctx.beginPath();
-      ctx.moveTo(14, 0);
-      ctx.lineTo(-10, -9);
-      ctx.lineTo(-10, 9);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.shadowBlur = 0;
-      ctx.restore();
-    }
-  }
-
-  const labelPulse = 0.6 + 0.4 * Math.sin(frame * 0.1 + g.rotSeed);
-  ctx.fillStyle = theme.accentA;
-  ctx.globalAlpha = labelPulse;
-  ctx.font = 'bold 14px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('ECHO', g.x, PLAY_TOP + 20);
-  ctx.globalAlpha = 1;
-
-  ctx.restore();
-}
-
-function drawEmp(g, theme) {
-  ctx.save();
-  const elapsed = empPhaseElapsed(g);
-  const discharging = empIsDischarging(g);
-  const chargeProgress = Math.min(1, elapsed / g.chargeFrames);
-
-  const anchorY = g.anchor === 'top' ? PLAY_TOP : PLAY_BOTTOM;
-  const regionTop = g.anchor === 'top' ? PLAY_TOP : PLAY_BOTTOM - g.reachDepth;
-  const regionBottom = g.anchor === 'top' ? PLAY_TOP + g.reachDepth : PLAY_BOTTOM;
-
-  if (discharging) {
-    const dischargeElapsed = elapsed - g.chargeFrames;
-    const dischargeProgress = dischargeElapsed / g.dischargeFrames;
-    const flashAlpha = Math.sin(dischargeProgress * Math.PI) * 0.6;
-    ctx.fillStyle = theme.accentA;
-    ctx.globalAlpha = flashAlpha;
-    ctx.fillRect(g.x - 30, regionTop, 60, regionBottom - regionTop);
-    ctx.globalAlpha = 1;
-
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.globalAlpha = 0.7;
-    for (let i = 0; i < 5; i++) {
-      const jag = (i - 2) * 12;
-      ctx.beginPath();
-      ctx.moveTo(g.x + jag, regionTop);
-      ctx.lineTo(g.x + jag + Math.sin(frame * 0.5 + i) * 8, regionBottom);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-  } else if (elapsed < g.chargeFrames) {
-    const intensity = chargeProgress;
-    const sparkCount = Math.floor(3 + intensity * 5);
-    for (let i = 0; i < sparkCount; i++) {
-      const sparkPhase = frame * 0.3 + i * 1.7;
-      if (Math.sin(sparkPhase) > (1 - intensity * 0.6)) {
-        const sx = g.x + Math.sin(i * 2.3) * 25;
-        const sy = anchorY + (g.anchor === 'top' ? 1 : -1) * (10 + Math.abs(Math.sin(sparkPhase * 2)) * 40 * intensity);
-        ctx.strokeStyle = theme.accentB;
-        ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.6;
-        ctx.beginPath();
-        ctx.moveTo(g.x, anchorY);
-        ctx.lineTo(sx, sy);
-        ctx.stroke();
-      }
-    }
-    ctx.globalAlpha = 1;
-
-    const pulse = 0.4 + 0.3 * intensity * (0.5 + 0.5 * Math.sin(frame * 0.2));
-    ctx.shadowColor = theme.accentB;
-    ctx.shadowBlur = 6 + 10 * intensity;
-    ctx.fillStyle = theme.accentB;
-    ctx.globalAlpha = pulse;
-    ctx.beginPath();
-    ctx.arc(g.x, anchorY, 8 + 4 * intensity, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur = 0;
-  }
 
   ctx.restore();
 }

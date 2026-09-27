@@ -3,15 +3,22 @@ Avoids Chrome/Edge hanging near the end of large JS on Python's default http.ser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import gzip
+import json
 import mimetypes
 import re
+import shutil
+import sys
+import time
 import urllib.parse
 
 ROOT = Path(__file__).resolve().parent
 HOST = "127.0.0.1"
 PORT = 8777
 GAME_PART_MAX_BYTES = 120000
-GAME_CACHE = "snes267"
+GAME_CACHE = "snes321"
+PLAYER_SAVE_DIR = ROOT / "player-saves"
+PLAYER_SAVE_ID_RE = re.compile(r"^[A-Z0-9]{6,16}$")
+PLAYER_SAVE_MAX_BYTES = 262144
 
 
 def split_game_js():
@@ -41,6 +48,56 @@ def split_game_js():
     for i, chunk in enumerate(chunks, 1):
         (ROOT / ("game-part%d.js" % i)).write_bytes(chunk.encode("utf-8"))
     return len(chunks)
+
+
+PLAYER_BUILD_FLAG = "<script>window.SYNTH_FLIGHT_PLAYER_BUILD=true;</script>\n"
+
+
+def apply_player_build_html(html):
+    html = re.sub(r"<title>Synth Flight[^<]*</title>", "<title>Synth Flight</title>", html)
+    if "SYNTH_FLIGHT_PLAYER_BUILD" not in html:
+        html = html.replace("<body>", "<body>\n" + PLAYER_BUILD_FLAG, 1)
+    return html
+
+
+def write_player_package():
+    """Static copy with no DEV / editor / sound-test chrome. Zip this folder to host it."""
+    n = split_game_js()
+    write_index_part_tags(n)
+    dest = ROOT / "player-build"
+    dest.mkdir(exist_ok=True)
+    html = apply_player_build_html((ROOT / "index.html").read_text(encoding="utf-8"))
+    # Chrome treats function declarations in split classic scripts as
+    # script-local when the files also use let/const, so resetGame cannot
+    # see stopLiftSound. Ship one file so those names share a scope.
+    html, replaced = re.subn(
+        r"<!-- GAME_PARTS -->.*?<!-- /GAME_PARTS -->",
+        "<!-- GAME_PARTS -->\n"
+        '<script src="game.js?v=%s"></script>\n'
+        "<!-- /GAME_PARTS -->" % GAME_CACHE,
+        html,
+        count=1,
+        flags=re.S,
+    )
+    if replaced != 1:
+        raise RuntimeError("index.html is missing GAME_PARTS markers")
+    (dest / "index.html").write_text(html, encoding="utf-8", newline="\n")
+    shutil.copy2(ROOT / "game.js", dest / "game.js")
+    custom = ROOT / "custom-levels.js"
+    if custom.exists():
+        shutil.copy2(custom, dest / "custom-levels.js")
+    audio_src = ROOT / "audio"
+    if audio_src.exists():
+        audio_dest = dest / "audio"
+        audio_dest.mkdir(exist_ok=True)
+        for src in audio_src.rglob("*"):
+            if src.is_dir() or src.name.endswith(".pre-trim.mp3"):
+                continue
+            rel = src.relative_to(audio_src)
+            out = audio_dest / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, out)
+    return dest
 
 
 def write_index_part_tags(part_count):
@@ -84,7 +141,7 @@ def build_offline_html():
         '<link href="https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" media="print" onload="this.media=\'all\'">\n',
         "",
     )
-    html = re.sub(r"<title>Synth Flight[^<]*</title>", "<title>Synth Flight</title>", html)
+    html = apply_player_build_html(html)
 
     def inline_src(match):
         src = match.group(1).split("?")[0]
@@ -120,11 +177,56 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
+    def _cors_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Connection", "close")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors_headers()
+        self.end_headers()
+
+    def _player_save_id(self, rel):
+        prefix = "/api/player-save/"
+        if not rel.startswith(prefix):
+            return None
+        save_id = rel[len(prefix):].strip("/").upper()
+        if not PLAYER_SAVE_ID_RE.match(save_id):
+            return False
+        return save_id
+
+    def _player_save_path(self, save_id):
+        PLAYER_SAVE_DIR.mkdir(parents=True, exist_ok=True)
+        return PLAYER_SAVE_DIR / (save_id + ".json")
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         rel = parsed.path
+        save_id = self._player_save_id(rel)
+        if save_id is False:
+            self.send_error(400)
+            return
+        if save_id:
+            fs = self._player_save_path(save_id)
+            if not fs.is_file():
+                self.send_error(404)
+                return
+            data = fs.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self._cors_headers()
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if rel == "/":
             rel = "/index.html"
+        if "player-saves" in rel.replace("\\", "/").split("/"):
+            self.send_error(404)
+            return
         fs = (ROOT / rel.lstrip("/")).resolve()
         if ROOT not in fs.parents and fs != ROOT:
             self.send_error(403)
@@ -202,8 +304,46 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
+    def do_PUT(self):
+        parsed = urllib.parse.urlparse(self.path)
+        save_id = self._player_save_id(parsed.path)
+        if save_id is False:
+            self.send_error(400)
+            return
+        if not save_id:
+            self.send_error(404)
+            return
+        length = int(self.headers.get("Content-Length") or "0")
+        if length <= 0 or length > PLAYER_SAVE_MAX_BYTES:
+            self.send_error(413)
+            return
+        raw = self.rfile.read(length)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            self.send_error(400)
+            return
+        if not isinstance(payload, dict):
+            self.send_error(400)
+            return
+        payload["saveId"] = save_id
+        payload["savedAt"] = int(payload.get("savedAt") or 0) or int(time.time() * 1000)
+        data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        if len(data) > PLAYER_SAVE_MAX_BYTES:
+            self.send_error(413)
+            return
+        self._player_save_path(save_id).write_bytes(data)
+        self.send_response(204)
+        self._cors_headers()
+        self.end_headers()
+
 
 if __name__ == "__main__":
+    if "--package" in sys.argv:
+        dest = write_player_package()
+        print("Player build: %s" % dest)
+        print("Zip that folder and upload it, or run a static server from inside it.")
+        sys.exit(0)
     offline = build_offline_html()
     n = len(list(ROOT.glob("game-part*.js")))
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)

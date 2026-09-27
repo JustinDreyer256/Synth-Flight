@@ -1,0 +1,5 @@
+player-saves/
+player-build/
+__pycache__/
+*.pyc
+*.pre-trim.mp3

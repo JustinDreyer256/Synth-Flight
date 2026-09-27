@@ -1,3 +1,315 @@
+function sfxCoreDyingCollapse() {
+  playElectricCrackles({ count: 6, spacing: 0.02, volume: 0.22 });
+  playSynth({ type: 'sawtooth', freq: 90, freqEnd: 28, duration: 0.28, attack: 0.004, decay: 0.08, sustain: 0.3, release: 0.1, volume: 0.14, filterType: 'lowpass', filterFreq: 350, delaySend: 0 });
+  playNoiseBurst({ duration: 0.2, filterFreq: 1600, filterEnd: 200, filterType: 'lowpass', volume: 0.28 });
+}
+
+function sfxMiniBossReturn() {
+  playNoiseBurst({ duration: 0.16, filterFreq: 900, filterEnd: 280, filterType: 'lowpass', volume: 0.22 });
+}
+
+function sfxFireBossExit() {
+  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
+  const t0 = audioCtx.currentTime;
+  const dur = 0.92;
+  const peakT = t0 + 0.12;
+  const endT = t0 + dur;
+  const sources = [];
+
+  const out = audioCtx.createGain();
+  out.gain.setValueAtTime(0.0001, t0);
+  out.gain.linearRampToValueAtTime(0.78, peakT);
+  out.gain.linearRampToValueAtTime(0.22, t0 + 0.48);
+  out.gain.linearRampToValueAtTime(0.0001, endT);
+
+  if (typeof audioCtx.createStereoPanner === 'function') {
+    const pan = audioCtx.createStereoPanner();
+    pan.pan.setValueAtTime(0.12, t0);
+    pan.pan.linearRampToValueAtTime(0.92, endT);
+    out.connect(pan);
+    pan.connect(sfxGain);
+  } else {
+    out.connect(sfxGain);
+  }
+
+  const air = createGlowDangerNoise();
+  const airFilt = audioCtx.createBiquadFilter();
+  airFilt.type = 'lowpass';
+  airFilt.Q.value = 0.5;
+  airFilt.frequency.setValueAtTime(1100, t0);
+  airFilt.frequency.exponentialRampToValueAtTime(180, endT);
+  const airGain = audioCtx.createGain();
+  airGain.gain.value = 0.7;
+  air.connect(airFilt);
+  airFilt.connect(airGain);
+  airGain.connect(out);
+  sources.push(air);
+
+  const rush = createGlowDangerNoise();
+  const rushFilt = audioCtx.createBiquadFilter();
+  rushFilt.type = 'bandpass';
+  rushFilt.Q.value = 0.7;
+  rushFilt.frequency.setValueAtTime(1400, t0);
+  rushFilt.frequency.exponentialRampToValueAtTime(320, endT);
+  const rushGain = audioCtx.createGain();
+  rushGain.gain.value = 0.42;
+  rush.connect(rushFilt);
+  rushFilt.connect(rushGain);
+  rushGain.connect(out);
+  sources.push(rush);
+
+  const heat = createGlowDangerNoise();
+  const heatFilt = audioCtx.createBiquadFilter();
+  heatFilt.type = 'highpass';
+  heatFilt.Q.value = 0.7;
+  heatFilt.frequency.setValueAtTime(2800, t0);
+  heatFilt.frequency.exponentialRampToValueAtTime(900, t0 + 0.4);
+  const heatGain = audioCtx.createGain();
+  heatGain.gain.setValueAtTime(0.16, t0);
+  heatGain.gain.linearRampToValueAtTime(0.0001, t0 + 0.42);
+  heat.connect(heatFilt);
+  heatFilt.connect(heatGain);
+  heatGain.connect(out);
+  sources.push(heat);
+
+  const body = audioCtx.createOscillator();
+  body.type = 'sine';
+  body.frequency.setValueAtTime(78, t0);
+  body.frequency.exponentialRampToValueAtTime(42, t0 + 0.38);
+  const bodyGain = audioCtx.createGain();
+  bodyGain.gain.setValueAtTime(0.14, t0);
+  bodyGain.gain.linearRampToValueAtTime(0.0001, t0 + 0.4);
+  body.connect(bodyGain);
+  bodyGain.connect(out);
+  sources.push(body);
+
+  sources.forEach((src) => {
+    src.start(t0);
+    src.stop(endT + 0.03);
+  });
+}
+
+function startMoltenCoreIdleSound({ preview = false } = {}) {
+  if (moltenCoreIdleNodes || !audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
+  const now = audioCtx.currentTime;
+  const out = audioCtx.createGain();
+  out.gain.setValueAtTime(0.0001, now);
+  out.gain.linearRampToValueAtTime(preview ? 0.055 : 0.04, now + 0.18);
+  out.connect(sfxGain);
+
+  const heat = createGlowDangerNoise();
+  const heatFilt = audioCtx.createBiquadFilter();
+  heatFilt.type = 'bandpass';
+  heatFilt.Q.value = 0.85;
+  heatFilt.frequency.setValueAtTime(980, now);
+  const heatGain = audioCtx.createGain();
+  heatGain.gain.value = 0.55;
+  heat.connect(heatFilt);
+  heatFilt.connect(heatGain);
+  heatGain.connect(out);
+
+  const hum = audioCtx.createOscillator();
+  hum.type = 'sine';
+  hum.frequency.setValueAtTime(50, now);
+  const humGain = audioCtx.createGain();
+  humGain.gain.value = 0.22;
+  hum.connect(humGain);
+  humGain.connect(out);
+
+  const sources = [heat, hum];
+  if (preview) {
+    const lfo = audioCtx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 60 / MINI_BOSS_FLOAT_PERIOD;
+    const lfoFilt = audioCtx.createGain();
+    lfoFilt.gain.value = 420;
+    lfo.connect(lfoFilt);
+    lfoFilt.connect(heatFilt.frequency);
+    const lfoVol = audioCtx.createGain();
+    lfoVol.gain.value = 0.018;
+    lfo.connect(lfoVol);
+    lfoVol.connect(out.gain);
+    sources.push(lfo);
+  }
+
+  sources.forEach((src) => src.start(now));
+  moltenCoreIdleNodes = { out, heatFilt, hum, sources };
+}
+
+function updateMoltenCoreIdleSound() {
+  if (!moltenCoreIdleNodes || !audioCtx || !miniBoss) return;
+  const now = audioCtx.currentTime;
+  const phase = Math.sin((frame - miniBossSpawnFrame) * (2 * Math.PI / MINI_BOSS_FLOAT_PERIOD));
+  const lift = 0.5 + 0.5 * phase;
+  moltenCoreIdleNodes.heatFilt.frequency.setTargetAtTime(760 + lift * 820, now, 0.06);
+  moltenCoreIdleNodes.out.gain.setTargetAtTime(0.028 + lift * 0.026, now, 0.06);
+  moltenCoreIdleNodes.hum.frequency.setTargetAtTime(46 + lift * 12, now, 0.06);
+}
+
+function stopMoltenCoreIdleSound() {
+  if (!moltenCoreIdleNodes) return;
+  const nodes = moltenCoreIdleNodes;
+  moltenCoreIdleNodes = null;
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  try {
+    nodes.out.gain.cancelScheduledValues(now);
+    nodes.out.gain.setValueAtTime(Math.max(0.0001, nodes.out.gain.value), now);
+    nodes.out.gain.linearRampToValueAtTime(0.0001, now + 0.12);
+  } catch (e) { /* already stopped */ }
+  nodes.sources.forEach((src) => {
+    try { src.stop(now + 0.14); } catch (e) { /* already stopped */ }
+  });
+}
+
+function syncMoltenCoreIdleSound() {
+  if (typeof previewLoopId === 'string' && previewLoopId === 'coreIdle') return;
+  const th = currentTheme();
+  const active = state === 'playing'
+    && th
+    && th.isMiniBossZone
+    && th.miniBossVariant !== 'core'
+    && miniBoss
+    && !miniBossDefeated
+    && miniBossAttackState === 'floating'
+    && (frame - miniBossSpawnFrame) >= MINI_BOSS_ENTRANCE_DURATION;
+  if (!active) {
+    stopMoltenCoreIdleSound();
+    return;
+  }
+  startMoltenCoreIdleSound();
+  updateMoltenCoreIdleSound();
+}
+
+function sfxFireBossFlameWallTelegraph() {
+  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
+  const t0 = audioCtx.currentTime;
+  playNoiseBurst({ duration: 0.95, filterFreq: 220, filterEnd: 520, filterType: 'lowpass', volume: 0.2, when: t0 });
+  playNoiseBurst({ duration: 0.85, filterFreq: 480, filterEnd: 900, filterType: 'bandpass', filterQ: 0.7, volume: 0.22, delaySend: 0.06, when: t0 + 0.06 });
+  playNoiseBurst({ duration: 0.55, filterFreq: 1400, filterEnd: 700, filterType: 'bandpass', filterQ: 1.1, volume: 0.14, when: t0 + 0.28 });
+  const pops = [0.12, 0.22, 0.31, 0.42, 0.5, 0.58, 0.66, 0.74, 0.82, 0.9];
+  pops.forEach((off, i) => {
+    playNoiseBurst({
+      duration: 0.035 + (i % 3) * 0.008,
+      filterFreq: 1600 + (i % 5) * 420,
+      filterType: 'bandpass',
+      filterQ: 2.4 + (i % 2),
+      volume: 0.12 + i * 0.012,
+      when: t0 + off,
+    });
+  });
+}
+
+function startMoltenFlameWallSound({ preview = false } = {}) {
+  if (moltenFlameWallNodes || !audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
+  const t0 = audioCtx.currentTime;
+  const out = audioCtx.createGain();
+  out.gain.setValueAtTime(0.0001, t0);
+  out.gain.linearRampToValueAtTime(preview ? 0.9 : 0.8, t0 + 0.08);
+  out.gain.linearRampToValueAtTime(preview ? 0.48 : 0.38, t0 + 0.4);
+  out.connect(sfxGain);
+
+  const roar = createGlowDangerNoise();
+  const roarFilt = audioCtx.createBiquadFilter();
+  roarFilt.type = 'lowpass';
+  roarFilt.Q.value = 0.55;
+  roarFilt.frequency.setValueAtTime(240, t0);
+  roarFilt.frequency.exponentialRampToValueAtTime(420, t0 + 0.2);
+  const roarGain = audioCtx.createGain();
+  roarGain.gain.value = 0.78;
+  roar.connect(roarFilt);
+  roarFilt.connect(roarGain);
+  roarGain.connect(out);
+
+  const billow = createGlowDangerNoise();
+  const billowFilt = audioCtx.createBiquadFilter();
+  billowFilt.type = 'bandpass';
+  billowFilt.Q.value = 0.7;
+  billowFilt.frequency.setValueAtTime(620, t0);
+  const billowGain = audioCtx.createGain();
+  billowGain.gain.value = 0.5;
+  billow.connect(billowFilt);
+  billowFilt.connect(billowGain);
+  billowGain.connect(out);
+
+  const snap = createGlowDangerNoise();
+  const snapFilt = audioCtx.createBiquadFilter();
+  snapFilt.type = 'bandpass';
+  snapFilt.Q.value = 2.8;
+  snapFilt.frequency.setValueAtTime(2200, t0);
+  const snapGain = audioCtx.createGain();
+  snapGain.gain.value = 0.16;
+  snap.connect(snapFilt);
+  snapFilt.connect(snapGain);
+  snapGain.connect(out);
+
+  const pop = createGlowDangerNoise();
+  const popFilt = audioCtx.createBiquadFilter();
+  popFilt.type = 'bandpass';
+  popFilt.Q.value = 4.2;
+  popFilt.frequency.setValueAtTime(3100, t0);
+  const popGain = audioCtx.createGain();
+  popGain.gain.value = 0.08;
+  pop.connect(popFilt);
+  popFilt.connect(popGain);
+  popGain.connect(out);
+
+  const crackleMod = createGlowDangerNoise();
+  const crackleModFilt = audioCtx.createBiquadFilter();
+  crackleModFilt.type = 'lowpass';
+  crackleModFilt.frequency.value = 22;
+  crackleModFilt.Q.value = 0.5;
+  const crackleDepth = audioCtx.createGain();
+  crackleDepth.gain.value = 0.28;
+  crackleMod.connect(crackleModFilt);
+  crackleModFilt.connect(crackleDepth);
+  crackleDepth.connect(snapGain.gain);
+
+  const popMod = createGlowDangerNoise();
+  const popModFilt = audioCtx.createBiquadFilter();
+  popModFilt.type = 'lowpass';
+  popModFilt.frequency.value = 38;
+  const popDepth = audioCtx.createGain();
+  popDepth.gain.value = 0.2;
+  popMod.connect(popModFilt);
+  popModFilt.connect(popDepth);
+  popDepth.connect(popGain.gain);
+
+  const swell = audioCtx.createOscillator();
+  swell.type = 'sine';
+  swell.frequency.value = 0.38;
+  const swellDepth = audioCtx.createGain();
+  swellDepth.gain.value = 90;
+  swell.connect(swellDepth);
+  swellDepth.connect(roarFilt.frequency);
+
+  const sources = [roar, billow, snap, pop, crackleMod, popMod, swell];
+  sources.forEach((src) => src.start(t0));
+  moltenFlameWallNodes = { out, sources };
+
+  playNoiseBurst({ duration: 0.22, filterFreq: 380, filterEnd: 140, filterType: 'lowpass', volume: 0.42, when: t0 });
+  playNoiseBurst({ duration: 0.16, filterFreq: 700, filterEnd: 320, filterType: 'bandpass', filterQ: 0.8, volume: 0.28, when: t0 });
+  playNoiseBurst({ duration: 0.05, filterFreq: 2400, filterType: 'bandpass', filterQ: 2.8, volume: 0.22, when: t0 + 0.02 });
+  playNoiseBurst({ duration: 0.04, filterFreq: 1800, filterType: 'bandpass', filterQ: 2.4, volume: 0.18, when: t0 + 0.07 });
+  playNoiseBurst({ duration: 0.045, filterFreq: 2800, filterType: 'bandpass', filterQ: 3.2, volume: 0.16, when: t0 + 0.12 });
+}
+
+function stopMoltenFlameWallSound() {
+  if (!moltenFlameWallNodes) return;
+  const nodes = moltenFlameWallNodes;
+  moltenFlameWallNodes = null;
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  try {
+    nodes.out.gain.cancelScheduledValues(now);
+    nodes.out.gain.setValueAtTime(Math.max(0.0001, nodes.out.gain.value), now);
+    nodes.out.gain.linearRampToValueAtTime(0.0001, now + 0.16);
+  } catch (e) { /* already stopped */ }
+  nodes.sources.forEach((src) => {
+    try { src.stop(now + 0.18); } catch (e) { /* already stopped */ }
+  });
+}
+
 function syncMoltenFlameWallSound() {
   if (typeof previewLoopId === 'string' && previewLoopId === 'coreFlame') return;
   const th = currentTheme();
@@ -1756,11 +2068,12 @@ const BGM_FILE_TRACKS = [
   { id: 'bgm-02-gravity-well', src: 'audio/bgm/bgm-02-gravity-well.mp3', themeIndex: 1, start: 0, loopStart: 0 },
   { id: 'bgm-03-deep-space', src: 'audio/bgm/bgm-03-deep-space.mp3', themeIndex: 2, start: 0, loopStart: 0, loopEnd: 22 },
   { id: 'bgm-04-inferno', src: 'audio/bgm/bgm-04-inferno.mp3', themeIndex: 3, start: 0, loopStart: 0, loopEnd: 104 },
-  { id: 'bgm-05-molten-core', src: 'audio/bgm/bgm-05-molten-core.mp3', themeIndex: 4, start: 0, loopStart: 0, loopEnd: 104 },
+  { id: 'bgm-05-molten-core-boss', src: 'audio/bgm/bgm-05-molten-core-boss.mp3?v=snes272', themeIndex: 4, phaseMin: 1, phaseMax: 1, start: 0, loopStart: 0 },
+  { id: 'bgm-05-molten-core', src: 'audio/bgm/bgm-05-molten-core.mp3', themeIndex: 4, phaseMin: 2, phaseMax: 99, start: 0, loopStart: 0, loopEnd: 104 },
   { id: 'bgm-06-storm-skies', src: 'audio/bgm/bgm-06-storm-skies.mp3', themeIndex: 5, start: 0, loopStart: 0 },
   { id: 'bgm-07-ancient-ruins', src: 'audio/bgm/bgm-07-ancient-ruins.ogg', themeIndex: 6, start: 0, loopStart: 0 },
   { id: 'bgm-08-toxic-wasteland', src: 'audio/bgm/bgm-08-toxic-wasteland.mp3', themeIndex: 7, start: 0, loopStart: 0, loopEnd: 46 },
-  { id: 'bgm-09-derelict-station', src: 'audio/bgm/bgm-09-derelict-station.mp3', themeIndex: 8, start: 0, loopStart: 0 },
+  { id: 'bgm-09-derelict-station', src: 'audio/bgm/bgm-09-derelict-station.mp3?v=snes271', themeIndex: 8, start: 2, loopStart: 2, loopEnd: 101 },
   { id: 'bgm-10-reactor-core-p1', src: 'audio/bgm/bgm-10-reactor-core-p1.mp3', themeIndex: 9, phaseMin: 1, phaseMax: 7, start: 0, loopStart: 0 },
   { id: 'bgm-10-reactor-core-p8', src: 'audio/bgm/bgm-10-reactor-core-p8.mp3?v=snes267', themeIndex: 9, phaseMin: 8, phaseMax: 99, start: 50, loopStart: 50 },
   { id: 'bgm-11-the-void', src: 'audio/bgm/bgm-11-the-void.mp3', themeIndex: 10, start: 1, loopStart: 1, loopEnd: 38 },
@@ -1789,6 +2102,7 @@ function currentPlayPhase() {
     return bossPhase || 1;
   }
   if (th.miniBossVariant === 'core') return coreBossPhase || 1;
+  if (th.isMiniBossZone) return (miniBossDefeated || miniBossEscapeRunActive) ? 2 : 1;
   return 1;
 }
 
@@ -1874,10 +2188,11 @@ function startHtmlBgm(track) {
   const media = getBgmMediaNode(track.src, el);
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0.0001, t0);
-  gain.gain.exponentialRampToValueAtTime(1, t0 + fade);
+  gain.gain.exponentialRampToValueAtTime(0.8, t0 + fade);
   try { media.disconnect(); } catch (e) { /* first connect */ }
   media.connect(gain);
   gain.connect(bgmGain);
+  el.volume = 1;
   el.loop = track.loopEnd == null;
   const offset = track.start != null ? track.start : 0;
   try { el.currentTime = offset; } catch (e) { /* not seekable yet */ }
@@ -2350,7 +2665,8 @@ const SFX_CATALOG = [
   { id: 'bgm02', section: '6. Background Music', name: '02 Gravity Well', kind: 'bgm', trackId: 'bgm-02-gravity-well', play: () => {} },
   { id: 'bgm03', section: '6. Background Music', name: '03 Deep Space', kind: 'bgm', trackId: 'bgm-03-deep-space', play: () => {} },
   { id: 'bgm04', section: '6. Background Music', name: '04 Inferno', kind: 'bgm', trackId: 'bgm-04-inferno', play: () => {} },
-  { id: 'bgm05', section: '6. Background Music', name: '05 Molten Core', kind: 'bgm', trackId: 'bgm-05-molten-core', play: () => {} },
+  { id: 'bgm05a', section: '6. Background Music', name: '05 Molten Core (boss)', kind: 'bgm', trackId: 'bgm-05-molten-core-boss', play: () => {} },
+  { id: 'bgm05b', section: '6. Background Music', name: '05 Molten Core (escape)', kind: 'bgm', trackId: 'bgm-05-molten-core', play: () => {} },
   { id: 'bgm06', section: '6. Background Music', name: '06 Storm Skies', kind: 'bgm', trackId: 'bgm-06-storm-skies', play: () => {} },
   { id: 'bgm07', section: '6. Background Music', name: '07 Ancient Ruins', kind: 'bgm', trackId: 'bgm-07-ancient-ruins', play: () => {} },
   { id: 'bgm08', section: '6. Background Music', name: '08 Toxic Wasteland', kind: 'bgm', trackId: 'bgm-08-toxic-wasteland', play: () => {} },
@@ -2364,292 +2680,3 @@ const SFX_CATALOG = [
   { id: 'bgm13c', section: '6. Background Music', name: '13 The Signal (phase 5)', kind: 'bgm', trackId: 'bgm-13-the-signal-p5', play: () => {} },
 ];
 
-function buildSfxTesterUi() {
-  const list = document.getElementById('sfx-tester-list');
-  if (!list) return;
-  const bySection = [];
-  for (const entry of SFX_CATALOG) {
-    let group = bySection.find((g) => g.title === entry.section);
-    if (!group) {
-      group = { title: entry.section, entries: [] };
-      bySection.push(group);
-    }
-    group.entries.push(entry);
-  }
-  list.innerHTML = bySection.map((group) => {
-    const buttons = group.entries.map((entry) => {
-      const kindLabel = entry.kind === 'loop' ? 'LOOP — click again to stop' : entry.kind === 'bgm' ? 'MUSIC — click again to stop' : 'ONE-SHOT';
-      if (entry.id === 'shipGlowDanger') {
-        return `<div class="sfx-glow-row">
-          <button type="button" class="sfx-glow-arrow" data-glow-danger-dir="-1" aria-label="Previous glow danger">&#9664;</button>
-          <button type="button" class="sfx-btn" data-sfx-id="${entry.id}">${entry.name}<span class="sfx-kind" id="sfx-glow-danger-kind">LOOP — ${currentGlowDangerLabel()} — arrows change style</span></button>
-          <button type="button" class="sfx-glow-arrow" data-glow-danger-dir="1" aria-label="Next glow danger">&#9654;</button>
-        </div>`;
-      }
-      if (entry.id === 'shipRespawn') {
-        return `<div class="sfx-glow-row">
-          <button type="button" class="sfx-glow-arrow" data-respawn-dir="-1" aria-label="Previous respawn">&#9664;</button>
-          <button type="button" class="sfx-btn" data-sfx-id="${entry.id}">${entry.name}<span class="sfx-kind" id="sfx-respawn-kind">ONE-SHOT — ${currentRespawnLabel()} — arrows change style</span></button>
-          <button type="button" class="sfx-glow-arrow" data-respawn-dir="1" aria-label="Next respawn">&#9654;</button>
-        </div>`;
-      }
-      if (entry.id === 'shipLifeLost') {
-        return `<div class="sfx-glow-row">
-          <button type="button" class="sfx-glow-arrow" data-life-lost-dir="-1" aria-label="Previous life lost">&#9664;</button>
-          <button type="button" class="sfx-btn" data-sfx-id="${entry.id}">${entry.name}<span class="sfx-kind" id="sfx-life-lost-kind">ONE-SHOT — ${currentLifeLostLabel()} — arrows change style</span></button>
-          <button type="button" class="sfx-glow-arrow" data-life-lost-dir="1" aria-label="Next life lost">&#9654;</button>
-        </div>`;
-      }
-      return `<button type="button" class="sfx-btn" data-sfx-id="${entry.id}">${entry.name}<span class="sfx-kind">${kindLabel}</span></button>`;
-    }).join('');
-    return `<div class="sfx-section-title">${group.title}</div><div class="sfx-grid">${buttons}</div>`;
-  }).join('');
-}
-
-function setSfxTesterPlaying(id) {
-  document.querySelectorAll('.sfx-btn.playing').forEach((btn) => btn.classList.remove('playing'));
-  if (!id) return;
-  const btn = document.querySelector(`.sfx-btn[data-sfx-id="${id}"]`);
-  if (btn) btn.classList.add('playing');
-}
-
-function initSfxTester() {
-  const overlay = document.getElementById('sfx-tester');
-  const toggle = document.getElementById('sfx-toggle');
-  const closeBtn = document.getElementById('sfx-tester-close');
-  const stopBtn = document.getElementById('sfx-tester-stop');
-  const list = document.getElementById('sfx-tester-list');
-  if (!overlay || !toggle || !list) return;
-  buildSfxTesterUi();
-  toggle.addEventListener('click', () => {
-    overlay.classList.add('active');
-    unlockAudio();
-  });
-  closeBtn.addEventListener('click', () => {
-    overlay.classList.remove('active');
-    stopAllSoundTesterAudio();
-    setSfxTesterPlaying(null);
-  });
-  stopBtn.addEventListener('click', () => {
-    stopAllSoundTesterAudio();
-    setSfxTesterPlaying(null);
-  });
-  list.addEventListener('click', (e) => {
-    const respawnStep = e.target.closest('[data-respawn-dir]');
-    if (respawnStep) {
-      unlockAudio();
-      initAudio();
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-      cycleRespawn(Number(respawnStep.dataset.respawnDir));
-      setSfxTesterPlaying('shipRespawn');
-      return;
-    }
-    const lifeLostStep = e.target.closest('[data-life-lost-dir]');
-    if (lifeLostStep) {
-      unlockAudio();
-      initAudio();
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-      cycleLifeLost(Number(lifeLostStep.dataset.lifeLostDir));
-      setSfxTesterPlaying('shipLifeLost');
-      return;
-    }
-    const step = e.target.closest('[data-glow-danger-dir]');
-    if (step) {
-      unlockAudio();
-      initAudio();
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-      cycleGlowDanger(Number(step.dataset.glowDangerDir));
-      setSfxTesterPlaying('shipGlowDanger');
-      return;
-    }
-    const btn = e.target.closest('[data-sfx-id]');
-    if (!btn) return;
-    const entry = SFX_CATALOG.find((item) => item.id === btn.dataset.sfxId);
-    if (!entry) return;
-    const playing = playSfxCatalogEntry(entry);
-    setSfxTesterPlaying(playing ? entry.id : null);
-  });
-}
-
-initSfxTester();
-
-// ---- Drawing ----
-function lerpHexColor(hexA, hexB, t) {
-  const a = parseInt(hexA.slice(1), 16);
-  const b = parseInt(hexB.slice(1), 16);
-  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
-  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return `rgb(${r},${g},${bl})`;
-}
-
-function getBossColorProgress() {
-  // 0 = original phase 1-2 colors, 1 = full phase 3 colors -- smoothly
-  // animated only during the phase 2->3 transition specifically.
-  // phases 3+ always stay at full color, including during the later
-  // phase 4->5 transformation, which reuses the same bossTransitioning
-  // flag for a different purpose and must not re-trigger this ramp
-  if (bossTransitioning && bossTransitionTargetPhase === 3) {
-    return Math.min(1, (frame - bossTransitionStartFrame) / BOSS_TRANSITION_DURATION);
-  }
-  if (bossPhase >= 3) return 1;
-  return 0;
-}
-
-function getPhase5BackgroundProgress() {
-  // 0 = phase 3/4 grid background, 1 = full volcanic ash background --
-  // animates in lockstep with the phase 4->5 transformation
-  if (bossTransitioning && bossTransitionTargetPhase === 5) {
-    return Math.min(1, (frame - bossTransitionStartFrame) / BOSS_PHASE5_TRANSITION_DURATION);
-  }
-  if (bossPhase >= 5) return 1;
-  return 0;
-}
-
-function drawBossCharge(theme, stageProgress) {
-  // stage 1: glitch static intensifying around the spawn point, plus a
-  // pulsing point of light building up -- no solid orb yet
-  ctx.save();
-  for (let i = 0; i < 12; i++) {
-    const flicker = Math.sin(frame * 0.5 + i * 3.1);
-    if (flicker > 0.2) {
-      const ang = i * 2.4;
-      const dist = 40 + 60 * stageProgress * (0.5 + 0.5 * Math.sin(i * 1.3));
-      const x = boss.x + Math.cos(ang) * dist;
-      const y = boss.y + Math.sin(ang) * dist;
-      ctx.fillStyle = i % 2 === 0 ? theme.accentA : theme.accentB;
-      ctx.globalAlpha = 0.4 * stageProgress;
-      ctx.fillRect(x - 3, y - 3, 6, 6);
-    }
-  }
-  const pulse = 0.6 + 0.4 * Math.sin(frame * 0.4);
-  const coreR = 8 + 30 * stageProgress * pulse;
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 15 + 15 * stageProgress;
-  ctx.fillStyle = '#ffffff';
-  ctx.globalAlpha = 0.5 + 0.5 * stageProgress;
-  ctx.beginPath();
-  ctx.arc(boss.x, boss.y, coreR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawBossFragments(theme, stageProgress) {
-  // stage 2: shards converge from a ring around the final position,
-  // accelerating inward, with a faint central glow building as they approach
-  ctx.save();
-  const eased = stageProgress * stageProgress;
-  for (const frag of boss.fragments) {
-    const fx = frag.startX + (boss.x - frag.startX) * eased;
-    const fy = frag.startY + (boss.y - frag.startY) * eased;
-    ctx.shadowColor = theme.accentA;
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = theme.accentB;
-    ctx.globalAlpha = 0.5 + 0.5 * stageProgress;
-    ctx.beginPath();
-    ctx.arc(fx, fy, frag.size, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = '#ffffff';
-  ctx.globalAlpha = 0.3 * stageProgress;
-  ctx.beginPath();
-  ctx.arc(boss.x, boss.y, 20 + 30 * stageProgress, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawBossSnapEffect(theme, stageProgress) {
-  // stage 3: bright flash fading quickly, plus an expanding shockwave
-  // ring -- layered on top of the now-fully-formed orb underneath
-  ctx.save();
-  const flashAlpha = Math.max(0, 1 - stageProgress * 3);
-  if (flashAlpha > 0) {
-    ctx.fillStyle = `rgba(255,255,255,${flashAlpha * 0.7})`;
-    ctx.beginPath();
-    ctx.arc(boss.x, boss.y, boss.maxR * 1.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  const ringR = boss.maxR * (1 + stageProgress * 2.5);
-  const ringAlpha = Math.max(0, 1 - stageProgress * 1.2);
-  ctx.strokeStyle = theme.accentB;
-  ctx.lineWidth = 4 * (1 - stageProgress) + 1;
-  ctx.globalAlpha = ringAlpha;
-  ctx.beginPath();
-  ctx.arc(boss.x, boss.y, ringR, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawBossTransitionCompleteEffect(theme, stageProgress) {
-  // punctuates the moment the new form locks in -- same visual language
-  // as the entrance snap, but in the new phase-3 colors
-  ctx.save();
-  const flashAlpha = Math.max(0, 1 - stageProgress * 2.5);
-  if (flashAlpha > 0) {
-    ctx.fillStyle = `rgba(255,255,255,${flashAlpha * 0.8})`;
-    ctx.beginPath();
-    ctx.arc(boss.x, boss.y, boss.maxR * 1.6, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  const ringR = boss.maxR * (1 + stageProgress * 2.8);
-  const ringAlpha = Math.max(0, 1 - stageProgress * 1.1);
-  ctx.strokeStyle = theme.phase3AccentB;
-  ctx.lineWidth = 5 * (1 - stageProgress) + 1;
-  ctx.globalAlpha = ringAlpha;
-  ctx.beginPath();
-  ctx.arc(boss.x, boss.y, ringR, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
-
-// phase 4 "wear and tear" -- jagged cracks spreading gradually across
-// the boss's surface as phase 4 progresses, echoing the same glowing
-// cyan crack language already used on the homing fragment's cracked
-// core. drawn inside the boss's own clip so they're automatically
-// bounded to its circular silhouette; each crack fades in individually
-// at a staggered offset so they visibly spread over time rather than
-// all appearing at once
-const BOSS_CRACK_PATHS = [
-  [[-0.5, -0.6], [-0.2, -0.3], [-0.4, -0.1], [-0.15, 0.05]],
-  [[0.4, -0.4], [0.55, -0.15], [0.35, 0.1], [0.5, 0.3]],
-  [[-0.3, 0.2], [-0.5, 0.4], [-0.25, 0.55]],
-  [[0.1, -0.7], [0.25, -0.5], [0.05, -0.35], [0.2, -0.15]],
-  [[0.2, 0.4], [0.4, 0.55], [0.15, 0.7]],
-  [[-0.1, -0.2], [0.1, 0.0], [-0.05, 0.25], [0.15, 0.45]]
-];
-const BOSS_CRACK_APPEAR_OFFSETS = [0, 150, 300, 500, 700, 900];
-const BOSS_CRACK_FADE_IN_DURATION = 120;
-
-function drawBossCracks(bx, by, r, framesSincePhase4) {
-  if (framesSincePhase4 < 0) return;
-  ctx.save();
-  for (let i = 0; i < BOSS_CRACK_PATHS.length; i++) {
-    const sinceAppear = framesSincePhase4 - BOSS_CRACK_APPEAR_OFFSETS[i];
-    if (sinceAppear < 0) continue;
-    const fadeIn = Math.min(1, sinceAppear / BOSS_CRACK_FADE_IN_DURATION);
-    const pulse = 0.7 + 0.3 * Math.sin(frame * 0.15 + i * 1.9);
-    ctx.strokeStyle = '#00e0ff';
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = fadeIn * pulse * 0.85;
-    ctx.shadowColor = '#00e0ff';
-    ctx.shadowBlur = 5;
-    ctx.beginPath();
-    BOSS_CRACK_PATHS[i].forEach(([px, py], j) => {
-      const x = bx + px * r, y = by + py * r;
-      j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-// phase 5 final form -- a total-eclipse look: dark core, irregular
-// flaring corona (not a smooth ring, jagged flare-like protrusions),
-// and a single bright "diamond ring" highlight point near the rim
-// the boss's standard sphere appearance -- gradient, scanlines, and
-// 3D shading, factored out so the phase 5 transformation can render
-// an exact match before morphing, instead of a simplified stand-in
-// that visibly pops the moment the sequence begins

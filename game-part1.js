@@ -1,8 +1,37 @@
 window.SYNTH_FLIGHT_JS_STARTED = true;
+function isPlainChromeBrowser() {
+  try {
+    if (navigator.brave) return false;
+  } catch (e) { /* ignore */ }
+  const ua = navigator.userAgent || '';
+  if (/Edg\/|OPR\/|Opera\/|SamsungBrowser|Firefox\/|YaBrowser|Vivaldi/i.test(ua)) return false;
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands) || [];
+  const names = brands.map((b) => String(b.brand || '').toLowerCase());
+  if (names.some((n) => n.includes('brave') || n.includes('edge') || n.includes('opera'))) return false;
+  if (names.some((n) => n === 'google chrome')) return true;
+  return /Chrome\//.test(ua) && !/Edg\//.test(ua);
+}
+
+const BROWSER_NOTE_HTML = isPlainChromeBrowser()
+  ? '<div id="browser-note">Play in Edge or Brave. Chrome runs this game at the wrong speed.</div>'
+  : '';
 const canvas = document.getElementById('gameCanvas');
 let ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 const rotateOverlay = document.getElementById('rotate-overlay');
+
+const DEV_TOOLS_ENABLED = (() => {
+  try {
+    const params = new URLSearchParams(location.search);
+    if (params.get('dev') === '1') return true;
+    if (params.get('player') === '1') return false;
+  } catch (e) { /* ignore */ }
+  return !window.SYNTH_FLIGHT_PLAYER_BUILD;
+})();
+if (!DEV_TOOLS_ENABLED) {
+  document.documentElement.classList.add('player-build');
+  if (document.body) document.body.classList.add('player-build');
+}
 
 const GAME_STORAGE_PREFIX = 'synthFlight:';
 window.storage = {
@@ -64,26 +93,50 @@ function sharpenCanvasContext(context) {
 }
 
 function resizeCanvas() {
-  W = window.innerWidth;
-  H = window.innerHeight;
-  // Game units stay in CSS pixels. The bitmap matches the display (up to 2x
-  // on retina) so a full-screen browser is not stretching an 800px frame.
+  // One playfield for Cursor, Edge, and the app. Game units stay 1280x720
+  // (16:9). The canvas is scaled to fit the window so a small Cursor panel
+  // still shows the full stage you will ship, not a cropped taller box.
+  W = 1280;
+  H = 720;
+  const fit = Math.min(window.innerWidth / W, window.innerHeight / H);
+  const dispW = Math.max(1, Math.round(W * fit));
+  const dispH = Math.max(1, Math.round(H * fit));
   renderScale = currentDisplayScale();
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-  overlay.style.width = W + 'px';
-  overlay.style.height = H + 'px';
+  canvas.style.width = dispW + 'px';
+  canvas.style.height = dispH + 'px';
+  overlay.style.width = dispW + 'px';
+  overlay.style.height = dispH + 'px';
   canvas.width = Math.max(1, Math.round(W * renderScale));
   canvas.height = Math.max(1, Math.round(H * renderScale));
+  const left = Math.round((window.innerWidth - dispW) / 2);
+  const top = Math.round((window.innerHeight - dispH) / 2);
+  canvas.style.left = left + 'px';
+  canvas.style.top = top + 'px';
+  overlay.style.left = left + 'px';
+  overlay.style.top = top + 'px';
+  overlay.style.transform = 'none';
   applyCanvasRenderScale();
   sharpenCanvasContext(ctx);
   BAR_HEIGHT = Math.min(50, Math.max(34, H * 0.05));
   PLAY_TOP = BAR_HEIGHT;
   PLAY_BOTTOM = H - BAR_HEIGHT;
+  positionPauseButton();
   if (!hasInitializedGame) {
     hasInitializedGame = true;
-    resetGame();
+    if (typeof resetGame === 'function') resetGame();
   }
+}
+
+function positionPauseButton() {
+  if (!pauseToggleBtn) return;
+  const fit = Math.min(window.innerWidth / W, window.innerHeight / H);
+  const dispW = Math.max(1, Math.round(W * fit));
+  const dispH = Math.max(1, Math.round(H * fit));
+  const left = Math.round((window.innerWidth - dispW) / 2);
+  const top = Math.round((window.innerHeight - dispH) / 2);
+  const barCss = BAR_HEIGHT * fit;
+  pauseToggleBtn.style.top = Math.max(8, top + barCss + 8) + 'px';
+  pauseToggleBtn.style.right = Math.max(8, window.innerWidth - left - dispW + 8) + 'px';
 }
 
 function checkOrientation() {
@@ -135,6 +188,11 @@ const GAP_FRACTION_MIN = 0.3;
 const SHIP_W = 40;
 const SHIP_H = 18;
 const THEME_DISTANCE = 1000;
+// Zone 1's decorative sun (the same orb that later becomes The Signal)
+// holds until this zone-local distance, then plays a vanish over
+// SYNTHWAVE_SUN_VANISH_DURATION meters so the sky is empty before warp
+const SYNTHWAVE_SUN_VANISH_START = 900;
+const SYNTHWAVE_SUN_VANISH_DURATION = 80;
 const WARP_DURATION = 100;
 const PORTAL_LEAD_DISTANCE = 80; // how far (in distance units) before the threshold the portal appears
 
@@ -195,9 +253,10 @@ const THEMES = [
   },
   {
     name: 'GRAVITY WELL',
-    skyTop: '#001a0d', skyMid: '#003320', skyBottom: '#000d05',
-    accentA: '#00ff9d', accentB: '#00c3ff',
-    barTop: '#00291a', barBottom: '#001008',
+    skyTop: '#071428', skyMid: '#0c3340', skyBottom: '#05101c',
+    accentA: '#3dffc8', accentB: '#6ec8ff',
+    wellAccent: '#e85cff',
+    barTop: '#123848', barBottom: '#071018',
     bgStyle: 'matrix',
     ampMult: 0.15, freqMult: 1.6,
     gravityMult: 1.40, liftMult: 0.8,
@@ -207,37 +266,36 @@ const THEMES = [
     // Bars never span the full width, so there's always open sky above and/or below each one.
     pattern: [
       { spacing: 360, bars: [
-        { yFrac: 0.20, ampFrac: 0.048, freq: 0.012, phase: 0.0, widthPx: 110, thicknessPx: 18 },
-        { yFrac: 0.55, ampFrac: 0.06, freq: 0.009, phase: 1.5, widthPx: 130, thicknessPx: 18 },
-        { yFrac: 0.85, ampFrac: 0.036, freq: 0.015, phase: 3.0, widthPx: 100, thicknessPx: 18 }
+        { yFrac: 0.14, ampFrac: 0.070, freq: 0.014, phase: 0.0, xOffsetPx: -55, widthPx: 110, thicknessPx: 18 },
+        { yFrac: 0.50, ampFrac: 0.085, freq: 0.009, phase: 2.1, xOffsetPx: 40, widthPx: 130, thicknessPx: 18 },
+        { yFrac: 0.86, ampFrac: 0.060, freq: 0.017, phase: 4.2, xOffsetPx: -20, widthPx: 100, thicknessPx: 18 }
       ]},
       { spacing: 380, bars: [
-        { yFrac: 0.35, ampFrac: 0.072, freq: 0.0108, phase: 0.8, widthPx: 140, thicknessPx: 20 },
-        { yFrac: 0.75, ampFrac: 0.054, freq: 0.0132, phase: 2.2, widthPx: 110, thicknessPx: 18 }
+        { yFrac: 0.22, ampFrac: 0.090, freq: 0.011, phase: 0.8, xOffsetPx: 50, widthPx: 140, thicknessPx: 20 },
+        { yFrac: 0.80, ampFrac: 0.075, freq: 0.016, phase: 3.4, xOffsetPx: -45, widthPx: 110, thicknessPx: 18 }
       ]},
       { spacing: 350, bars: [
-        { yFrac: 0.15, ampFrac: 0.042, freq: 0.012, phase: 1.0, widthPx: 100, thicknessPx: 16 },
-        { yFrac: 0.50, ampFrac: 0.06, freq: 0.0096, phase: 2.6, widthPx: 120, thicknessPx: 18 },
-        { yFrac: 0.82, ampFrac: 0.048, freq: 0.0144, phase: 4.0, widthPx: 110, thicknessPx: 18 }
+        { yFrac: 0.12, ampFrac: 0.065, freq: 0.013, phase: 1.4, xOffsetPx: 25, widthPx: 100, thicknessPx: 16 },
+        { yFrac: 0.48, ampFrac: 0.080, freq: 0.008, phase: 3.0, xOffsetPx: -50, widthPx: 120, thicknessPx: 18 },
+        { yFrac: 0.88, ampFrac: 0.070, freq: 0.015, phase: 5.1, xOffsetPx: 35, widthPx: 110, thicknessPx: 18 }
       ]},
       { spacing: 390, bars: [
-        { yFrac: 0.30, ampFrac: 0.066, freq: 0.0114, phase: 0.4, widthPx: 130, thicknessPx: 20 },
-        { yFrac: 0.68, ampFrac: 0.066, freq: 0.0126, phase: 3.4, widthPx: 130, thicknessPx: 20 }
+        { yFrac: 0.20, ampFrac: 0.085, freq: 0.010, phase: 1.8, xOffsetPx: -40, widthPx: 130, thicknessPx: 20 },
+        { yFrac: 0.78, ampFrac: 0.090, freq: 0.014, phase: 4.6, xOffsetPx: 55, widthPx: 130, thicknessPx: 20 }
       ]},
       { spacing: 370, bars: [
-        { yFrac: 0.22, ampFrac: 0.048, freq: 0.0102, phase: 2.0, widthPx: 100, thicknessPx: 16 },
-        { yFrac: 0.50, ampFrac: 0.054, freq: 0.0138, phase: 0.6, widthPx: 120, thicknessPx: 18 },
-        { yFrac: 0.78, ampFrac: 0.042, freq: 0.0114, phase: 3.8, widthPx: 100, thicknessPx: 16 }
+        { yFrac: 0.16, ampFrac: 0.060, freq: 0.012, phase: 2.7, xOffsetPx: 60, widthPx: 100, thicknessPx: 16 },
+        { yFrac: 0.50, ampFrac: 0.075, freq: 0.016, phase: 0.4, xOffsetPx: -30, widthPx: 120, thicknessPx: 18 },
+        { yFrac: 0.84, ampFrac: 0.055, freq: 0.011, phase: 3.9, xOffsetPx: 15, widthPx: 100, thicknessPx: 16 }
       ]},
       { spacing: 340, bars: [
-        { yFrac: 0.40, ampFrac: 0.078, freq: 0.009, phase: 1.2, widthPx: 140, thicknessPx: 20 },
-        { yFrac: 0.80, ampFrac: 0.048, freq: 0.0156, phase: 4.5, widthPx: 110, thicknessPx: 18 }
+        { yFrac: 0.26, ampFrac: 0.095, freq: 0.009, phase: 1.2, xOffsetPx: -50, widthPx: 140, thicknessPx: 20 },
+        { yFrac: 0.84, ampFrac: 0.070, freq: 0.018, phase: 4.8, xOffsetPx: 45, widthPx: 110, thicknessPx: 18 }
       ]}
     ],
-    // secondary layer: a spinning dust tornado, sand-colored, sweeping
-    // straight across from right to left as it scrolls through with the
-    // world -- no vertical movement, a clean horizontal sweep. instant
-    // death on contact, same as any other solid hazard
+    // secondary layer: a spinning gravity swirl (visual retint of the
+    // original dust tornado). same size, path, and hitbox -- it only
+    // looks like a well instead of sand
     extraStormPattern: [
       { baseYFrac: 0.35, r: 55, interval: 480 },
       { baseYFrac: 0.65, r: 50, interval: 520 }
@@ -296,13 +354,13 @@ const THEMES = [
       { centerFrac: 0.46 }, { centerFrac: 0.59 }, { centerFrac: 0.74 },
       { centerFrac: 0.74 }, { centerFrac: 0.64 }, { centerFrac: 0.75, gapMult: 0.55 },
       { centerFrac: 0.61 },
-      // third fork -- the biggest/most dramatic of the four
-      { centerFrac: 0.5, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.65, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.55, gapMult: 1.15, fork: { islandFrac: 0.26 } },
+      // first fork -- extra ceiling/floor room; island size unchanged
+      { centerFrac: 0.5, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.65, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.55, gapMult: 1.15, fork: { islandFrac: 0.26, outerPadPx: 30 } },
       { centerFrac: 0.82 }, { centerFrac: 0.73 },
       { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 },
       { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 },
-      { centerFrac: 0.63 }, { centerFrac: 0.46, gapMult: 1.45, fork: { islandFrac: 0.15 } }, { centerFrac: 0.59, gapMult: 1.45, fork: { islandFrac: 0.15 } },
-      { centerFrac: 0.73, gapMult: 1.45, fork: { islandFrac: 0.13 } },
+      { centerFrac: 0.63 }, { centerFrac: 0.46, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 }, startDistance: 550 }, { centerFrac: 0.59, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 } },
+      { centerFrac: 0.73, gapMult: 1.45, fork: { islandFrac: 0.26, outerPadPx: 50 } },
       // tight slalom right after the fork -- quick alternating swings instead of the
       // gentle wave that was here before
       { centerFrac: 0.28 }, { centerFrac: 0.68 }, { centerFrac: 0.26 }, { centerFrac: 0.7 },
@@ -317,12 +375,10 @@ const THEMES = [
       { centerFrac: 0.78 }, { centerFrac: 0.78 },
       { centerFrac: 0.61 }, { centerFrac: 0.47 }, { centerFrac: 0.34 },
       { centerFrac: 0.19 },
-      // second fork -- tighter and differently-shaped than the first one
-      { centerFrac: 0.29, gapMult: 1.15, fork: { islandFrac: 0.24 } }, { centerFrac: 0.36, gapMult: 1.15, fork: { islandFrac: 0.24 } }, { centerFrac: 0.3, gapMult: 1.15, fork: { islandFrac: 0.22 } },
+      { centerFrac: 0.29 }, { centerFrac: 0.36 }, { centerFrac: 0.3 },
       { centerFrac: 0.22 }, { centerFrac: 0.28 }, { centerFrac: 0.2, gapMult: 0.55 },
       { centerFrac: 0.3 }, { centerFrac: 0.54 },
-      // fourth fork -- tighter and trickier than the others
-      { centerFrac: 0.7, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.58, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.66, gapMult: 1.15, fork: { islandFrac: 0.26 } },
+      { centerFrac: 0.7 }, { centerFrac: 0.58 }, { centerFrac: 0.66 },
       { centerFrac: 0.4 },
       { centerFrac: 0.32 }, { centerFrac: 0.18 }, { centerFrac: 0.31 },
       { centerFrac: 0.41 }, { centerFrac: 0.26 }, { centerFrac: 0.22 },
@@ -458,7 +514,7 @@ const THEMES = [
   },
   {
     name: 'TOXIC WASTELAND',
-    skyTop: '#0a1408', skyMid: '#1a2e12', skyBottom: '#050a04',
+    skyTop: '#141c0c', skyMid: '#2a3820', skyBottom: '#070a04',
     accentA: '#8aff4d', accentB: '#d4c84a',
     barTop: '#14200e', barBottom: '#040803',
     bgStyle: 'toxic',
@@ -498,6 +554,12 @@ const THEMES = [
       { pivotSide: 'ceiling', lowHeightPx: 16, highHeightPx: 290, widthPx: 32, warningFrames: 30, riseFrames: 9, holdFrames: 38, fallFrames: 13, restFrames: 32, phaseOffset: 60, interval: 180 },
       { pivotSide: 'floor', lowHeightPx: 20, highHeightPx: 330, widthPx: 36, warningFrames: 32, riseFrames: 11, holdFrames: 40, fallFrames: 14, restFrames: 34, phaseOffset: 120, interval: 175 },
       { pivotSide: 'ceiling', lowHeightPx: 18, highHeightPx: 300, widthPx: 34, warningFrames: 34, riseFrames: 10, holdFrames: 40, fallFrames: 14, restFrames: 33, phaseOffset: 20, interval: 170 }
+    ],
+    extraGeyserNudges: [
+      { pivotSide: 'floor', minDistance: 500, maxDistance: 560, xOffsetPx: 70 }
+    ],
+    acidDripNudges: [
+      { minAtShipDistance: 585, maxAtShipDistance: 605, targetFallFrac: 0.18 }
     ]
   },
   {
@@ -762,7 +824,7 @@ const THEMES = [
     // reposition between the outbound and return heights
     boomerangEvents: [
       { triggerDistance: 350, xStart: -100, xMax: 600, yOutbound: 150, yReturn: 450, arcAmplitude: 50, period: 250, r: 14 },
-      { triggerDistance: 870, xStart: -100, xMax: 600, yOutbound: 450, yReturn: 150, arcAmplitude: 50, period: 250, r: 14 }
+      { triggerDistance: 920, xStart: -100, xMax: 600, yOutbound: 450, yReturn: 150, arcAmplitude: 50, period: 250, r: 14 }
     ],
     // exactly 2 fixed rooftop searchlight events -- a beam pivoting from
     // a fixed point at the ceiling, sweeping its angle back and forth
@@ -839,7 +901,16 @@ let settingsReturnState = 'options';
 // Select). Migrates from the older, separate localStorage keys this game
 // used before, so existing players don't lose their progress.
 const PROFILE_STORAGE_KEY = 'synthFlightProfile';
-const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV12';
+const SAVE_ID_STORAGE_KEY = 'synthFlightSaveId';
+const SAVE_ID_COOKIE = 'sfid';
+const DURABLE_DB_NAME = 'synthFlightDurable';
+const DURABLE_STORE = 'profile';
+const SAVE_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+let playerSaveId = '';
+let durableWriteLock = false;
+let durableSaveTimer = 0;
+let durableHydrated = false;
+const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV19';
 const PREVIEW_STILL_W = 640;
 const PREVIEW_STILL_ASPECT = 860 / 412;
 let zoneScreenshots = {};
@@ -928,38 +999,13 @@ function maybeCaptureZoneScreenshot() {
   if (warpActive || bossExplosionActive || shipFlyOffActive) return;
   if (zoneScreenshotLive[themeIndex]) return;
   const th = currentTheme();
-  // Live play only overwrites The Signal. Other zones already have a still,
-  // but storeZoneScreenshot used to reject the JPEG without marking the
-  // zone captured -- so every later frame still encoded a full-canvas
-  // JPEG. That's the mid-zone hitch on Inferno and everywhere else.
-  if (zoneScreenshots[themeIndex] && !(th && th.isBossZone)) {
-    zoneScreenshotLive[themeIndex] = true;
-    return;
-  }
-  if (th.isBossZone) {
-    if (!boss || boss.r < boss.maxR * 0.85) return;
-    if (frame - bossSpawnFrame < BOSS_ENTRANCE_DURATION) return;
-    if (bossDefeated || bossFullyDefeated || bossFinalChargeActive) return;
-  } else if (th.isMiniBossZone) {
-    if (!miniBoss || miniBoss.r < miniBoss.maxR * 0.85) return;
-    if (frame - miniBossSpawnFrame < MINI_BOSS_ENTRANCE_DURATION) return;
-    if (miniBossDefeated) return;
-    if (th.miniBossVariant === 'core') {
-      const busy = miniBossAttackState === 'coreOrbitBarrageActive'
-        || miniBossAttackState === 'coreCrossfireActive'
-        || miniBossAttackState === 'coreEmpActive'
-        || miniBossAttackState === 'coreLaserActive'
-        || miniBossAttackState === 'coreBulkheadActive'
-        || miniBossAttackState === 'coreSparkDeploy'
-        || (coreOrbitProjectiles && coreOrbitProjectiles.length > 4)
-        || (coreSparks && coreSparks.length > 2);
-      if (!busy) return;
-    }
-  } else {
-    const progress = distance - zoneStartDistance;
-    if (progress < 35) return;
-    if (gates.length === 0 && progress < 90) return;
-  }
+  // Full-window JPEG capture on a large Chrome window is both the Inferno
+  // hitch and the wrong Zone Select stills. Authored stills come from
+  // generateAndStoreZoneStill; live play only snapshots The Signal.
+  if (!th || !th.isBossZone) return;
+  if (!boss || boss.r < boss.maxR * 0.85) return;
+  if (frame - bossSpawnFrame < BOSS_ENTRANCE_DURATION) return;
+  if (bossDefeated || bossFullyDefeated || bossFinalChargeActive) return;
   const url = cropPlayfieldToJpeg(canvas, 0.78);
   if (url) storeZoneScreenshot(themeIndex, url, true);
 }
@@ -1097,6 +1143,8 @@ function generateAndStoreZoneStill(themeIdx) {
   const savedShip = { x: ship.x, y: ship.y, vy: ship.vy, rotation: ship.rotation };
   const savedFrame = frame;
   const savedZsf = zoneStartFrame;
+  const savedDistance = distance;
+  const savedZoneStartDistance = zoneStartDistance;
   const savedWarp = warpActive;
   const savedBg = bgParticles;
   const savedPortal = portalObject;
@@ -1172,6 +1220,18 @@ function generateAndStoreZoneStill(themeIdx) {
     }
     poseZonePreviewCombatants(theme);
     placePreviewShipClearOfHazards();
+    distance = 400;
+    zoneStartDistance = 0;
+    if (theme.isBossZone && boss) {
+      const shots = [
+        { x: ship.x + 150, y: ship.y - 55 },
+        { x: ship.x + 195, y: ship.y + 8 },
+        { x: ship.x + 168, y: ship.y + 62 }
+      ];
+      for (let i = 0; i < shots.length; i++) {
+        gates.push({ type: 'bossattack', x: shots[i].x, y: shots[i].y, r: 10, vx: 0, vy: 0, passed: false });
+      }
+    }
     initBackgroundParticles(theme);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
@@ -1183,7 +1243,10 @@ function generateAndStoreZoneStill(themeIdx) {
     drawReactorCoreAttacks(theme);
     if (theme.obstacleShape === 'terrain') drawTerrain(theme);
     else drawGates(theme);
-    if (theme.isBossZone) drawBossArenaBarrierWall(theme, boss);
+    if (theme.isBossZone) {
+      drawBossArenaBarrierWall(theme, boss);
+      drawBossArenaVignette(theme, boss);
+    }
     if (theme.isMiniBossZone && miniBoss && theme.miniBossVariant !== 'core') {
       drawBossArenaObsidianWall(theme, miniBoss);
     }
@@ -1206,6 +1269,8 @@ function generateAndStoreZoneStill(themeIdx) {
     ship.x = savedShip.x; ship.y = savedShip.y; ship.vy = savedShip.vy; ship.rotation = savedShip.rotation;
     frame = savedFrame;
     zoneStartFrame = savedZsf;
+    distance = savedDistance;
+    zoneStartDistance = savedZoneStartDistance;
     warpActive = savedWarp;
     bgParticles = savedBg;
     portalObject = savedPortal;
@@ -1237,30 +1302,38 @@ function generateAndStoreZoneStill(themeIdx) {
   if (url) storeZoneScreenshot(themeIdx, url, false);
   return url;
 }
+function normalizePlayerProfile(parsed) {
+  if (!parsed || typeof parsed !== 'object') {
+    return { best: 0, extraDifficultyUnlocked: false, unlockedZones: [0], completedZones: [], deathlessZones: [], beatenDifficulties: [], totalDistanceTraveled: 0, lifetimeDeathsByZone: new Array(13).fill(0), zoneCompletionCounts: new Array(13).fill(0), achievedRanks: [], shipTrail: 'classic', shipSkin: 'classic' };
+  }
+  const pad13 = (arr) => {
+    const out = Array.isArray(arr) ? arr.slice(0, 13) : [];
+    while (out.length < 13) out.push(0);
+    return out.map((n) => (typeof n === 'number' && n > 0 ? n : 0));
+  };
+  return {
+    best: typeof parsed.best === 'number' ? parsed.best : 0,
+    extraDifficultyUnlocked: !!parsed.extraDifficultyUnlocked,
+    unlockedZones: Array.isArray(parsed.unlockedZones) ? parsed.unlockedZones : [0],
+    completedZones: Array.isArray(parsed.completedZones) ? parsed.completedZones : [],
+    deathlessZones: Array.isArray(parsed.deathlessZones) ? parsed.deathlessZones : [],
+    beatenDifficulties: Array.isArray(parsed.beatenDifficulties) ? parsed.beatenDifficulties : [],
+    totalDistanceTraveled: typeof parsed.totalDistanceTraveled === 'number' ? parsed.totalDistanceTraveled : 0,
+    lifetimeDeathsByZone: pad13(parsed.lifetimeDeathsByZone),
+    zoneCompletionCounts: pad13(parsed.zoneCompletionCounts),
+    achievedRanks: Array.isArray(parsed.achievedRanks) ? parsed.achievedRanks : [],
+    shipTrail: typeof parsed.shipTrail === 'string' ? parsed.shipTrail : 'classic',
+    shipSkin: typeof parsed.shipSkin === 'string' ? parsed.shipSkin : 'classic',
+  };
+}
 function loadPlayerProfile() {
   try {
     const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        best: typeof parsed.best === 'number' ? parsed.best : 0,
-        extraDifficultyUnlocked: !!parsed.extraDifficultyUnlocked,
-        unlockedZones: Array.isArray(parsed.unlockedZones) ? parsed.unlockedZones : [0],
-        completedZones: Array.isArray(parsed.completedZones) ? parsed.completedZones : [],
-        deathlessZones: Array.isArray(parsed.deathlessZones) ? parsed.deathlessZones : [],
-        beatenDifficulties: Array.isArray(parsed.beatenDifficulties) ? parsed.beatenDifficulties : [],
-        totalDistanceTraveled: typeof parsed.totalDistanceTraveled === 'number' ? parsed.totalDistanceTraveled : 0,
-        lifetimeDeathsByZone: Array.isArray(parsed.lifetimeDeathsByZone) ? parsed.lifetimeDeathsByZone : new Array(13).fill(0),
-        zoneCompletionCounts: Array.isArray(parsed.zoneCompletionCounts) ? parsed.zoneCompletionCounts : new Array(13).fill(0),
-        achievedRanks: Array.isArray(parsed.achievedRanks) ? parsed.achievedRanks : [],
-        shipTrail: typeof parsed.shipTrail === 'string' ? parsed.shipTrail : 'classic',
-        shipSkin: typeof parsed.shipSkin === 'string' ? parsed.shipSkin : 'classic',
-      };
-    }
+    if (raw) return normalizePlayerProfile(JSON.parse(raw));
   } catch (e) { /* corrupted profile data -- fall through to legacy keys/defaults */ }
   const legacyBest = parseInt(localStorage.getItem('synthFlightBest') || '0', 10) || 0;
   const legacyExtra = localStorage.getItem('synthFlightExtraDifficultyUnlocked') === 'true';
-  return { best: legacyBest, extraDifficultyUnlocked: legacyExtra, unlockedZones: [0], completedZones: [], deathlessZones: [], beatenDifficulties: [], totalDistanceTraveled: 0, lifetimeDeathsByZone: new Array(13).fill(0), zoneCompletionCounts: new Array(13).fill(0), achievedRanks: [], shipTrail: 'classic', shipSkin: 'classic' };
+  return normalizePlayerProfile({ best: legacyBest, extraDifficultyUnlocked: legacyExtra, unlockedZones: [0] });
 }
 function savePlayerProfile() {
   try {
@@ -1268,6 +1341,7 @@ function savePlayerProfile() {
       best, extraDifficultyUnlocked, unlockedZones: Array.from(unlockedZones), completedZones: Array.from(completedZones), deathlessZones: Array.from(deathlessZones), beatenDifficulties: Array.from(beatenDifficulties), totalDistanceTraveled, lifetimeDeathsByZone, zoneCompletionCounts, achievedRanks: Array.from(achievedRanks), shipTrail: shipTrailStyle, shipSkin: shipSkinStyle
     }));
   } catch (e) { /* storage unavailable/full -- fail silently, never crash the game over this */ }
+  if (!durableWriteLock) queueDurableSave();
 }
 function resetPlayerProfile() {
   best = 0;
@@ -1343,6 +1417,8 @@ let frame = 0;
 let distance = 0;
 let best = __loadedProfile.best;
 let holding = false;
+let pointerHolding = false;
+let keyHolding = false;
 let lives = 3;
 let totalDeaths = 0;
 let deathsByZone = {}; // keyed by theme name
@@ -1906,6 +1982,7 @@ let terrainWaypointTarget = null;
 let terrainWaypointSegLeft = 0;
 let terrainWaypointGapTarget = null;
 let terrainWaypointIslandTarget = 0;
+let terrainMeanderIndex = 0;
 
 let themeIndex = 0;
 let themeLevelReached = 0;
@@ -2087,74 +2164,5 @@ function spawnBarrier(x) {
     passed: false
   });
   return entry.spacing;
-}
-
-function barrierIsActive(g) {
-  const t = (frame - zoneStartFrame + g.phaseOffset) % g.cycleLength;
-  return t < g.onFrames;
-}
-
-// how many frames remain until this barrier's next state change (for the
-// pre-activation warning flicker in the renderer)
-function barrierFramesToToggle(g) {
-  const t = (frame - zoneStartFrame + g.phaseOffset) % g.cycleLength;
-  return t < g.onFrames ? (g.onFrames - t) : (g.cycleLength - t);
-}
-
-function spawnHBarCluster(x) {
-  const th = currentTheme();
-  const playHeight = PLAY_BOTTOM - PLAY_TOP;
-
-  const entry = th.pattern[patternIndex % th.pattern.length];
-  patternIndex++;
-
-  for (const b of entry.bars) {
-    gates.push({
-      type: 'hbar',
-      x: x,
-      baseCenter: PLAY_TOP + b.yFrac * playHeight,
-      amplitude: b.ampFrac * playHeight,
-      freq: b.freq,
-      phase: b.phase,
-      width: b.widthPx,
-      thickness: b.thicknessPx,
-      passed: false
-    });
-  }
-  return entry.spacing;
-}
-
-// hand-picked bolt silhouettes (normalized: x as fraction of swingWidth/2,
-// y as fraction of height from top), each a distinct filled icon shape
-const BOLT_SHAPES = {
-  E1: [[0.55, 0], [-0.45, 0.425], [0.2, 0.425], [-0.625, 1], [0.875, 0.45], [0.075, 0.45]],
-  E3: [[0.8, 0], [-0.75, 0.45], [0.25, 0.45], [-0.875, 1], [1.125, 0.5], [0.2, 0.5]],
-  E4: [[0.5, 0.15], [-0.45, 0.45], [0.15, 0.45], [-0.55, 0.85], [0.8, 0.525], [0.05, 0.525]],
-  E5: [[0.3, 0], [-0.35, 0.55], [0.125, 0.55], [-0.4, 1], [0.55, 0.6], [0.05, 0.6]],
-  E6: [[0.2, 0], [-0.2, 0.45], [0.075, 0.45], [-0.25, 1], [0.35, 0.475], [0.025, 0.475]]
-};
-
-// accurate polygon-vs-rectangle collision, used so hitboxes match the
-// visible jagged bolt silhouette instead of its full bounding box (which
-// is much wider than thin shapes like E5/E6 actually render)
-function pointInPolygon(px, py, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i][0], yi = poly[i][1];
-    const xj = poly[j][0], yj = poly[j][1];
-    const intersect = ((yi > py) !== (yj > py)) &&
-      (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
-function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
-  const d1 = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx);
-  const d2 = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx);
-  const d3 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-  const d4 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
-  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
 }
 

@@ -1,3 +1,499 @@
+function drawSupernovaFlash(g, theme) {
+  const t = Math.min(1, (frame - g.detonationFrame) / 20);
+  ctx.save();
+  ctx.translate(g.x, g.y);
+  const flashR = g.planetR * (1 + t * 2);
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, flashR);
+  grad.addColorStop(0, `rgba(255,255,255,${1 - t})`);
+  grad.addColorStop(0.4, `rgba(255,220,150,${(1 - t) * 0.6})`);
+  grad.addColorStop(1, 'rgba(255,180,100,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, flashR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawSupernovaDebris(g, theme) {
+  const pos = liveProjectilePos(g);
+  ctx.save();
+  ctx.shadowColor = '#ff8844';
+  ctx.shadowBlur = 10;
+  const grad = ctx.createRadialGradient(pos.x - g.r * 0.3, pos.y - g.r * 0.3, g.r * 0.1, pos.x, pos.y, g.r);
+  grad.addColorStop(0, '#fff3c4');
+  grad.addColorStop(0.5, '#e8703a');
+  grad.addColorStop(1, '#3a1a10');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, g.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawLensingZone(g, theme) {
+  ctx.save();
+  ctx.translate(g.x, g.y);
+
+  // concentric rippling distortion rings, like heat-haze or water ripples
+  const ringCount = 5;
+  for (let i = 1; i <= ringCount; i++) {
+    const baseR = (g.zoneRadius / ringCount) * i;
+    const wobbleAmt = 6 + i * 1.5;
+    const phase = frame * 0.02 + g.rotSeed + i * 0.8;
+    ctx.beginPath();
+    const segments = 40;
+    for (let s = 0; s <= segments; s++) {
+      const ang = (s / segments) * Math.PI * 2;
+      const wobble = Math.sin(ang * 4 + phase) * wobbleAmt * (i / ringCount);
+      const r = baseR + wobble;
+      const px = Math.cos(ang) * r, py = Math.sin(ang) * r;
+      if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = theme.accentA;
+    ctx.globalAlpha = 0.12 * (1 - i / (ringCount + 2));
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // subtle rotating swirl streaks
+  ctx.save();
+  ctx.rotate(frame * 0.008 + g.rotSeed);
+  for (let i = 0; i < 3; i++) {
+    const swirlAngle = (i / 3) * Math.PI * 2;
+    ctx.strokeStyle = theme.accentB;
+    ctx.globalAlpha = 0.15;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let s = 0; s <= 20; s++) {
+      const t = s / 20;
+      const ang = swirlAngle + t * Math.PI * 1.5;
+      const r = t * g.zoneRadius * 0.85;
+      ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  // small lethal core, partially camouflaged in the shimmer -- genuinely
+  // findable (pulses toward full brightness periodically), just easy to
+  // overlook amid the surrounding visual noise
+  const corePulse = 0.5 + 0.5 * Math.sin(frame * 0.15 + g.rotSeed);
+  ctx.shadowColor = theme.accentA;
+  ctx.shadowBlur = 6 + 4 * corePulse;
+  ctx.fillStyle = theme.accentA;
+  ctx.globalAlpha = 0.55 + 0.25 * corePulse;
+  ctx.beginPath();
+  ctx.arc(0, 0, g.coreR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+// telegraph: a growing preview line at the locked height, plus a
+// building charge glow and converging sparks at the boss itself
+function drawBossChargeBeamTelegraph(g, theme) {
+  const elapsed = frame - g.spawnFrame;
+  const progress = Math.min(1, elapsed / g.warningFrames);
+  ctx.save();
+  const pulse = 0.7 + 0.3 * Math.sin(frame * 0.3);
+  ctx.strokeStyle = '#ffd23f';
+  ctx.lineWidth = 2 + progress * 3;
+  ctx.globalAlpha = (0.15 + progress * 0.5) * pulse;
+  ctx.shadowColor = '#ff6020';
+  ctx.shadowBlur = 6 + progress * 10;
+  ctx.beginPath();
+  ctx.moveTo(boss ? boss.x : 0, g.lockedY);
+  ctx.lineTo(0, g.lockedY);
+  ctx.stroke();
+
+  if (boss) {
+    ctx.globalAlpha = progress * 0.7;
+    ctx.fillStyle = '#fff5cc';
+    ctx.shadowColor = '#ffd23f';
+    ctx.shadowBlur = 15 * progress;
+    ctx.beginPath();
+    ctx.arc(boss.x, boss.y, boss.maxR * 0.25 * progress, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let i = 0; i < 6; i++) {
+      const ang = i * 1.047 + frame * 0.04;
+      const dist = boss.maxR * (1.5 - progress * 0.8);
+      const sx = boss.x + Math.cos(ang) * dist, sy = boss.y + Math.sin(ang) * dist;
+      ctx.globalAlpha = progress * 0.6;
+      ctx.fillStyle = '#ffd23f';
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+// fired beam: layered glow, mid orange body, and a flickering
+// white-hot core, spanning the full width at the locked height
+function drawBossChargeBeam(g, theme) {
+  const elapsed = frame - g.spawnFrame;
+  const progress = elapsed / (g.fireDuration || BOSS_CHARGE_BEAM_FIRE_DURATION);
+  const fadeOut = progress > 0.8 ? Math.max(0, 1 - (progress - 0.8) / 0.2) : 1;
+  const beamThickness = g.thickness || BOSS_CHARGE_BEAM_THICKNESS;
+  ctx.save();
+
+  ctx.strokeStyle = '#ff2010';
+  ctx.lineWidth = beamThickness;
+  ctx.shadowColor = '#ff2010';
+  ctx.shadowBlur = 25;
+  ctx.globalAlpha = fadeOut * 0.5;
+  ctx.beginPath();
+  ctx.moveTo(boss ? boss.x : 0, g.lockedY);
+  ctx.lineTo(0, g.lockedY);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#ff8020';
+  ctx.lineWidth = beamThickness * 0.55;
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = fadeOut * 0.8;
+  ctx.beginPath();
+  ctx.moveTo(boss ? boss.x : 0, g.lockedY);
+  ctx.lineTo(0, g.lockedY);
+  ctx.stroke();
+
+  const flicker = 0.85 + 0.15 * Math.sin(frame * 0.8);
+  ctx.strokeStyle = '#fff5cc';
+  ctx.lineWidth = beamThickness * 0.2 * flicker;
+  ctx.globalAlpha = fadeOut;
+  ctx.beginPath();
+  ctx.moveTo(boss ? boss.x : 0, g.lockedY);
+  ctx.lineTo(0, g.lockedY);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBossAshCloud(g, theme) {
+  ctx.save();
+  const puffs = [
+    { dx: 0, dy: 0, r: g.r },
+    { dx: -g.r * 0.5, dy: g.r * 0.2, r: g.r * 0.65 },
+    { dx: g.r * 0.45, dy: -g.r * 0.15, r: g.r * 0.6 },
+    { dx: g.r * 0.1, dy: g.r * 0.35, r: g.r * 0.5 }
+  ];
+  for (const p of puffs) {
+    const cx = g.x + p.dx, cy = g.y + p.dy;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, p.r);
+    grad.addColorStop(0, 'rgba(50,48,50,0.55)');
+    grad.addColorStop(1, 'rgba(50,48,50,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawBossEmber(g, theme) {
+  ctx.save();
+  const pulse = 0.7 + 0.3 * Math.sin(frame * 0.3 + g.rotSeed);
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = '#ff5020';
+  ctx.shadowColor = '#ff5020';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fff5cc';
+  ctx.globalAlpha = pulse * 0.8;
+  ctx.beginPath();
+  ctx.arc(g.x, g.y, g.r * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBossVolleyTelegraph(g, theme) {
+  if (!boss) return;
+  const elapsed = frame - g.spawnFrame;
+  const progress = Math.min(1, elapsed / g.warningFrames);
+
+  ctx.save();
+  ctx.strokeStyle = '#ff3050';
+  ctx.lineWidth = 2 + 3 * progress;
+  ctx.globalAlpha = 0.3 + 0.5 * progress;
+  ctx.setLineDash([8, 6]);
+  ctx.beginPath();
+  ctx.moveTo(boss.x, boss.y);
+  ctx.lineTo(ship.x, ship.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const pulse = 0.5 + 0.5 * Math.sin(frame * 0.4);
+  ctx.fillStyle = '#ff3050';
+  ctx.globalAlpha = progress;
+  ctx.beginPath();
+  ctx.arc(boss.x, boss.y, 8 + 4 * pulse, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawBossRagePulse(g, theme) {
+  const liveR = liveRagePulseRadius(g);
+  if (liveR <= 0) return;
+  ctx.save();
+  const alpha = Math.max(0, 1 - (liveR / BOSS_RAGE_PULSE_MAX_R) * 0.8);
+
+  const vRadius = BOSS_RAGE_PULSE_THICKNESS / 2;
+  const ringColors = ['#fff5cc', '#ffd23f', '#ffb020', theme.phase3AccentA, '#a01000'];
+
+  // one continuous ring, centered on wherever the boss was at the
+  // exact moment it originated, growing outward as a whole (like the
+  // reference image's ring bursting outward) -- starts tight around
+  // that origin point and expands horizontally in both directions,
+  // without tracking any further boss movement afterward. the
+  // outermost band is the brightest, reading clearly as the true
+  // collision edge without needing a separate straight-line marker
+  // that broke the ring's silhouette
+  for (let i = 0; i < ringColors.length; i++) {
+    const hRadius = Math.max(0, liveR - i * 9);
+    const vR = vRadius * (1 - i * 0.12);
+    ctx.strokeStyle = ringColors[i];
+    ctx.lineWidth = i === 0 ? 5 : 3 + (ringColors.length - i);
+    ctx.globalAlpha = alpha * (i === 0 ? 0.95 : 0.7 - i * 0.09);
+    ctx.shadowColor = ringColors[i];
+    ctx.shadowBlur = i === 0 ? 18 : 10;
+    ctx.beginPath();
+    ctx.ellipse(g.x, g.y, hRadius, vR, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawBossDiagonalRings(g, theme) {
+  const liveR = liveDiagonalRingRadius(g);
+  if (liveR <= 0) return;
+  ctx.save();
+  const alpha = Math.max(0, 1 - (liveR / BOSS_DIAGONAL_RING_MAX_R) * 0.8);
+  const vRadius = BOSS_DIAGONAL_RING_THICKNESS / 2;
+  const ringColors = ['#e0faff', '#4fd3ff', '#1a9fe0', '#0a5fb0', '#052a60'];
+  const angle = Math.atan(BOSS_DIAGONAL_RING_SLOPE);
+
+  // two rings, tilted at opposite angles, crossing in an X -- same
+  // nested-ellipse technique as the phase 3 ring, distinct cool
+  // blue palette to read as a different attack
+  for (const rotSign of [1, -1]) {
+    for (let i = 0; i < ringColors.length; i++) {
+      const hRadius = Math.max(0, liveR - i * 9);
+      const vR = vRadius * (1 - i * 0.12);
+      ctx.strokeStyle = ringColors[i];
+      ctx.lineWidth = i === 0 ? 5 : 3 + (ringColors.length - i);
+      ctx.globalAlpha = alpha * (i === 0 ? 0.95 : 0.7 - i * 0.09);
+      ctx.shadowColor = ringColors[i];
+      ctx.shadowBlur = i === 0 ? 18 : 10;
+      ctx.beginPath();
+      ctx.ellipse(g.x, g.y, hRadius, vR, rotSign * angle, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawBossAttack(g, theme) {
+  ctx.save();
+  ctx.translate(g.x, g.y);
+  ctx.shadowColor = theme.accentA;
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = '#ffd23f';
+  ctx.beginPath();
+  ctx.arc(0, 0, g.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = theme.accentB;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBoomerang(g, theme) {
+  const pos = liveBoomerangPos(g);
+  ctx.save();
+  ctx.translate(pos.x, pos.y);
+  ctx.rotate(frame * 0.3);
+
+  ctx.shadowColor = theme.accentA;
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = theme.accentB;
+  ctx.strokeStyle = theme.accentA;
+  ctx.lineWidth = 2;
+
+  for (let i = 0; i < 2; i++) {
+    ctx.save();
+    ctx.rotate(i * Math.PI / 2);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, g.r * 1.6, g.r * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function drawPulsingOrb(g, theme) {
+  const liveR = livePulsingOrbRadius(g);
+  ctx.save();
+  ctx.translate(g.x, g.y);
+
+  const grad = ctx.createRadialGradient(-liveR * 0.3, -liveR * 0.3, liveR * 0.1, 0, 0, liveR);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.4, theme.accentA);
+  grad.addColorStop(1, theme.accentB);
+  ctx.fillStyle = grad;
+  ctx.shadowColor = theme.accentA;
+  ctx.shadowBlur = 15;
+  ctx.beginPath();
+  ctx.arc(0, 0, liveR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.strokeStyle = theme.accentB;
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath();
+  ctx.arc(0, 0, liveR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+function drawEchoTrail(g, theme) {
+  ctx.save();
+
+  const zoneLeft = g.x - g.zoneWidth / 2;
+  const zoneRight = g.x + g.zoneWidth / 2;
+
+  ctx.strokeStyle = theme.accentA;
+  ctx.lineWidth = 3;
+  ctx.shadowColor = theme.accentA;
+  ctx.shadowBlur = 8;
+  ctx.globalAlpha = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(zoneLeft, PLAY_TOP);
+  ctx.lineTo(zoneLeft, PLAY_BOTTOM);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(zoneRight, PLAY_TOP);
+  ctx.lineTo(zoneRight, PLAY_BOTTOM);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+
+  if (Math.abs(ship.x - g.x) < g.zoneWidth / 2) {
+    const histIdx = shipYHistory.length - 1 - g.delayFrames;
+    if (histIdx >= 0) {
+      const historicalY = shipYHistory[histIdx];
+      const dist = Math.abs(ship.y - historicalY);
+      const danger = dist < g.dangerThreshold * 2;
+
+      ctx.save();
+      ctx.translate(ship.x, historicalY);
+      ctx.globalAlpha = danger ? 0.7 : 0.35;
+      ctx.fillStyle = danger ? '#ff3050' : theme.accentB;
+      ctx.shadowColor = danger ? '#ff3050' : theme.accentB;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(14, 0);
+      ctx.lineTo(-10, -9);
+      ctx.lineTo(-10, 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+  }
+
+  const labelPulse = 0.6 + 0.4 * Math.sin(frame * 0.1 + g.rotSeed);
+  ctx.fillStyle = theme.accentA;
+  ctx.globalAlpha = labelPulse;
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('ECHO', g.x, PLAY_TOP + 20);
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+function drawEmp(g, theme) {
+  ctx.save();
+  const elapsed = empPhaseElapsed(g);
+  const discharging = empIsDischarging(g);
+  const chargeProgress = Math.min(1, elapsed / g.chargeFrames);
+
+  const anchorY = g.anchor === 'top' ? PLAY_TOP : PLAY_BOTTOM;
+  const regionTop = g.anchor === 'top' ? PLAY_TOP : PLAY_BOTTOM - g.reachDepth;
+  const regionBottom = g.anchor === 'top' ? PLAY_TOP + g.reachDepth : PLAY_BOTTOM;
+
+  if (discharging) {
+    const dischargeElapsed = elapsed - g.chargeFrames;
+    const dischargeProgress = dischargeElapsed / g.dischargeFrames;
+    const flashAlpha = Math.sin(dischargeProgress * Math.PI) * 0.6;
+    ctx.fillStyle = theme.accentA;
+    ctx.globalAlpha = flashAlpha;
+    ctx.fillRect(g.x - 30, regionTop, 60, regionBottom - regionTop);
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.7;
+    for (let i = 0; i < 5; i++) {
+      const jag = (i - 2) * 12;
+      ctx.beginPath();
+      ctx.moveTo(g.x + jag, regionTop);
+      ctx.lineTo(g.x + jag + Math.sin(frame * 0.5 + i) * 8, regionBottom);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (elapsed < g.chargeFrames) {
+    const intensity = chargeProgress;
+    const sparkCount = Math.floor(3 + intensity * 5);
+    for (let i = 0; i < sparkCount; i++) {
+      const sparkPhase = frame * 0.3 + i * 1.7;
+      if (Math.sin(sparkPhase) > (1 - intensity * 0.6)) {
+        const sx = g.x + Math.sin(i * 2.3) * 25;
+        const sy = anchorY + (g.anchor === 'top' ? 1 : -1) * (10 + Math.abs(Math.sin(sparkPhase * 2)) * 40 * intensity);
+        ctx.strokeStyle = theme.accentB;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(g.x, anchorY);
+        ctx.lineTo(sx, sy);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    const pulse = 0.4 + 0.3 * intensity * (0.5 + 0.5 * Math.sin(frame * 0.2));
+    ctx.shadowColor = theme.accentB;
+    ctx.shadowBlur = 6 + 10 * intensity;
+    ctx.fillStyle = theme.accentB;
+    ctx.globalAlpha = pulse;
+    ctx.beginPath();
+    ctx.arc(g.x, anchorY, 8 + 4 * intensity, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
 function drawSignalCorruption(g, theme) {
   ctx.save();
 
@@ -468,38 +964,36 @@ function drawZone2Storm(g, theme) {
 
   // outer layer -- darkest, largest, sets the overall silhouette
   scallopedPath(g.r * 0.8 * pulse1, 9, g.r * 0.2, phase1);
-  ctx.fillStyle = '#6b5a38';
+  ctx.fillStyle = '#1a2858';
   ctx.fill();
 
-  // mid layer -- main tone
+  // mid layer -- cyan well mass
   scallopedPath(g.r * 0.62 * pulse2, 8, g.r * 0.16, phase2);
-  ctx.fillStyle = '#c4a86a';
+  ctx.fillStyle = theme.accentB || '#6ec8ff';
+  ctx.globalAlpha = 0.92;
   ctx.fill();
+  ctx.globalAlpha = 1;
 
-  // inner layer -- lightest, brightest, gives the sense of a glowing core
+  // inner layer -- magenta/white core
   scallopedPath(g.r * 0.38 * pulse3, 7, g.r * 0.1, phase3);
-  ctx.fillStyle = '#e8dcb8';
+  ctx.fillStyle = theme.wellAccent || '#e85cff';
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath();
+  ctx.arc(0, 0, g.r * 0.16, 0, Math.PI * 2);
   ctx.fill();
 
-  // burst spike lines radiating from a few fixed points around the edge,
-  // matching the reference image's cartoon dust-poof look
-  const spikeAngles = [-2.1, -0.6, 1.2, 2.6];
-  spikeAngles.forEach((baseAng) => {
-    const ang = baseAng + phase1 * 0.3;
-    const r1 = g.r * 0.78;
-    const r2 = g.r * 1.05;
-    const perpAng = ang + Math.PI / 2;
-    const spread = g.r * 0.1;
-    ctx.strokeStyle = '#c4a86a';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
+  ctx.strokeStyle = theme.accentA || '#3dffc8';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.globalAlpha = 0.7;
+  for (let i = 0; i < 5; i++) {
+    const ang = phase1 + i * (Math.PI * 2 / 5);
     ctx.beginPath();
-    ctx.moveTo(Math.cos(ang) * r1 + Math.cos(perpAng) * spread, Math.sin(ang) * r1 + Math.sin(perpAng) * spread);
-    ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
-    ctx.moveTo(Math.cos(ang) * r1 - Math.cos(perpAng) * spread, Math.sin(ang) * r1 - Math.sin(perpAng) * spread);
-    ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
+    ctx.arc(0, 0, g.r * (0.45 + (i % 2) * 0.12), ang, ang + 1.1);
     ctx.stroke();
-  });
+  }
+  ctx.globalAlpha = 1;
 
   ctx.restore();
 }
@@ -730,8 +1224,8 @@ function drawFireball(g, theme) {
   ctx.strokeStyle = '#4fd6ff';
   ctx.lineWidth = Math.max(2, r * 0.15);
   const cycleLen = r * 4.5;
-  for (let i = 0; i < 5; i++) {
-    const phase = (frame * 1.6 + i * (cycleLen / 5)) % cycleLen;
+  for (let i = 0; i < 2; i++) {
+    const phase = (frame * 1.6 + i * (cycleLen / 2)) % cycleLen;
     const off = 42 * s + phase;
     const fade = 1 - phase / cycleLen;
     ctx.globalAlpha = 0.38 * fade;
@@ -744,8 +1238,7 @@ function drawFireball(g, theme) {
   }
   ctx.globalAlpha = 1;
 
-  ctx.shadowColor = '#4fd6ff';
-  ctx.shadowBlur = 14;
+  ctx.shadowBlur = 0;
 
   // outer jagged flame silhouette -- fixed shape, no pulsing (only the
   // ship-relative position moves, so the slide reads clearly)
@@ -781,19 +1274,60 @@ function drawFireball(g, theme) {
   ctx.restore();
 }
 
+function drawGravityWellBackdrop(theme) {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const cx = W * 0.72;
+  const cy = PLAY_TOP + playHeight * 0.48;
+  const magenta = theme.wellAccent || '#e85cff';
+  ctx.save();
+  const well = ctx.createRadialGradient(cx, cy, 8, cx, cy, playHeight * 0.95);
+  well.addColorStop(0, 'rgba(232, 92, 255, 0.18)');
+  well.addColorStop(0.28, 'rgba(110, 200, 255, 0.10)');
+  well.addColorStop(0.62, 'rgba(61, 255, 200, 0.05)');
+  well.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = well;
+  ctx.fillRect(0, PLAY_TOP, W, playHeight);
+
+  ctx.strokeStyle = magenta;
+  ctx.globalAlpha = 0.16;
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 6; i++) {
+    const wobble = 1 + Math.sin(frame * 0.012 + i * 0.7) * 0.04;
+    const rx = (70 + i * 42) * wobble;
+    const ry = (38 + i * 22) * wobble;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0.18, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.16 - i * 0.018;
+  }
+
+  ctx.globalAlpha = 0.55;
+  const core = ctx.createRadialGradient(cx - 6, cy - 6, 2, cx, cy, 22);
+  core.addColorStop(0, '#ffffff');
+  core.addColorStop(0.35, magenta);
+  core.addColorStop(1, 'rgba(12, 24, 40, 0)');
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawHBar(g, theme) {
   const y = liveGateCenter(g);
   const left = g.x - g.width / 2;
   const top = y - g.thickness / 2;
+  const magenta = theme.wellAccent || '#e85cff';
+  const palettes = [
+    { rim: theme.accentA, body: '#102a28', gem: '#d4ff8a' },
+    { rim: theme.accentB, body: '#0c2438', gem: '#9ee7ff' },
+    { rim: magenta, body: '#24102e', gem: '#ffb3e8' }
+  ];
+  const pal = palettes[Math.abs(Math.floor((g.phase || 0) * 8)) % palettes.length];
 
   ctx.save();
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 12;
-  const grad = ctx.createLinearGradient(left, top, left + g.width, top + g.thickness);
-  grad.addColorStop(0, theme.accentA);
-  grad.addColorStop(1, theme.accentB);
-  ctx.fillStyle = grad;
-
+  ctx.shadowColor = pal.rim;
+  ctx.shadowBlur = 14;
   const r = Math.min(6, g.thickness / 2);
   ctx.beginPath();
   ctx.moveTo(left + r, top);
@@ -806,12 +1340,27 @@ function drawHBar(g, theme) {
   ctx.lineTo(left, top + r);
   ctx.quadraticCurveTo(left, top, left + r, top);
   ctx.closePath();
+  const body = ctx.createLinearGradient(left, top, left, top + g.thickness);
+  body.addColorStop(0, pal.rim);
+  body.addColorStop(0.35, pal.body);
+  body.addColorStop(0.65, pal.body);
+  body.addColorStop(1, pal.rim);
+  ctx.fillStyle = body;
   ctx.fill();
-
-  ctx.strokeStyle = theme.accentB;
-  ctx.lineWidth = 1.5;
-  ctx.globalAlpha = 0.7;
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = pal.rim;
+  ctx.lineWidth = 1.6;
+  ctx.globalAlpha = 0.85;
   ctx.stroke();
+
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = pal.gem;
+  const gemH = Math.max(3, g.thickness * 0.28);
+  ctx.fillRect(left + 10, y - gemH / 2, g.width - 20, gemH);
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.arc(g.x, y, Math.min(4.5, g.thickness * 0.28), 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -1951,17 +2500,27 @@ function traceShipDart() {
   ctx.closePath();
 }
 
+function classicShipPalette(theme) {
+  if (theme && theme.bgStyle === 'toxic' && currentShipSkin().id === 'classic') {
+    return { accentA: '#0ff0fc', accentB: '#7af6ff', hull: '#1a2a44', hullMid: '#3d5a78', nose: '#e8fbff' };
+  }
+  return { accentA: theme.accentA, accentB: theme.accentB };
+}
+
 function drawShipSkinClassic(theme) {
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 12;
+  const pal = classicShipPalette(theme);
+  const toxicReadability = theme && theme.bgStyle === 'toxic';
+  ctx.shadowColor = toxicReadability ? pal.accentA : pal.accentB;
+  ctx.shadowBlur = toxicReadability ? 14 : 12;
   const bodyGrad = ctx.createLinearGradient(-SHIP_W / 2, 0, SHIP_W / 2, 0);
-  bodyGrad.addColorStop(0, theme.accentB);
-  bodyGrad.addColorStop(1, '#ffffff');
+  bodyGrad.addColorStop(0, toxicReadability ? pal.hull : pal.accentB);
+  if (toxicReadability) bodyGrad.addColorStop(0.55, pal.hullMid);
+  bodyGrad.addColorStop(1, toxicReadability ? pal.nose : '#ffffff');
   ctx.fillStyle = bodyGrad;
   traceShipDart();
   ctx.fill();
-  ctx.strokeStyle = theme.accentA;
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = pal.accentA;
+  ctx.lineWidth = toxicReadability ? 2 : 1.5;
   ctx.stroke();
 }
 
@@ -2572,9 +3131,10 @@ function drawShipTrailWorld(theme) {
 function drawShipTrailLocal(theme) {
   const skin = currentShipSkin().id;
   if (skin === 'molten' || skin === 'void' || skin === 'toxic' || skin === 'signal') return;
+  const pal = classicShipPalette(theme);
   const id = currentShipTrail().id;
   if (id === 'classic' || id === 'echo' || id === 'ribbon') {
-    drawClassicFlame(theme, 0, theme.accentA, theme.accentB);
+    drawClassicFlame(theme, 0, pal.accentA, pal.accentB);
     return;
   }
   if (id === 'pulse') {
@@ -2582,7 +3142,7 @@ function drawShipTrailLocal(theme) {
       const pulse = 0.55 + 0.45 * Math.abs(Math.sin(frame * 0.28 + i * 0.9));
       const len = (10 + i * 7 + (holding ? 8 : 0)) * pulse;
       ctx.globalAlpha = 0.35 + pulse * 0.4;
-      ctx.strokeStyle = i % 2 === 0 ? theme.accentB : theme.accentA;
+      ctx.strokeStyle = i % 2 === 0 ? pal.accentB : pal.accentA;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(-SHIP_W / 2 - 2, -5 + i);
@@ -2594,7 +3154,7 @@ function drawShipTrailLocal(theme) {
     return;
   }
   if (id === 'sparks') {
-    drawClassicFlame(theme, -4, theme.accentB, '#ffffff');
+    drawClassicFlame(theme, -4, pal.accentB, '#ffffff');
     return;
   }
   if (id === 'glitch') {
@@ -2608,7 +3168,7 @@ function drawShipTrailLocal(theme) {
       const len = baseLen + ((frame * 2 + i * 7) % 16) - (i * 2);
       const xOff = ((frame + i * 13) % 9) - 4;
       ctx.globalAlpha = 0.55 + (i % 2) * 0.25;
-      ctx.fillStyle = i % 2 === 0 ? theme.accentB : theme.accentA;
+      ctx.fillStyle = i % 2 === 0 ? pal.accentB : pal.accentA;
       ctx.fillRect(-SHIP_W / 2 - len + xOff, y, len, 2.2);
     }
     if ((frame % 6) < 2) {
@@ -2666,22 +3226,22 @@ function drawShipTrailLocal(theme) {
   if (id === 'twin') {
     ctx.save();
     ctx.translate(0, -8);
-    drawClassicFlame(theme, -2, theme.accentB, '#ffffff');
+    drawClassicFlame(theme, -2, pal.accentB, '#ffffff');
     ctx.restore();
     ctx.save();
     ctx.translate(0, 8);
-    drawClassicFlame(theme, -2, theme.accentA, '#ffffff');
+    drawClassicFlame(theme, -2, pal.accentA, '#ffffff');
     ctx.restore();
     return;
   }
   if (id === 'helix') {
-    drawClassicFlame(theme, -8, theme.accentB, theme.accentA);
+    drawClassicFlame(theme, -8, pal.accentB, pal.accentA);
     return;
   }
   if (id === 'rings') {
-    drawClassicFlame(theme, -10, theme.accentB, '#ffffff');
+    drawClassicFlame(theme, -10, pal.accentB, '#ffffff');
     ctx.save();
-    ctx.strokeStyle = theme.accentA;
+    ctx.strokeStyle = pal.accentA;
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 3; i++) {
       const age = (frame * 2.4 + i * 11) % 28;
@@ -2857,7 +3417,7 @@ function drawBars(theme) {
   ctx.shadowBlur = 0;
   ctx.font = '9px Courier New';
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.fillText('build 2026-08-28-vortex-overlap-check', 14, BAR_HEIGHT + 10);
+  if (DEV_TOOLS_ENABLED) ctx.fillText('build 2026-08-28-vortex-overlap-check', 14, BAR_HEIGHT + 10);
   ctx.textAlign = 'right';
   ctx.font = 'bold 13px Courier New';
   ctx.fillStyle = theme.accentA;
@@ -2883,9 +3443,15 @@ function drawBars(theme) {
   ctx.font = 'bold 15px Courier New';
   ctx.fillStyle = theme.accentA;
   ctx.textAlign = 'left';
-  ctx.fillText('DISTANCE: ' + Math.floor(distance - zoneStartDistance) + ' / ' + THEME_DISTANCE, 14, H - BAR_HEIGHT / 2 + 1);
-  ctx.textAlign = 'right';
-  ctx.fillText('BEST: ' + best, W - 14, H - BAR_HEIGHT / 2 + 1);
+  const zoneDist = Math.floor(distance - zoneStartDistance);
+  const distLabel = (theme.isBossZone || theme.isMiniBossZone)
+    ? ('DISTANCE: ' + zoneDist)
+    : ('DISTANCE: ' + zoneDist + ' / ' + THEME_DISTANCE);
+  ctx.fillText(distLabel, 14, H - BAR_HEIGHT / 2 + 1);
+  if (!theme.isBossZone && !theme.isMiniBossZone) {
+    ctx.textAlign = 'right';
+    ctx.fillText('BEST: ' + best, W - 14, H - BAR_HEIGHT / 2 + 1);
+  }
 }
 
 function drawWarpEffect() {
@@ -2938,8 +3504,8 @@ function drawTerrain(theme) {
   if (terrainSegments.length < 2) return;
 
   ctx.save();
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 12;
+  // shadowBlur on these giant cave fills is what tanks Inferno in Chrome
+  ctx.shadowBlur = 0;
 
   // top land mass
   const topGrad = ctx.createLinearGradient(0, PLAY_TOP, 0, PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.55);
@@ -3148,6 +3714,7 @@ function updateBgmForState() {
     const fileTrack = currentFileBgmTrack();
     if (fileTrack) {
       playFileBgm(fileTrack.id);
+      if (fileTrack.id === 'bgm-05-molten-core-boss') prefetchBgmTrack('bgm-05-molten-core');
       if (fileTrack.id === 'bgm-10-reactor-core-p1') prefetchBgmTrack('bgm-10-reactor-core-p8');
       if (fileTrack.id === 'bgm-13-the-signal-p1') prefetchBgmTrack('bgm-13-the-signal-p3');
       if (fileTrack.id === 'bgm-13-the-signal-p3') prefetchBgmTrack('bgm-13-the-signal-p5');
@@ -3175,7 +3742,9 @@ function draw() {
 
   const shakeOffset = getBossShakeOffset();
   ctx.save();
-  ctx.translate(shakeOffset.x, shakeOffset.y);
+  if (shakeOffset.x || shakeOffset.y) {
+    ctx.translate(Math.round(shakeOffset.x), Math.round(shakeOffset.y));
+  }
 
   const theme = currentTheme();
   if (state === 'home') {
@@ -3224,16 +3793,14 @@ function draw() {
 let lastRenderedOverlayState = null;
 const STATIC_OVERLAY_STATES = new Set(['zone-select', 'settings', 'achievements', 'paused', 'statistics', 'confirm-reset-stats', 'victory']);
 function updateOverlay() {
+  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state;
+  if (__renderKey === lastRenderedOverlayState) return;
   overlay.classList.toggle('home-layout', state === 'home');
   pauseToggleBtn.style.display = (state === 'playing' || state === 'paused') ? 'block' : 'none';
-  pauseToggleBtn.style.top = (BAR_HEIGHT + 8) + 'px';
+  positionPauseButton();
   pauseToggleBtn.textContent = (state === 'paused') ? '\u25B6' : 'II';
   pauseToggleBtn.title = (state === 'paused') ? 'Resume (Esc)' : 'Pause (Esc)';
   overlay.style.pointerEvents = (state === 'playing' || state === 'ready' || state === 'respawn' || state === 'gameover' || state === 'victory') ? 'none' : 'auto';
-  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state;
-  if (__renderKey === lastRenderedOverlayState) {
-    return;
-  }
   lastRenderedOverlayState = __renderKey;
   const __scrollList = (typeof overlay.querySelector === 'function') ? overlay.querySelector('.scrollable-overlay-list') : null;
   const __savedScrollTop = __scrollList ? __scrollList.scrollTop : null;
@@ -3292,6 +3859,7 @@ function updateOverlay() {
     overlay.innerHTML = `
       <div class="menu-panel">
         <div id="title" style="font-size:32px;">SETTINGS</div>
+        ${BROWSER_NOTE_HTML}
         <div id="subtitle" class="overlay-recap">Audio</div>
         <div class="settings-diff-list scrollable-overlay-list">
           <div class="menu-btn-row" data-action="toggle-sfx">
@@ -3320,6 +3888,24 @@ function updateOverlay() {
             </div>
           </div>
           <div class="settings-trail-hint">${currentShipSkin().hint} &middot; ${unlockedShipSkins().length} / ${SHIP_SKINS.length} unlocked</div>
+          <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
+          <div class="menu-btn-row" data-action="copy-save-id">
+            <span class="menu-btn-label">SAVE ID</span>
+            <span class="row-action-indicator settings-save-id">${ensurePlayerSaveId()}</span>
+          </div>
+          <div class="settings-trail-hint">Keep this ID or bookmark the page (the address ends with #sf=${ensurePlayerSaveId()}). Clearing cache does not erase a server save. Export a file for a copy that lives outside the browser.</div>
+          <div class="menu-btn-row" data-action="export-save">
+            <span class="menu-btn-label">EXPORT SAVE</span>
+            <span class="row-action-indicator">FILE &#9660;</span>
+          </div>
+          <div class="menu-btn-row" data-action="import-save">
+            <span class="menu-btn-label">IMPORT SAVE</span>
+            <span class="row-action-indicator">FILE &#9654;</span>
+          </div>
+          <div class="menu-btn-row" data-action="restore-save-id">
+            <span class="menu-btn-label">RESTORE ID</span>
+            <span class="row-action-indicator">LOAD &#9654;</span>
+          </div>
           <div class="achievement-section-header" style="margin-top:14px;">DIFFICULTY DETAILS</div>
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-easy">EASY</div>
@@ -3638,7 +4224,9 @@ function updateOverlay() {
 const devToggle = document.getElementById('dev-toggle');
 const devPanel = document.getElementById('dev-panel');
 
-devToggle.addEventListener('click', () => {
-  devPanel.classList.toggle('active');
-});
+if (DEV_TOOLS_ENABLED && devToggle && devPanel) {
+  devToggle.addEventListener('click', () => {
+    devPanel.classList.toggle('active');
+  });
+}
 

@@ -776,8 +776,10 @@ function update() {
     // stay in sync without needing separate collision logic)
     if (!warpActive && (miniBossEscapeRunActive || (!th.isBossZone && !th.isMiniBossZone))) {
       const remaining = zoneEndRemainingDistance();
-      if (!portalObject && remaining > 0 && remaining <= PORTAL_LEAD_DISTANCE) {
-        portalObject = { x: ship.x + remaining * 10, forLevel: themeLevelReached };
+      const remainingPx = remaining * 10;
+      const appearPx = Math.max(PORTAL_LEAD_DISTANCE * 10, (W - ship.x) + 80);
+      if (!portalObject && remaining > 0 && remainingPx <= appearPx) {
+        portalObject = { x: ship.x + remainingPx, forLevel: themeLevelReached };
         // nothing should exist beyond the portal -- clear out anything that
         // was already pre-spawned further out than where the portal now sits.
         // the portal ring itself is rendered with a halfWidth (oscillating
@@ -933,23 +935,17 @@ function update() {
       }
       if (th.movingDoorPattern && !portalObject) {
         const zoneProgress = distance - zoneStartDistance;
-        // only the last special door event gets protected -- that was the
-        // one specific spot that looked bad; the earlier events are left
-        // alone since the original unrestricted timing felt right there
-        const lastEvent = th.specialDoorEvents && th.specialDoorEvents.length
-          ? th.specialDoorEvents[th.specialDoorEvents.length - 1] : null;
-        const nearLastEvent = lastEvent &&
-          zoneProgress >= lastEvent.triggerDistance - lastEvent.keyLeadDistance - 40 &&
-          zoneProgress <= lastEvent.triggerDistance + 40;
-        // First key shares a lane with the 2-gap moving door. On typical
-        // window widths that door spawns ~50px behind the key, so the slab
-        // arrives first and the card sits in the metal. Hold the door until
-        // the key is clearly closer to the ship.
-        const movingDoorSpawnX = W + 60;
-        const keyBlocksMovingDoor = gates.some((g) => (
-          g.type === 'accesskey' && !g.collected && g.x > movingDoorSpawnX - 280
+        const nearSpecialDoor = !!(th.specialDoorEvents || []).some((event) => (
+          zoneProgress >= event.triggerDistance - event.keyLeadDistance - 50 &&
+          zoneProgress <= event.triggerDistance + 70
         ));
-        if (!nearLastEvent && !keyBlocksMovingDoor) {
+        const movingDoorSpawnX = W + 60;
+        const keyOrGateBlocksMovingDoor = gates.some((g) => {
+          if (g.type === 'accesskey' && !g.collected && Math.abs(g.x - movingDoorSpawnX) < 340) return true;
+          if (g.type === 'specialdoor' && Math.abs(g.x - movingDoorSpawnX) < 300) return true;
+          return false;
+        });
+        if (!nearSpecialDoor && !keyOrGateBlocksMovingDoor) {
           extraMovingDoorCounter++;
           const nextInterval = th.movingDoorPattern[extraMovingDoorPatternIndex % th.movingDoorPattern.length].interval;
           if (extraMovingDoorCounter >= nextInterval) {
@@ -1009,7 +1005,7 @@ function update() {
           }
         });
       }
-      if (th.droneSwarmEvents && !portalObject) {
+      if (th.droneSwarmEvents) {
         const zoneProgress = distance - zoneStartDistance;
         th.droneSwarmEvents.forEach((event, i) => {
           if (!droneSwarmEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
@@ -1072,7 +1068,7 @@ function update() {
           }
         });
       }
-      if (th.boomerangEvents && !portalObject) {
+      if (th.boomerangEvents) {
         const zoneProgress = distance - zoneStartDistance;
         th.boomerangEvents.forEach((event, i) => {
           if (!boomerangEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
@@ -1749,13 +1745,14 @@ function saveAudioSettings() {
       respawn: audioSettings.respawn,
     }));
   } catch (e) { /* storage unavailable -- fail silently, never crash the game over a preference */ }
+  if (!durableWriteLock) queueDurableSave();
 }
 const __loadedAudioSettings = loadAudioSettings();
 
 const audioSettings = {
   masterVolume: 1.0,
-  sfxVolume: 0.58,
-  bgmVolume: 0.3,
+  sfxVolume: 0.64,
+  bgmVolume: 0.26,
   muted: false,
   sfxEnabled: __loadedAudioSettings.sfxEnabled,
   bgmEnabled: __loadedAudioSettings.bgmEnabled,
@@ -1772,6 +1769,308 @@ function applyAudioSettings() {
   masterGain.gain.value = audioSettings.muted ? 0 : audioSettings.masterVolume;
   sfxGain.gain.value = audioSettings.sfxEnabled ? audioSettings.sfxVolume : 0;
   bgmGain.gain.value = audioSettings.bgmEnabled ? audioSettings.bgmVolume : 0;
+}
+
+function normalizeSaveId(raw) {
+  const id = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return id.length >= 6 && id.length <= 16 ? id : '';
+}
+function generateSaveId() {
+  let id = '';
+  const cryptoObj = typeof crypto !== 'undefined' ? crypto : null;
+  for (let i = 0; i < 8; i++) {
+    let n = 0;
+    if (cryptoObj && cryptoObj.getRandomValues) {
+      const buf = new Uint8Array(1);
+      cryptoObj.getRandomValues(buf);
+      n = buf[0] % SAVE_ID_ALPHABET.length;
+    } else {
+      n = Math.floor(Math.random() * SAVE_ID_ALPHABET.length);
+    }
+    id += SAVE_ID_ALPHABET[n];
+  }
+  return id;
+}
+function readSaveIdCookie() {
+  try {
+    const parts = String(document.cookie || '').split(';');
+    for (let i = 0; i < parts.length; i++) {
+      const piece = parts[i].trim();
+      if (piece.indexOf(SAVE_ID_COOKIE + '=') === 0) return normalizeSaveId(piece.slice(SAVE_ID_COOKIE.length + 1));
+    }
+  } catch (e) { /* cookies blocked */ }
+  return '';
+}
+function persistSaveId(id) {
+  playerSaveId = normalizeSaveId(id) || playerSaveId || generateSaveId();
+  try { localStorage.setItem(SAVE_ID_STORAGE_KEY, playerSaveId); } catch (e) { /* storage blocked */ }
+  try { document.cookie = SAVE_ID_COOKIE + '=' + playerSaveId + '; Max-Age=63072000; Path=/; SameSite=Lax'; } catch (e) { /* cookies blocked */ }
+  try {
+    const nextHash = '#sf=' + playerSaveId;
+    if (location.hash !== nextHash) history.replaceState(null, '', location.pathname + location.search + nextHash);
+  } catch (e) { /* file:// or locked history */ }
+  return playerSaveId;
+}
+function ensurePlayerSaveId() {
+  if (playerSaveId) return persistSaveId(playerSaveId);
+  const fromHash = normalizeSaveId((location.hash.match(/sf=([A-Za-z0-9]+)/) || [])[1]);
+  let fromStore = '';
+  try { fromStore = normalizeSaveId(localStorage.getItem(SAVE_ID_STORAGE_KEY)); } catch (e) { fromStore = ''; }
+  return persistSaveId(fromHash || fromStore || readSaveIdCookie() || generateSaveId());
+}
+function collectDurableSave() {
+  return {
+    v: 1,
+    saveId: ensurePlayerSaveId(),
+    savedAt: Date.now(),
+    profile: {
+      best,
+      extraDifficultyUnlocked,
+      unlockedZones: Array.from(unlockedZones),
+      completedZones: Array.from(completedZones),
+      deathlessZones: Array.from(deathlessZones),
+      beatenDifficulties: Array.from(beatenDifficulties),
+      totalDistanceTraveled,
+      lifetimeDeathsByZone: lifetimeDeathsByZone.slice(),
+      zoneCompletionCounts: zoneCompletionCounts.slice(),
+      achievedRanks: Array.from(achievedRanks),
+      shipTrail: shipTrailStyle,
+      shipSkin: shipSkinStyle,
+    },
+    audio: {
+      sfxEnabled: audioSettings.sfxEnabled,
+      bgmEnabled: audioSettings.bgmEnabled,
+      chargeTelegraph: audioSettings.chargeTelegraph,
+      glowDanger: audioSettings.glowDanger,
+      lifeLost: audioSettings.lifeLost,
+      respawn: audioSettings.respawn,
+    },
+  };
+}
+function durableProgressScore(blob) {
+  if (!blob || !blob.profile) return 0;
+  const p = normalizePlayerProfile(blob.profile);
+  const deaths = p.lifetimeDeathsByZone.reduce((a, b) => a + b, 0);
+  const clears = p.zoneCompletionCounts.reduce((a, b) => a + b, 0);
+  return p.best + p.totalDistanceTraveled + deaths + clears * 10 + p.unlockedZones.length + p.completedZones.length + (p.extraDifficultyUnlocked ? 1000 : 0);
+}
+function mergeDurableSaves(blobs) {
+  const live = [];
+  for (let i = 0; i < blobs.length; i++) {
+    if (blobs[i] && blobs[i].profile) live.push(blobs[i]);
+  }
+  if (!live.length) return collectDurableSave();
+  live.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  const newest = live[0];
+  const profiles = live.map((b) => normalizePlayerProfile(b.profile));
+  const union = (key) => {
+    const set = new Set();
+    profiles.forEach((p) => (p[key] || []).forEach((v) => set.add(v)));
+    return Array.from(set);
+  };
+  const maxArr = (key) => {
+    const out = new Array(13).fill(0);
+    profiles.forEach((p) => {
+      const arr = p[key] || [];
+      for (let i = 0; i < 13; i++) out[i] = Math.max(out[i], arr[i] || 0);
+    });
+    return out;
+  };
+  const newestProfile = normalizePlayerProfile(newest.profile);
+  const newestAudio = newest.audio || {};
+  return {
+    v: 1,
+    saveId: ensurePlayerSaveId(),
+    savedAt: Date.now(),
+    profile: {
+      best: Math.max.apply(null, profiles.map((p) => p.best || 0)),
+      extraDifficultyUnlocked: profiles.some((p) => p.extraDifficultyUnlocked),
+      unlockedZones: union('unlockedZones').length ? union('unlockedZones') : [0],
+      completedZones: union('completedZones'),
+      deathlessZones: union('deathlessZones'),
+      beatenDifficulties: union('beatenDifficulties'),
+      totalDistanceTraveled: Math.max.apply(null, profiles.map((p) => p.totalDistanceTraveled || 0)),
+      lifetimeDeathsByZone: maxArr('lifetimeDeathsByZone'),
+      zoneCompletionCounts: maxArr('zoneCompletionCounts'),
+      achievedRanks: union('achievedRanks'),
+      shipTrail: newestProfile.shipTrail,
+      shipSkin: newestProfile.shipSkin,
+    },
+    audio: {
+      sfxEnabled: typeof newestAudio.sfxEnabled === 'boolean' ? newestAudio.sfxEnabled : audioSettings.sfxEnabled,
+      bgmEnabled: typeof newestAudio.bgmEnabled === 'boolean' ? newestAudio.bgmEnabled : audioSettings.bgmEnabled,
+      chargeTelegraph: typeof newestAudio.chargeTelegraph === 'string' ? newestAudio.chargeTelegraph : audioSettings.chargeTelegraph,
+      glowDanger: typeof newestAudio.glowDanger === 'string' ? newestAudio.glowDanger : audioSettings.glowDanger,
+      lifeLost: typeof newestAudio.lifeLost === 'string' ? newestAudio.lifeLost : audioSettings.lifeLost,
+      respawn: typeof newestAudio.respawn === 'string' ? newestAudio.respawn : audioSettings.respawn,
+    },
+  };
+}
+function applyDurableSave(blob) {
+  if (!blob || !blob.profile) return;
+  const p = normalizePlayerProfile(blob.profile);
+  durableWriteLock = true;
+  best = p.best;
+  extraDifficultyUnlocked = p.extraDifficultyUnlocked;
+  unlockedZones = new Set(p.unlockedZones.length ? p.unlockedZones : [0]);
+  completedZones = new Set(p.completedZones);
+  deathlessZones = new Set(p.deathlessZones);
+  beatenDifficulties = new Set(p.beatenDifficulties);
+  totalDistanceTraveled = p.totalDistanceTraveled;
+  lifetimeDeathsByZone = p.lifetimeDeathsByZone;
+  zoneCompletionCounts = p.zoneCompletionCounts;
+  achievedRanks = new Set(p.achievedRanks);
+  if (typeof SHIP_TRAILS !== 'undefined' && SHIP_TRAILS.some((t) => t.id === p.shipTrail)) shipTrailStyle = p.shipTrail;
+  if (typeof SHIP_SKINS !== 'undefined' && SHIP_SKINS.some((s) => s.id === p.shipSkin)) shipSkinStyle = p.shipSkin;
+  if (blob.audio) {
+    if (typeof blob.audio.sfxEnabled === 'boolean') audioSettings.sfxEnabled = blob.audio.sfxEnabled;
+    if (typeof blob.audio.bgmEnabled === 'boolean') audioSettings.bgmEnabled = blob.audio.bgmEnabled;
+    if (typeof blob.audio.chargeTelegraph === 'string' && blob.audio.chargeTelegraph !== 'xCharge') audioSettings.chargeTelegraph = blob.audio.chargeTelegraph;
+    if (typeof blob.audio.glowDanger === 'string') audioSettings.glowDanger = blob.audio.glowDanger;
+    if (typeof blob.audio.lifeLost === 'string') audioSettings.lifeLost = blob.audio.lifeLost;
+    if (typeof blob.audio.respawn === 'string') audioSettings.respawn = blob.audio.respawn;
+  }
+  savePlayerProfile();
+  saveAudioSettings();
+  applyAudioSettings();
+  durableWriteLock = false;
+}
+function openDurableDb() {
+  return new Promise((resolve) => {
+    if (!window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    const req = indexedDB.open(DURABLE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(DURABLE_STORE)) db.createObjectStore(DURABLE_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+async function readIndexedDbSave() {
+  try {
+    const db = await openDurableDb();
+    if (!db) return null;
+    return await new Promise((resolve) => {
+      const tx = db.transaction(DURABLE_STORE, 'readonly');
+      const get = tx.objectStore(DURABLE_STORE).get('current');
+      get.onsuccess = () => resolve(get.result || null);
+      get.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+async function writeIndexedDbSave(blob) {
+  try {
+    const db = await openDurableDb();
+    if (!db) return;
+    await new Promise((resolve) => {
+      const tx = db.transaction(DURABLE_STORE, 'readwrite');
+      tx.objectStore(DURABLE_STORE).put(blob, 'current');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch (e) { /* private mode / quota */ }
+}
+async function fetchServerSave(id) {
+  const saveId = normalizeSaveId(id);
+  if (!saveId || location.protocol === 'file:') return null;
+  try {
+    const res = await fetch('/api/player-save/' + saveId, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const blob = await res.json();
+    return blob && blob.profile ? blob : null;
+  } catch (e) {
+    return null;
+  }
+}
+async function putServerSave(blob) {
+  if (!blob || location.protocol === 'file:') return;
+  try {
+    await fetch('/api/player-save/' + ensurePlayerSaveId(), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(blob),
+    });
+  } catch (e) { /* offline or static host */ }
+}
+async function writeAllDurableLayers(blob) {
+  const payload = blob || collectDurableSave();
+  payload.saveId = ensurePlayerSaveId();
+  payload.savedAt = Date.now();
+  durableWriteLock = true;
+  savePlayerProfile();
+  saveAudioSettings();
+  durableWriteLock = false;
+  await writeIndexedDbSave(payload);
+  await putServerSave(payload);
+}
+function queueDurableSave() {
+  if (durableWriteLock) return;
+  clearTimeout(durableSaveTimer);
+  durableSaveTimer = setTimeout(() => {
+    writeAllDurableLayers(collectDurableSave());
+  }, 700);
+}
+async function hydrateDurableSave() {
+  ensurePlayerSaveId();
+  const local = collectDurableSave();
+  const [idb, server] = await Promise.all([readIndexedDbSave(), fetchServerSave(playerSaveId)]);
+  const merged = mergeDurableSaves([idb, server, local]);
+  if (durableProgressScore(merged) >= durableProgressScore(local) || (server && durableProgressScore(server) > 0) || (idb && durableProgressScore(idb) > durableProgressScore(local))) {
+    applyDurableSave(merged);
+  }
+  await writeAllDurableLayers(collectDurableSave());
+  durableHydrated = true;
+  if (state === 'settings' || state === 'options' || state === 'home' || state === 'statistics' || state === 'achievements') updateOverlay();
+}
+function exportPlayerSaveFile() {
+  const blob = collectDurableSave();
+  const text = JSON.stringify(blob, null, 2);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.download = 'synth-flight-save-' + blob.saveId + '.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 500);
+  writeAllDurableLayers(blob);
+}
+async function importPlayerSaveObject(parsed) {
+  if (!parsed || typeof parsed !== 'object' || !parsed.profile) throw new Error('Not a Synth Flight save');
+  if (parsed.saveId) persistSaveId(parsed.saveId);
+  applyDurableSave(mergeDurableSaves([parsed, collectDurableSave()]));
+  await writeAllDurableLayers(collectDurableSave());
+  updateOverlay();
+}
+function promptRestoreSaveId() {
+  const next = normalizeSaveId(window.prompt('Enter your SAVE ID to restore this profile (from another device or after clearing site data).', playerSaveId));
+  if (!next) return;
+  persistSaveId(next);
+  fetchServerSave(next).then(async (server) => {
+    const idb = await readIndexedDbSave();
+    if (!server && !idb) {
+      window.alert('No cloud save found for ' + next + '. Import a backup file, or keep playing to create a new save under this ID.');
+      return;
+    }
+    applyDurableSave(mergeDurableSaves([server, idb, collectDurableSave()]));
+    await writeAllDurableLayers(collectDurableSave());
+    updateOverlay();
+  });
+}
+function copySaveIdToClipboard() {
+  const id = ensurePlayerSaveId();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(id).catch(() => { window.alert('SAVE ID: ' + id); });
+  } else {
+    window.alert('SAVE ID: ' + id);
+  }
 }
 
 function toggleSfxEnabled() {
@@ -2385,348 +2684,5 @@ function playChargeHeartbeat({ duration = 2, size = 1, isSuperBeam = false } = {
   body.stop(stopAt);
   pulse.stop(stopAt);
   megaManChargeCtl = { master, nodes: [osc, body, pulse] };
-}
-
-function playChargeStatic({ duration = 2, size = 1, isSuperBeam = false } = {}) {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
-  stopMegaManCharge(0.02);
-  const now = audioCtx.currentTime;
-  const dur = Math.max(0.12, duration);
-  const s = Math.min(6, Math.max(1, size));
-  const vol = (0.07 + s * 0.024) * (isSuperBeam ? 1.2 : 1);
-
-  const master = audioCtx.createGain();
-  master.gain.setValueAtTime(1, now);
-  if (dur > 0.06) master.gain.setValueAtTime(1, now + dur - 0.05);
-  master.gain.linearRampToValueAtTime(0.0001, now + dur);
-  master.connect(sfxGain);
-
-  const nBuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
-  const nData = nBuf.getChannelData(0);
-  for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
-  const noise = audioCtx.createBufferSource();
-  noise.buffer = nBuf;
-  noise.loop = true;
-  const nFilt = audioCtx.createBiquadFilter();
-  nFilt.type = 'bandpass';
-  nFilt.Q.value = 1.4;
-  nFilt.frequency.setValueAtTime(380, now);
-  nFilt.frequency.exponentialRampToValueAtTime(isSuperBeam ? 2800 : 2200, now + dur);
-  const nGain = audioCtx.createGain();
-  nGain.gain.setValueAtTime(vol * 0.25, now);
-  nGain.gain.linearRampToValueAtTime(vol * 0.9, now + dur);
-  noise.connect(nFilt);
-  nFilt.connect(nGain);
-  nGain.connect(master);
-
-  const tone = audioCtx.createOscillator();
-  tone.type = 'sine';
-  tone.frequency.setValueAtTime(160, now);
-  tone.frequency.exponentialRampToValueAtTime(isSuperBeam ? 880 : 680, now + dur);
-  const tGain = audioCtx.createGain();
-  tGain.gain.setValueAtTime(vol * 0.2, now);
-  tGain.gain.linearRampToValueAtTime(vol * 0.65, now + dur);
-  tone.connect(tGain);
-  tGain.connect(master);
-
-  const stopAt = now + dur + 0.04;
-  noise.start(now);
-  tone.start(now);
-  noise.stop(stopAt);
-  tone.stop(stopAt);
-  megaManChargeCtl = { master, nodes: [noise, tone] };
-}
-
-function playChargeTelegraph(opts) {
-  const id = currentChargeTelegraphId();
-  if (id === 'sweep') playChargeSweep(opts);
-  else if (id === 'heartbeat') playChargeHeartbeat(opts);
-  else if (id === 'static') playChargeStatic(opts);
-  else playMegaManCharge(opts);
-}
-
-function playChargeWhine() {
-  playChargeTelegraph({ duration: framesToSeconds(CORE_LASER_TELEGRAPH), size: 1 });
-}
-
-function playChargeBeamFire({ size = 1, isSuperBeam = false, duration = 1.5 } = {}) {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
-  const now = audioCtx.currentTime;
-  const s = Math.min(6, Math.max(1, size));
-  const dur = Math.max(0.12, duration);
-  const peak = (0.34 + s * 0.08) * (isSuperBeam ? 1.5 : 1);
-
-  playNoiseBurst({ duration: 0.1, filterFreq: 3200, filterType: 'highpass', volume: peak * 0.55, when: now });
-  playSynth({
-    type: 'sine', freq: 90, freqEnd: 38, duration: 0.22,
-    attack: 0.002, decay: 0.05, sustain: 0.35, release: 0.08,
-    volume: peak * 0.7, filterFreq: 240, delaySend: 0, when: now,
-  });
-
-  const out = audioCtx.createGain();
-  out.gain.setValueAtTime(0.0001, now);
-  out.gain.linearRampToValueAtTime(1, now + 0.04);
-  out.gain.setValueAtTime(1, now + Math.max(0.12, dur - 0.28));
-  out.gain.linearRampToValueAtTime(0.0001, now + dur);
-  out.connect(sfxGain);
-
-  const nBuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
-  const nData = nBuf.getChannelData(0);
-  for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
-  const noise = audioCtx.createBufferSource();
-  noise.buffer = nBuf;
-  noise.loop = true;
-  const nFilt = audioCtx.createBiquadFilter();
-  nFilt.type = 'lowpass';
-  nFilt.Q.value = 0.6;
-  nFilt.frequency.setValueAtTime(1100 + s * 120, now);
-  nFilt.frequency.exponentialRampToValueAtTime(280, now + dur);
-  const nGain = audioCtx.createGain();
-  nGain.gain.value = peak;
-  noise.connect(nFilt);
-  nFilt.connect(nGain);
-  nGain.connect(out);
-
-  const hiss = audioCtx.createBufferSource();
-  hiss.buffer = nBuf;
-  hiss.loop = true;
-  const hFilt = audioCtx.createBiquadFilter();
-  hFilt.type = 'bandpass';
-  hFilt.frequency.value = 1800 + s * 200;
-  hFilt.Q.value = 1.1;
-  const hGain = audioCtx.createGain();
-  hGain.gain.value = peak * 0.28;
-  hiss.connect(hFilt);
-  hFilt.connect(hGain);
-  hGain.connect(out);
-
-  const saw = audioCtx.createOscillator();
-  saw.type = 'sawtooth';
-  saw.frequency.setValueAtTime(150 + s * 12, now);
-  saw.frequency.exponentialRampToValueAtTime(72, now + dur);
-  const sFilt = audioCtx.createBiquadFilter();
-  sFilt.type = 'lowpass';
-  sFilt.frequency.setValueAtTime(1400, now);
-  sFilt.frequency.exponentialRampToValueAtTime(420, now + dur);
-  const sGain = audioCtx.createGain();
-  sGain.gain.value = peak * 0.38;
-  saw.connect(sFilt);
-  sFilt.connect(sGain);
-  sGain.connect(out);
-
-  const sub = audioCtx.createOscillator();
-  sub.type = 'sine';
-  sub.frequency.setValueAtTime(52 + s * 4, now);
-  sub.frequency.exponentialRampToValueAtTime(26, now + dur);
-  const subGain = audioCtx.createGain();
-  subGain.gain.value = peak * 0.72;
-  sub.connect(subGain);
-  subGain.connect(out);
-
-  const stopAt = now + dur + 0.05;
-  noise.start(now);
-  hiss.start(now);
-  saw.start(now);
-  sub.start(now);
-  noise.stop(stopAt);
-  hiss.stop(stopAt);
-  saw.stop(stopAt);
-  sub.stop(stopAt);
-
-  if (isSuperBeam || s >= 3.5) {
-    const rumble = audioCtx.createOscillator();
-    rumble.type = 'sine';
-    rumble.frequency.setValueAtTime(32, now);
-    rumble.frequency.exponentialRampToValueAtTime(18, now + dur);
-    const rGain = audioCtx.createGain();
-    rGain.gain.value = peak * 0.45;
-    rumble.connect(rGain);
-    rGain.connect(out);
-    rumble.start(now);
-    rumble.stop(stopAt);
-  }
-}
-
-function playBeamFire() {
-  playChargeBeamFire({ size: 1 });
-}
-
-function sfxCoreCrossfireTelegraph() {
-  return;
-}
-
-function sfxCoreEyeBeamTrack() {
-  playLockOn();
-}
-
-function sfxCoreEyeBeamLock() {
-  playTrackingLockOn();
-}
-
-function sfxCoreEyeBeamFire() {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
-  const now = audioCtx.currentTime;
-  const dur = Math.max(0.72, framesToSeconds(CORE_EYEBEAM_ACTIVE_DURATION) * 2.4);
-  const peak = 0.52;
-
-  playNoiseBurst({ duration: 0.09, filterFreq: 5500, filterType: 'highpass', volume: 0.32, delaySend: 0.08, when: now });
-  playNoiseBurst({ duration: 0.12, filterFreq: 1800, filterType: 'bandpass', filterQ: 1.2, volume: 0.22, delaySend: 0.06, when: now });
-  playSynth({
-    type: 'sine', freq: 160, freqEnd: 72, duration: 0.22,
-    attack: 0.002, decay: 0.05, sustain: 0.4, release: 0.08,
-    volume: 0.22, filterFreq: 420, delaySend: 0, when: now,
-  });
-
-  const out = audioCtx.createGain();
-  out.gain.setValueAtTime(0.0001, now);
-  out.gain.linearRampToValueAtTime(1, now + 0.018);
-  out.gain.setValueAtTime(1, now + Math.max(0.18, dur - 0.22));
-  out.gain.linearRampToValueAtTime(0.0001, now + dur);
-  out.connect(sfxGain);
-
-  const nBuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
-  const nData = nBuf.getChannelData(0);
-  for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
-
-  const roar = audioCtx.createBufferSource();
-  roar.buffer = nBuf;
-  roar.loop = true;
-  const rFilt = audioCtx.createBiquadFilter();
-  rFilt.type = 'bandpass';
-  rFilt.frequency.setValueAtTime(2200, now);
-  rFilt.frequency.exponentialRampToValueAtTime(900, now + dur);
-  rFilt.Q.value = 0.9;
-  const rGain = audioCtx.createGain();
-  rGain.gain.value = peak * 0.42;
-  roar.connect(rFilt);
-  rFilt.connect(rGain);
-  rGain.connect(out);
-
-  const hiss = audioCtx.createBufferSource();
-  hiss.buffer = nBuf;
-  hiss.loop = true;
-  const hFilt = audioCtx.createBiquadFilter();
-  hFilt.type = 'highpass';
-  hFilt.frequency.setValueAtTime(4200, now);
-  hFilt.frequency.exponentialRampToValueAtTime(2400, now + dur);
-  const hGain = audioCtx.createGain();
-  hGain.gain.value = peak * 0.28;
-  hiss.connect(hFilt);
-  hFilt.connect(hGain);
-  hGain.connect(out);
-
-  const sawA = audioCtx.createOscillator();
-  sawA.type = 'sawtooth';
-  sawA.frequency.setValueAtTime(880, now);
-  sawA.frequency.exponentialRampToValueAtTime(340, now + dur);
-  const sawB = audioCtx.createOscillator();
-  sawB.type = 'sawtooth';
-  sawB.frequency.setValueAtTime(910, now);
-  sawB.frequency.exponentialRampToValueAtTime(355, now + dur);
-  const sFilt = audioCtx.createBiquadFilter();
-  sFilt.type = 'lowpass';
-  sFilt.frequency.setValueAtTime(4800, now);
-  sFilt.frequency.exponentialRampToValueAtTime(1600, now + dur);
-  const sGain = audioCtx.createGain();
-  sGain.gain.value = peak * 0.36;
-  sawA.connect(sFilt);
-  sawB.connect(sFilt);
-  sFilt.connect(sGain);
-  sGain.connect(out);
-
-  const scream = audioCtx.createOscillator();
-  scream.type = 'square';
-  scream.frequency.setValueAtTime(1480, now);
-  scream.frequency.exponentialRampToValueAtTime(620, now + dur);
-  const scFilt = audioCtx.createBiquadFilter();
-  scFilt.type = 'bandpass';
-  scFilt.frequency.setValueAtTime(1600, now);
-  scFilt.frequency.exponentialRampToValueAtTime(700, now + dur);
-  scFilt.Q.value = 2.2;
-  const scGain = audioCtx.createGain();
-  scGain.gain.value = peak * 0.22;
-  scream.connect(scFilt);
-  scFilt.connect(scGain);
-  scGain.connect(out);
-
-  const pierce = audioCtx.createOscillator();
-  pierce.type = 'sine';
-  pierce.frequency.setValueAtTime(1760, now);
-  pierce.frequency.exponentialRampToValueAtTime(740, now + dur);
-  const pGain = audioCtx.createGain();
-  pGain.gain.value = peak * 0.38;
-  pierce.connect(pGain);
-  pGain.connect(out);
-
-  if (delayInput) {
-    const send = audioCtx.createGain();
-    send.gain.value = 0.18;
-    out.connect(send);
-    send.connect(delayInput);
-  }
-
-  const stopAt = now + dur + 0.05;
-  roar.start(now);
-  hiss.start(now);
-  sawA.start(now);
-  sawB.start(now);
-  scream.start(now);
-  pierce.start(now);
-  roar.stop(stopAt);
-  hiss.stop(stopAt);
-  sawA.stop(stopAt);
-  sawB.stop(stopAt);
-  scream.stop(stopAt);
-  pierce.stop(stopAt);
-}
-
-function sfxCoreTeslaCharge() {
-  return;
-}
-
-const CORE_TESLA_BURST_STYLES = ['contra', 'thick', 'chord', 'coil', 'spray'];
-let coreTeslaBurstStyle = 'contra';
-
-function sfxCoreTeslaBurst() {
-  if (coreTeslaBurstStyle === 'chord') return sfxCoreTeslaBurstChord();
-  if (coreTeslaBurstStyle === 'coil') return sfxCoreTeslaBurstCoil();
-  if (coreTeslaBurstStyle === 'spray') return sfxCoreTeslaBurstSpray();
-  if (coreTeslaBurstStyle === 'fan') return sfxCoreTeslaBurstFan();
-  if (coreTeslaBurstStyle === 'thick') return sfxCoreTeslaBurstThick();
-  return sfxCoreTeslaBurstContra();
-}
-
-function playNesDutyPulse({ when, duration, freq, freqEnd, vol, duty = 0.5 }) {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
-  const sr = audioCtx.sampleRate;
-  const n = Math.max(1, Math.floor(sr * duration));
-  const buf = audioCtx.createBuffer(1, n, sr);
-  const data = buf.getChannelData(0);
-  let phase = 0;
-  const ratio = Math.max(0.05, freqEnd / freq);
-  for (let i = 0; i < n; i++) {
-    const t = i / n;
-    const f = freq * Math.pow(ratio, t);
-    phase += f / sr;
-    phase -= Math.floor(phase);
-    const env = Math.pow(1 - t, 0.7);
-    const sq = phase < duty ? 1 : -1;
-    const sine = Math.sin(phase * Math.PI * 2);
-    data[i] = (sq * 0.42 + sine * 0.58) * env;
-  }
-  const src = audioCtx.createBufferSource();
-  src.buffer = buf;
-  const lp = audioCtx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.setValueAtTime(3200, when);
-  lp.frequency.exponentialRampToValueAtTime(1400, when + duration);
-  lp.Q.value = 0.55;
-  const gain = audioCtx.createGain();
-  gain.gain.value = vol;
-  src.connect(lp);
-  lp.connect(gain);
-  gain.connect(sfxGain);
-  src.start(when);
-  src.stop(when + duration + 0.01);
 }
 

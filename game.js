@@ -1,8 +1,37 @@
 window.SYNTH_FLIGHT_JS_STARTED = true;
+function isPlainChromeBrowser() {
+  try {
+    if (navigator.brave) return false;
+  } catch (e) { /* ignore */ }
+  const ua = navigator.userAgent || '';
+  if (/Edg\/|OPR\/|Opera\/|SamsungBrowser|Firefox\/|YaBrowser|Vivaldi/i.test(ua)) return false;
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands) || [];
+  const names = brands.map((b) => String(b.brand || '').toLowerCase());
+  if (names.some((n) => n.includes('brave') || n.includes('edge') || n.includes('opera'))) return false;
+  if (names.some((n) => n === 'google chrome')) return true;
+  return /Chrome\//.test(ua) && !/Edg\//.test(ua);
+}
+
+const BROWSER_NOTE_HTML = isPlainChromeBrowser()
+  ? '<div id="browser-note">Play in Edge or Brave. Chrome runs this game at the wrong speed.</div>'
+  : '';
 const canvas = document.getElementById('gameCanvas');
 let ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 const rotateOverlay = document.getElementById('rotate-overlay');
+
+const DEV_TOOLS_ENABLED = (() => {
+  try {
+    const params = new URLSearchParams(location.search);
+    if (params.get('dev') === '1') return true;
+    if (params.get('player') === '1') return false;
+  } catch (e) { /* ignore */ }
+  return !window.SYNTH_FLIGHT_PLAYER_BUILD;
+})();
+if (!DEV_TOOLS_ENABLED) {
+  document.documentElement.classList.add('player-build');
+  if (document.body) document.body.classList.add('player-build');
+}
 
 const GAME_STORAGE_PREFIX = 'synthFlight:';
 window.storage = {
@@ -64,26 +93,50 @@ function sharpenCanvasContext(context) {
 }
 
 function resizeCanvas() {
-  W = window.innerWidth;
-  H = window.innerHeight;
-  // Game units stay in CSS pixels. The bitmap matches the display (up to 2x
-  // on retina) so a full-screen browser is not stretching an 800px frame.
+  // One playfield for Cursor, Edge, and the app. Game units stay 1280x720
+  // (16:9). The canvas is scaled to fit the window so a small Cursor panel
+  // still shows the full stage you will ship, not a cropped taller box.
+  W = 1280;
+  H = 720;
+  const fit = Math.min(window.innerWidth / W, window.innerHeight / H);
+  const dispW = Math.max(1, Math.round(W * fit));
+  const dispH = Math.max(1, Math.round(H * fit));
   renderScale = currentDisplayScale();
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-  overlay.style.width = W + 'px';
-  overlay.style.height = H + 'px';
+  canvas.style.width = dispW + 'px';
+  canvas.style.height = dispH + 'px';
+  overlay.style.width = dispW + 'px';
+  overlay.style.height = dispH + 'px';
   canvas.width = Math.max(1, Math.round(W * renderScale));
   canvas.height = Math.max(1, Math.round(H * renderScale));
+  const left = Math.round((window.innerWidth - dispW) / 2);
+  const top = Math.round((window.innerHeight - dispH) / 2);
+  canvas.style.left = left + 'px';
+  canvas.style.top = top + 'px';
+  overlay.style.left = left + 'px';
+  overlay.style.top = top + 'px';
+  overlay.style.transform = 'none';
   applyCanvasRenderScale();
   sharpenCanvasContext(ctx);
   BAR_HEIGHT = Math.min(50, Math.max(34, H * 0.05));
   PLAY_TOP = BAR_HEIGHT;
   PLAY_BOTTOM = H - BAR_HEIGHT;
+  positionPauseButton();
   if (!hasInitializedGame) {
     hasInitializedGame = true;
-    resetGame();
+    if (typeof resetGame === 'function') resetGame();
   }
+}
+
+function positionPauseButton() {
+  if (!pauseToggleBtn) return;
+  const fit = Math.min(window.innerWidth / W, window.innerHeight / H);
+  const dispW = Math.max(1, Math.round(W * fit));
+  const dispH = Math.max(1, Math.round(H * fit));
+  const left = Math.round((window.innerWidth - dispW) / 2);
+  const top = Math.round((window.innerHeight - dispH) / 2);
+  const barCss = BAR_HEIGHT * fit;
+  pauseToggleBtn.style.top = Math.max(8, top + barCss + 8) + 'px';
+  pauseToggleBtn.style.right = Math.max(8, window.innerWidth - left - dispW + 8) + 'px';
 }
 
 function checkOrientation() {
@@ -135,6 +188,11 @@ const GAP_FRACTION_MIN = 0.3;
 const SHIP_W = 40;
 const SHIP_H = 18;
 const THEME_DISTANCE = 1000;
+// Zone 1's decorative sun (the same orb that later becomes The Signal)
+// holds until this zone-local distance, then plays a vanish over
+// SYNTHWAVE_SUN_VANISH_DURATION meters so the sky is empty before warp
+const SYNTHWAVE_SUN_VANISH_START = 900;
+const SYNTHWAVE_SUN_VANISH_DURATION = 80;
 const WARP_DURATION = 100;
 const PORTAL_LEAD_DISTANCE = 80; // how far (in distance units) before the threshold the portal appears
 
@@ -195,9 +253,10 @@ const THEMES = [
   },
   {
     name: 'GRAVITY WELL',
-    skyTop: '#001a0d', skyMid: '#003320', skyBottom: '#000d05',
-    accentA: '#00ff9d', accentB: '#00c3ff',
-    barTop: '#00291a', barBottom: '#001008',
+    skyTop: '#071428', skyMid: '#0c3340', skyBottom: '#05101c',
+    accentA: '#3dffc8', accentB: '#6ec8ff',
+    wellAccent: '#e85cff',
+    barTop: '#123848', barBottom: '#071018',
     bgStyle: 'matrix',
     ampMult: 0.15, freqMult: 1.6,
     gravityMult: 1.40, liftMult: 0.8,
@@ -207,37 +266,36 @@ const THEMES = [
     // Bars never span the full width, so there's always open sky above and/or below each one.
     pattern: [
       { spacing: 360, bars: [
-        { yFrac: 0.20, ampFrac: 0.048, freq: 0.012, phase: 0.0, widthPx: 110, thicknessPx: 18 },
-        { yFrac: 0.55, ampFrac: 0.06, freq: 0.009, phase: 1.5, widthPx: 130, thicknessPx: 18 },
-        { yFrac: 0.85, ampFrac: 0.036, freq: 0.015, phase: 3.0, widthPx: 100, thicknessPx: 18 }
+        { yFrac: 0.14, ampFrac: 0.070, freq: 0.014, phase: 0.0, xOffsetPx: -55, widthPx: 110, thicknessPx: 18 },
+        { yFrac: 0.50, ampFrac: 0.085, freq: 0.009, phase: 2.1, xOffsetPx: 40, widthPx: 130, thicknessPx: 18 },
+        { yFrac: 0.86, ampFrac: 0.060, freq: 0.017, phase: 4.2, xOffsetPx: -20, widthPx: 100, thicknessPx: 18 }
       ]},
       { spacing: 380, bars: [
-        { yFrac: 0.35, ampFrac: 0.072, freq: 0.0108, phase: 0.8, widthPx: 140, thicknessPx: 20 },
-        { yFrac: 0.75, ampFrac: 0.054, freq: 0.0132, phase: 2.2, widthPx: 110, thicknessPx: 18 }
+        { yFrac: 0.22, ampFrac: 0.090, freq: 0.011, phase: 0.8, xOffsetPx: 50, widthPx: 140, thicknessPx: 20 },
+        { yFrac: 0.80, ampFrac: 0.075, freq: 0.016, phase: 3.4, xOffsetPx: -45, widthPx: 110, thicknessPx: 18 }
       ]},
       { spacing: 350, bars: [
-        { yFrac: 0.15, ampFrac: 0.042, freq: 0.012, phase: 1.0, widthPx: 100, thicknessPx: 16 },
-        { yFrac: 0.50, ampFrac: 0.06, freq: 0.0096, phase: 2.6, widthPx: 120, thicknessPx: 18 },
-        { yFrac: 0.82, ampFrac: 0.048, freq: 0.0144, phase: 4.0, widthPx: 110, thicknessPx: 18 }
+        { yFrac: 0.12, ampFrac: 0.065, freq: 0.013, phase: 1.4, xOffsetPx: 25, widthPx: 100, thicknessPx: 16 },
+        { yFrac: 0.48, ampFrac: 0.080, freq: 0.008, phase: 3.0, xOffsetPx: -50, widthPx: 120, thicknessPx: 18 },
+        { yFrac: 0.88, ampFrac: 0.070, freq: 0.015, phase: 5.1, xOffsetPx: 35, widthPx: 110, thicknessPx: 18 }
       ]},
       { spacing: 390, bars: [
-        { yFrac: 0.30, ampFrac: 0.066, freq: 0.0114, phase: 0.4, widthPx: 130, thicknessPx: 20 },
-        { yFrac: 0.68, ampFrac: 0.066, freq: 0.0126, phase: 3.4, widthPx: 130, thicknessPx: 20 }
+        { yFrac: 0.20, ampFrac: 0.085, freq: 0.010, phase: 1.8, xOffsetPx: -40, widthPx: 130, thicknessPx: 20 },
+        { yFrac: 0.78, ampFrac: 0.090, freq: 0.014, phase: 4.6, xOffsetPx: 55, widthPx: 130, thicknessPx: 20 }
       ]},
       { spacing: 370, bars: [
-        { yFrac: 0.22, ampFrac: 0.048, freq: 0.0102, phase: 2.0, widthPx: 100, thicknessPx: 16 },
-        { yFrac: 0.50, ampFrac: 0.054, freq: 0.0138, phase: 0.6, widthPx: 120, thicknessPx: 18 },
-        { yFrac: 0.78, ampFrac: 0.042, freq: 0.0114, phase: 3.8, widthPx: 100, thicknessPx: 16 }
+        { yFrac: 0.16, ampFrac: 0.060, freq: 0.012, phase: 2.7, xOffsetPx: 60, widthPx: 100, thicknessPx: 16 },
+        { yFrac: 0.50, ampFrac: 0.075, freq: 0.016, phase: 0.4, xOffsetPx: -30, widthPx: 120, thicknessPx: 18 },
+        { yFrac: 0.84, ampFrac: 0.055, freq: 0.011, phase: 3.9, xOffsetPx: 15, widthPx: 100, thicknessPx: 16 }
       ]},
       { spacing: 340, bars: [
-        { yFrac: 0.40, ampFrac: 0.078, freq: 0.009, phase: 1.2, widthPx: 140, thicknessPx: 20 },
-        { yFrac: 0.80, ampFrac: 0.048, freq: 0.0156, phase: 4.5, widthPx: 110, thicknessPx: 18 }
+        { yFrac: 0.26, ampFrac: 0.095, freq: 0.009, phase: 1.2, xOffsetPx: -50, widthPx: 140, thicknessPx: 20 },
+        { yFrac: 0.84, ampFrac: 0.070, freq: 0.018, phase: 4.8, xOffsetPx: 45, widthPx: 110, thicknessPx: 18 }
       ]}
     ],
-    // secondary layer: a spinning dust tornado, sand-colored, sweeping
-    // straight across from right to left as it scrolls through with the
-    // world -- no vertical movement, a clean horizontal sweep. instant
-    // death on contact, same as any other solid hazard
+    // secondary layer: a spinning gravity swirl (visual retint of the
+    // original dust tornado). same size, path, and hitbox -- it only
+    // looks like a well instead of sand
     extraStormPattern: [
       { baseYFrac: 0.35, r: 55, interval: 480 },
       { baseYFrac: 0.65, r: 50, interval: 520 }
@@ -296,13 +354,13 @@ const THEMES = [
       { centerFrac: 0.46 }, { centerFrac: 0.59 }, { centerFrac: 0.74 },
       { centerFrac: 0.74 }, { centerFrac: 0.64 }, { centerFrac: 0.75, gapMult: 0.55 },
       { centerFrac: 0.61 },
-      // third fork -- the biggest/most dramatic of the four
-      { centerFrac: 0.5, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.65, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.55, gapMult: 1.15, fork: { islandFrac: 0.26 } },
+      // first fork -- extra ceiling/floor room; island size unchanged
+      { centerFrac: 0.5, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.65, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.55, gapMult: 1.15, fork: { islandFrac: 0.26, outerPadPx: 30 } },
       { centerFrac: 0.82 }, { centerFrac: 0.73 },
       { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 },
       { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 },
-      { centerFrac: 0.63 }, { centerFrac: 0.46, gapMult: 1.45, fork: { islandFrac: 0.15 } }, { centerFrac: 0.59, gapMult: 1.45, fork: { islandFrac: 0.15 } },
-      { centerFrac: 0.73, gapMult: 1.45, fork: { islandFrac: 0.13 } },
+      { centerFrac: 0.63 }, { centerFrac: 0.46, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 }, startDistance: 550 }, { centerFrac: 0.59, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 } },
+      { centerFrac: 0.73, gapMult: 1.45, fork: { islandFrac: 0.26, outerPadPx: 50 } },
       // tight slalom right after the fork -- quick alternating swings instead of the
       // gentle wave that was here before
       { centerFrac: 0.28 }, { centerFrac: 0.68 }, { centerFrac: 0.26 }, { centerFrac: 0.7 },
@@ -317,12 +375,10 @@ const THEMES = [
       { centerFrac: 0.78 }, { centerFrac: 0.78 },
       { centerFrac: 0.61 }, { centerFrac: 0.47 }, { centerFrac: 0.34 },
       { centerFrac: 0.19 },
-      // second fork -- tighter and differently-shaped than the first one
-      { centerFrac: 0.29, gapMult: 1.15, fork: { islandFrac: 0.24 } }, { centerFrac: 0.36, gapMult: 1.15, fork: { islandFrac: 0.24 } }, { centerFrac: 0.3, gapMult: 1.15, fork: { islandFrac: 0.22 } },
+      { centerFrac: 0.29 }, { centerFrac: 0.36 }, { centerFrac: 0.3 },
       { centerFrac: 0.22 }, { centerFrac: 0.28 }, { centerFrac: 0.2, gapMult: 0.55 },
       { centerFrac: 0.3 }, { centerFrac: 0.54 },
-      // fourth fork -- tighter and trickier than the others
-      { centerFrac: 0.7, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.58, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.66, gapMult: 1.15, fork: { islandFrac: 0.26 } },
+      { centerFrac: 0.7 }, { centerFrac: 0.58 }, { centerFrac: 0.66 },
       { centerFrac: 0.4 },
       { centerFrac: 0.32 }, { centerFrac: 0.18 }, { centerFrac: 0.31 },
       { centerFrac: 0.41 }, { centerFrac: 0.26 }, { centerFrac: 0.22 },
@@ -458,7 +514,7 @@ const THEMES = [
   },
   {
     name: 'TOXIC WASTELAND',
-    skyTop: '#0a1408', skyMid: '#1a2e12', skyBottom: '#050a04',
+    skyTop: '#141c0c', skyMid: '#2a3820', skyBottom: '#070a04',
     accentA: '#8aff4d', accentB: '#d4c84a',
     barTop: '#14200e', barBottom: '#040803',
     bgStyle: 'toxic',
@@ -498,6 +554,12 @@ const THEMES = [
       { pivotSide: 'ceiling', lowHeightPx: 16, highHeightPx: 290, widthPx: 32, warningFrames: 30, riseFrames: 9, holdFrames: 38, fallFrames: 13, restFrames: 32, phaseOffset: 60, interval: 180 },
       { pivotSide: 'floor', lowHeightPx: 20, highHeightPx: 330, widthPx: 36, warningFrames: 32, riseFrames: 11, holdFrames: 40, fallFrames: 14, restFrames: 34, phaseOffset: 120, interval: 175 },
       { pivotSide: 'ceiling', lowHeightPx: 18, highHeightPx: 300, widthPx: 34, warningFrames: 34, riseFrames: 10, holdFrames: 40, fallFrames: 14, restFrames: 33, phaseOffset: 20, interval: 170 }
+    ],
+    extraGeyserNudges: [
+      { pivotSide: 'floor', minDistance: 500, maxDistance: 560, xOffsetPx: 70 }
+    ],
+    acidDripNudges: [
+      { minAtShipDistance: 585, maxAtShipDistance: 605, targetFallFrac: 0.18 }
     ]
   },
   {
@@ -762,7 +824,7 @@ const THEMES = [
     // reposition between the outbound and return heights
     boomerangEvents: [
       { triggerDistance: 350, xStart: -100, xMax: 600, yOutbound: 150, yReturn: 450, arcAmplitude: 50, period: 250, r: 14 },
-      { triggerDistance: 870, xStart: -100, xMax: 600, yOutbound: 450, yReturn: 150, arcAmplitude: 50, period: 250, r: 14 }
+      { triggerDistance: 920, xStart: -100, xMax: 600, yOutbound: 450, yReturn: 150, arcAmplitude: 50, period: 250, r: 14 }
     ],
     // exactly 2 fixed rooftop searchlight events -- a beam pivoting from
     // a fixed point at the ceiling, sweeping its angle back and forth
@@ -839,7 +901,16 @@ let settingsReturnState = 'options';
 // Select). Migrates from the older, separate localStorage keys this game
 // used before, so existing players don't lose their progress.
 const PROFILE_STORAGE_KEY = 'synthFlightProfile';
-const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV12';
+const SAVE_ID_STORAGE_KEY = 'synthFlightSaveId';
+const SAVE_ID_COOKIE = 'sfid';
+const DURABLE_DB_NAME = 'synthFlightDurable';
+const DURABLE_STORE = 'profile';
+const SAVE_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+let playerSaveId = '';
+let durableWriteLock = false;
+let durableSaveTimer = 0;
+let durableHydrated = false;
+const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV19';
 const PREVIEW_STILL_W = 640;
 const PREVIEW_STILL_ASPECT = 860 / 412;
 let zoneScreenshots = {};
@@ -928,38 +999,13 @@ function maybeCaptureZoneScreenshot() {
   if (warpActive || bossExplosionActive || shipFlyOffActive) return;
   if (zoneScreenshotLive[themeIndex]) return;
   const th = currentTheme();
-  // Live play only overwrites The Signal. Other zones already have a still,
-  // but storeZoneScreenshot used to reject the JPEG without marking the
-  // zone captured -- so every later frame still encoded a full-canvas
-  // JPEG. That's the mid-zone hitch on Inferno and everywhere else.
-  if (zoneScreenshots[themeIndex] && !(th && th.isBossZone)) {
-    zoneScreenshotLive[themeIndex] = true;
-    return;
-  }
-  if (th.isBossZone) {
-    if (!boss || boss.r < boss.maxR * 0.85) return;
-    if (frame - bossSpawnFrame < BOSS_ENTRANCE_DURATION) return;
-    if (bossDefeated || bossFullyDefeated || bossFinalChargeActive) return;
-  } else if (th.isMiniBossZone) {
-    if (!miniBoss || miniBoss.r < miniBoss.maxR * 0.85) return;
-    if (frame - miniBossSpawnFrame < MINI_BOSS_ENTRANCE_DURATION) return;
-    if (miniBossDefeated) return;
-    if (th.miniBossVariant === 'core') {
-      const busy = miniBossAttackState === 'coreOrbitBarrageActive'
-        || miniBossAttackState === 'coreCrossfireActive'
-        || miniBossAttackState === 'coreEmpActive'
-        || miniBossAttackState === 'coreLaserActive'
-        || miniBossAttackState === 'coreBulkheadActive'
-        || miniBossAttackState === 'coreSparkDeploy'
-        || (coreOrbitProjectiles && coreOrbitProjectiles.length > 4)
-        || (coreSparks && coreSparks.length > 2);
-      if (!busy) return;
-    }
-  } else {
-    const progress = distance - zoneStartDistance;
-    if (progress < 35) return;
-    if (gates.length === 0 && progress < 90) return;
-  }
+  // Full-window JPEG capture on a large Chrome window is both the Inferno
+  // hitch and the wrong Zone Select stills. Authored stills come from
+  // generateAndStoreZoneStill; live play only snapshots The Signal.
+  if (!th || !th.isBossZone) return;
+  if (!boss || boss.r < boss.maxR * 0.85) return;
+  if (frame - bossSpawnFrame < BOSS_ENTRANCE_DURATION) return;
+  if (bossDefeated || bossFullyDefeated || bossFinalChargeActive) return;
   const url = cropPlayfieldToJpeg(canvas, 0.78);
   if (url) storeZoneScreenshot(themeIndex, url, true);
 }
@@ -1097,6 +1143,8 @@ function generateAndStoreZoneStill(themeIdx) {
   const savedShip = { x: ship.x, y: ship.y, vy: ship.vy, rotation: ship.rotation };
   const savedFrame = frame;
   const savedZsf = zoneStartFrame;
+  const savedDistance = distance;
+  const savedZoneStartDistance = zoneStartDistance;
   const savedWarp = warpActive;
   const savedBg = bgParticles;
   const savedPortal = portalObject;
@@ -1172,6 +1220,18 @@ function generateAndStoreZoneStill(themeIdx) {
     }
     poseZonePreviewCombatants(theme);
     placePreviewShipClearOfHazards();
+    distance = 400;
+    zoneStartDistance = 0;
+    if (theme.isBossZone && boss) {
+      const shots = [
+        { x: ship.x + 150, y: ship.y - 55 },
+        { x: ship.x + 195, y: ship.y + 8 },
+        { x: ship.x + 168, y: ship.y + 62 }
+      ];
+      for (let i = 0; i < shots.length; i++) {
+        gates.push({ type: 'bossattack', x: shots[i].x, y: shots[i].y, r: 10, vx: 0, vy: 0, passed: false });
+      }
+    }
     initBackgroundParticles(theme);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
@@ -1183,7 +1243,10 @@ function generateAndStoreZoneStill(themeIdx) {
     drawReactorCoreAttacks(theme);
     if (theme.obstacleShape === 'terrain') drawTerrain(theme);
     else drawGates(theme);
-    if (theme.isBossZone) drawBossArenaBarrierWall(theme, boss);
+    if (theme.isBossZone) {
+      drawBossArenaBarrierWall(theme, boss);
+      drawBossArenaVignette(theme, boss);
+    }
     if (theme.isMiniBossZone && miniBoss && theme.miniBossVariant !== 'core') {
       drawBossArenaObsidianWall(theme, miniBoss);
     }
@@ -1206,6 +1269,8 @@ function generateAndStoreZoneStill(themeIdx) {
     ship.x = savedShip.x; ship.y = savedShip.y; ship.vy = savedShip.vy; ship.rotation = savedShip.rotation;
     frame = savedFrame;
     zoneStartFrame = savedZsf;
+    distance = savedDistance;
+    zoneStartDistance = savedZoneStartDistance;
     warpActive = savedWarp;
     bgParticles = savedBg;
     portalObject = savedPortal;
@@ -1237,30 +1302,38 @@ function generateAndStoreZoneStill(themeIdx) {
   if (url) storeZoneScreenshot(themeIdx, url, false);
   return url;
 }
+function normalizePlayerProfile(parsed) {
+  if (!parsed || typeof parsed !== 'object') {
+    return { best: 0, extraDifficultyUnlocked: false, unlockedZones: [0], completedZones: [], deathlessZones: [], beatenDifficulties: [], totalDistanceTraveled: 0, lifetimeDeathsByZone: new Array(13).fill(0), zoneCompletionCounts: new Array(13).fill(0), achievedRanks: [], shipTrail: 'classic', shipSkin: 'classic' };
+  }
+  const pad13 = (arr) => {
+    const out = Array.isArray(arr) ? arr.slice(0, 13) : [];
+    while (out.length < 13) out.push(0);
+    return out.map((n) => (typeof n === 'number' && n > 0 ? n : 0));
+  };
+  return {
+    best: typeof parsed.best === 'number' ? parsed.best : 0,
+    extraDifficultyUnlocked: !!parsed.extraDifficultyUnlocked,
+    unlockedZones: Array.isArray(parsed.unlockedZones) ? parsed.unlockedZones : [0],
+    completedZones: Array.isArray(parsed.completedZones) ? parsed.completedZones : [],
+    deathlessZones: Array.isArray(parsed.deathlessZones) ? parsed.deathlessZones : [],
+    beatenDifficulties: Array.isArray(parsed.beatenDifficulties) ? parsed.beatenDifficulties : [],
+    totalDistanceTraveled: typeof parsed.totalDistanceTraveled === 'number' ? parsed.totalDistanceTraveled : 0,
+    lifetimeDeathsByZone: pad13(parsed.lifetimeDeathsByZone),
+    zoneCompletionCounts: pad13(parsed.zoneCompletionCounts),
+    achievedRanks: Array.isArray(parsed.achievedRanks) ? parsed.achievedRanks : [],
+    shipTrail: typeof parsed.shipTrail === 'string' ? parsed.shipTrail : 'classic',
+    shipSkin: typeof parsed.shipSkin === 'string' ? parsed.shipSkin : 'classic',
+  };
+}
 function loadPlayerProfile() {
   try {
     const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        best: typeof parsed.best === 'number' ? parsed.best : 0,
-        extraDifficultyUnlocked: !!parsed.extraDifficultyUnlocked,
-        unlockedZones: Array.isArray(parsed.unlockedZones) ? parsed.unlockedZones : [0],
-        completedZones: Array.isArray(parsed.completedZones) ? parsed.completedZones : [],
-        deathlessZones: Array.isArray(parsed.deathlessZones) ? parsed.deathlessZones : [],
-        beatenDifficulties: Array.isArray(parsed.beatenDifficulties) ? parsed.beatenDifficulties : [],
-        totalDistanceTraveled: typeof parsed.totalDistanceTraveled === 'number' ? parsed.totalDistanceTraveled : 0,
-        lifetimeDeathsByZone: Array.isArray(parsed.lifetimeDeathsByZone) ? parsed.lifetimeDeathsByZone : new Array(13).fill(0),
-        zoneCompletionCounts: Array.isArray(parsed.zoneCompletionCounts) ? parsed.zoneCompletionCounts : new Array(13).fill(0),
-        achievedRanks: Array.isArray(parsed.achievedRanks) ? parsed.achievedRanks : [],
-        shipTrail: typeof parsed.shipTrail === 'string' ? parsed.shipTrail : 'classic',
-        shipSkin: typeof parsed.shipSkin === 'string' ? parsed.shipSkin : 'classic',
-      };
-    }
+    if (raw) return normalizePlayerProfile(JSON.parse(raw));
   } catch (e) { /* corrupted profile data -- fall through to legacy keys/defaults */ }
   const legacyBest = parseInt(localStorage.getItem('synthFlightBest') || '0', 10) || 0;
   const legacyExtra = localStorage.getItem('synthFlightExtraDifficultyUnlocked') === 'true';
-  return { best: legacyBest, extraDifficultyUnlocked: legacyExtra, unlockedZones: [0], completedZones: [], deathlessZones: [], beatenDifficulties: [], totalDistanceTraveled: 0, lifetimeDeathsByZone: new Array(13).fill(0), zoneCompletionCounts: new Array(13).fill(0), achievedRanks: [], shipTrail: 'classic', shipSkin: 'classic' };
+  return normalizePlayerProfile({ best: legacyBest, extraDifficultyUnlocked: legacyExtra, unlockedZones: [0] });
 }
 function savePlayerProfile() {
   try {
@@ -1268,6 +1341,7 @@ function savePlayerProfile() {
       best, extraDifficultyUnlocked, unlockedZones: Array.from(unlockedZones), completedZones: Array.from(completedZones), deathlessZones: Array.from(deathlessZones), beatenDifficulties: Array.from(beatenDifficulties), totalDistanceTraveled, lifetimeDeathsByZone, zoneCompletionCounts, achievedRanks: Array.from(achievedRanks), shipTrail: shipTrailStyle, shipSkin: shipSkinStyle
     }));
   } catch (e) { /* storage unavailable/full -- fail silently, never crash the game over this */ }
+  if (!durableWriteLock) queueDurableSave();
 }
 function resetPlayerProfile() {
   best = 0;
@@ -1343,6 +1417,8 @@ let frame = 0;
 let distance = 0;
 let best = __loadedProfile.best;
 let holding = false;
+let pointerHolding = false;
+let keyHolding = false;
 let lives = 3;
 let totalDeaths = 0;
 let deathsByZone = {}; // keyed by theme name
@@ -1906,6 +1982,7 @@ let terrainWaypointTarget = null;
 let terrainWaypointSegLeft = 0;
 let terrainWaypointGapTarget = null;
 let terrainWaypointIslandTarget = 0;
+let terrainMeanderIndex = 0;
 
 let themeIndex = 0;
 let themeLevelReached = 0;
@@ -2111,7 +2188,7 @@ function spawnHBarCluster(x) {
   for (const b of entry.bars) {
     gates.push({
       type: 'hbar',
-      x: x,
+      x: x + (b.xOffsetPx || 0),
       baseCenter: PLAY_TOP + b.yFrac * playHeight,
       amplitude: b.ampFrac * playHeight,
       freq: b.freq,
@@ -3780,9 +3857,19 @@ function spawnExtraGeyser() {
   const entry = th.extraGeyserPattern[extraGeyserPatternIndex % th.extraGeyserPattern.length];
   extraGeyserPatternIndex++;
 
+  let spawnX = W + 50;
+  const zoneDist = distance - zoneStartDistance;
+  const nudges = th.extraGeyserNudges || [];
+  for (let i = 0; i < nudges.length; i++) {
+    const n = nudges[i];
+    if (n.pivotSide && n.pivotSide !== entry.pivotSide) continue;
+    if (zoneDist < (n.minDistance || 0) || zoneDist > (n.maxDistance == null ? 1e9 : n.maxDistance)) continue;
+    spawnX += n.xOffsetPx || 0;
+  }
+
   gates.push({
     type: 'geyser',
-    x: W + 50,
+    x: spawnX,
     spawnFrame: frame,
     pivotSide: entry.pivotSide,
     lowHeight: entry.lowHeightPx,
@@ -3964,6 +4051,7 @@ function spawnKeyAndDoor(eventIndex) {
   // can end up sitting on this exact spot before the key ever exists to
   // check against
   gates = gates.filter(g => {
+    if (g.type === 'movingdoor' && (Math.abs(g.x - keyX) < 90 || Math.abs(g.x - doorX) < 90)) return false;
     if (g.type !== 'wreckage') return true;
     const distToKey = Math.hypot(g.x - keyX, g.y - keyY);
     if (distToKey < g.r + keyR + 20) return false;
@@ -4039,14 +4127,23 @@ function spawnAcidDrip(x) {
   const entry = th.pattern[patternIndex % th.pattern.length];
   patternIndex++;
 
-  // fall speed is derived from how far this drip actually needs to travel
-  // to reach the ship, not a fixed value -- this guarantees it's still
-  // genuinely mid-fall (not already culled) by the time it arrives,
-  // regardless of exactly where along the spacing chain it happened to spawn
+  let fallFrac = entry.targetFallFrac;
+  const zoneDist = distance - zoneStartDistance;
+  const atShipDist = zoneDist + Math.max(0, x - ship.x) * 0.1;
+  const dripNudges = th.acidDripNudges || [];
+  for (let i = 0; i < dripNudges.length; i++) {
+    const n = dripNudges[i];
+    const d0 = n.minAtShipDistance != null ? n.minAtShipDistance : (n.minDistance || 0);
+    const d1 = n.maxAtShipDistance != null ? n.maxAtShipDistance : (n.maxDistance == null ? 1e9 : n.maxDistance);
+    const dist = (n.minAtShipDistance != null || n.maxAtShipDistance != null) ? atShipDist : zoneDist;
+    if (dist < d0 || dist > d1) continue;
+    if (n.targetFallFrac != null) fallFrac = n.targetFallFrac;
+  }
+
   const effScroll = SCROLL_SPEED * (th.scrollMult || 1);
   const distanceToShip = Math.max(100, x - ship.x);
   const framesToReachShip = distanceToShip / effScroll;
-  const fallSpeed = (playHeight * entry.targetFallFrac) / framesToReachShip;
+  const fallSpeed = (playHeight * fallFrac) / framesToReachShip;
 
   gates.push({
     type: 'aciddrip',
@@ -4139,6 +4236,7 @@ function initTerrain() {
   terrainWaypointSegLeft = 0;
   terrainWaypointGapTarget = null;
   terrainWaypointIslandTarget = 0;
+  terrainMeanderIndex = 0;
   for (let x = -spacing; x <= W + spacing; x += spacing) {
     terrainSegments.push({ x, topY: startTop, bottomY: startBottom, islandTop: startCenter, islandBottom: startCenter });
     terrainSegmentsSinceEntry++;
@@ -4195,8 +4293,25 @@ function addTerrainSegment() {
     const maxDeltaPerSegment = Math.min(maxClimbSpeed, maxDiveSpeed) * framesPerSegment * safetyFactor;
 
     if (terrainWaypointSegLeft <= 0) {
-      const entry = th.pattern[patternIndex % th.pattern.length];
-      patternIndex++;
+      const upcoming = th.pattern[patternIndex % th.pattern.length];
+      const genDistance = (terrainLevelX + W) / 10;
+      let entry = upcoming;
+      let consumePattern = true;
+      if (upcoming.startDistance != null && genDistance < upcoming.startDistance) {
+        const meander = upcoming.meander || [
+          { centerFrac: 0.82 }, { centerFrac: 0.73 },
+          { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 },
+          { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 },
+          { centerFrac: 0.63 }
+        ];
+        entry = meander[terrainMeanderIndex % meander.length];
+        terrainMeanderIndex++;
+        consumePattern = false;
+      }
+      if (consumePattern) {
+        patternIndex++;
+        terrainMeanderIndex = 0;
+      }
 
       const gapMult = entry.gapMult !== undefined ? entry.gapMult : 1;
       const entryGap = baseGap * gapMult;
@@ -4204,19 +4319,18 @@ function addTerrainSegment() {
       const maxCenter = PLAY_BOTTOM - entryGap / 2 - margin;
       const rawTarget = PLAY_TOP + entry.centerFrac * playHeight;
       terrainWaypointTarget = Math.max(minCenter, Math.min(maxCenter, rawTarget));
-      terrainWaypointGapTarget = entryGap;
+      const outerPadPx = (entry.fork && entry.fork.outerPadPx) ? entry.fork.outerPadPx : 0;
+      terrainWaypointGapTarget = entryGap + outerPadPx * 2;
 
       if (entry.fork) {
-        // island thickness as a fraction of THIS waypoint's gap, capped so both
-        // resulting paths always keep a comfortable, independently-flyable width
         const islandFrac = Math.min(0.45, entry.fork.islandFrac || 0.3);
         terrainWaypointIslandTarget = Math.max(0, entryGap * islandFrac - SHIP_H * 2);
       } else {
         terrainWaypointIslandTarget = 0;
       }
 
-      const lastCenter = (last.topY + last.bottomY) / 2;
-      const fullDelta = Math.abs(terrainWaypointTarget - lastCenter);
+      const holdLastCenter = (last.topY + last.bottomY) / 2;
+      const fullDelta = Math.abs(terrainWaypointTarget - holdLastCenter);
       terrainWaypointSegLeft = Math.max(1, Math.ceil(fullDelta / Math.max(1, maxDeltaPerSegment)));
     }
 
@@ -4314,10 +4428,18 @@ function diamondGeometry(gate) {
 }
 
 function liveGateCenter(gate) {
-  const gap = liveGateGap(gate);
   const margin = 20;
-  const minCenter = PLAY_TOP + gap / 2 + margin;
-  const maxCenter = PLAY_BOTTOM - gap / 2 - margin;
+  let minCenter;
+  let maxCenter;
+  if (gate.type === 'hbar') {
+    const half = (gate.thickness || 18) / 2;
+    minCenter = PLAY_TOP + half + margin;
+    maxCenter = PLAY_BOTTOM - half - margin;
+  } else {
+    const gap = liveGateGap(gate);
+    minCenter = PLAY_TOP + gap / 2 + margin;
+    maxCenter = PLAY_BOTTOM - gap / 2 - margin;
+  }
   let c = gate.baseCenter + gate.amplitude * Math.sin((frame - zoneStartFrame) * gate.freq + gate.phase);
   return Math.max(minCenter, Math.min(maxCenter, c));
 }
@@ -4326,13 +4448,16 @@ function initBackgroundParticles(theme) {
   bgParticles = [];
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
   if (theme.bgStyle === 'matrix') {
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 64; i++) {
+      const tint = i % 3;
       bgParticles.push({
         x: Math.random() * W,
         y: PLAY_TOP + Math.random() * playHeight,
-        speed: 1.5 + Math.random() * 3.5,
-        len: 20 + Math.random() * 50,
-        alpha: 0.3 + Math.random() * 0.6
+        speed: 1.2 + Math.random() * 3.2,
+        len: 16 + Math.random() * 46,
+        alpha: 0.22 + Math.random() * 0.5,
+        drift: (Math.random() - 0.5) * 0.35,
+        tint
       });
     }
   } else if (theme.bgStyle === 'stars') {
@@ -4345,15 +4470,28 @@ function initBackgroundParticles(theme) {
         speed: 0.3 + Math.random() * 1.4
       });
     }
-  } else if (theme.bgStyle === 'embers') {
-    for (let i = 0; i < 60; i++) {
+    } else if (theme.bgStyle === 'embers') {
+    for (let i = 0; i < 16; i++) {
       bgParticles.push({
+        kind: 'rush',
         x: Math.random() * W,
         y: PLAY_TOP + Math.random() * playHeight,
-        r: 1 + Math.random() * 2.2,
-        alpha: 0.3 + Math.random() * 0.6,
-        speed: 0.4 + Math.random() * 1.2,
-        drift: (Math.random() - 0.5) * 0.6
+        speed: 7 + Math.random() * 10,
+        len: 28 + Math.random() * 70,
+        alpha: 0.08 + Math.random() * 0.16,
+        thick: 1 + Math.random() * 1.4
+      });
+    }
+    for (let i = 0; i < 18; i++) {
+      bgParticles.push({
+        kind: 'spark',
+        x: Math.random() * W,
+        y: PLAY_TOP + Math.random() * playHeight,
+        speed: 3.2 + Math.random() * 5.5,
+        lift: 0.15 + Math.random() * 0.55,
+        len: 10 + Math.random() * 22,
+        r: 0.7 + Math.random() * 1.6,
+        alpha: 0.28 + Math.random() * 0.45
       });
     }
   } else if (theme.bgStyle === 'ruins') {
@@ -4368,14 +4506,16 @@ function initBackgroundParticles(theme) {
       });
     }
   } else if (theme.bgStyle === 'toxic') {
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 36; i++) {
       bgParticles.push({
         x: Math.random() * W,
         y: PLAY_TOP + Math.random() * playHeight,
-        r: 1 + Math.random() * 2.5,
-        alpha: 0.2 + Math.random() * 0.35,
-        speed: 0.2 + Math.random() * 0.5,
-        drift: (Math.random() - 0.5) * 0.4
+        r: 1.2 + Math.random() * 2.4,
+        alpha: 0.12 + Math.random() * 0.18,
+        speed: 0.12 + Math.random() * 0.28,
+        drift: (Math.random() - 0.5) * 0.25,
+        wobble: Math.random() * Math.PI * 2,
+        stretch: 1.2 + Math.random() * 0.8
       });
     }
   } else if (theme.bgStyle === 'station') {
@@ -4682,6 +4822,8 @@ function resetGame() {
   distance = 0;
   frame = 0;
   holding = false;
+  pointerHolding = false;
+  keyHolding = false;
   stopLiftSound();
   stopGlowDangerSound();
   stopFireballBreathSound();
@@ -4801,7 +4943,7 @@ function startPress() {
 }
 
 function endPress() {
-  holding = false;
+  holding = pointerHolding || keyHolding;
 }
 
 // cycles the selected difficulty in either direction, skipping over the
@@ -4822,7 +4964,8 @@ function cycleDifficulty(direction) {
 function pauseGame() {
   if (state !== 'playing') return;
   state = 'paused';
-  holding = false; // don't carry a stale "still holding" into the pause screen
+  pointerHolding = false;
+  holding = keyHolding;
   stopLiftSound();
   stopGlowDangerSound();
   sfxPause();
@@ -4922,6 +5065,12 @@ function handleOverlayActivate(e) {
     else if (action === 'trail-next') cycleShipTrail(1);
     else if (action === 'skin-prev') cycleShipSkin(-1);
     else if (action === 'skin-next') cycleShipSkin(1);
+    else if (action === 'copy-save-id') copySaveIdToClipboard();
+    else if (action === 'export-save') exportPlayerSaveFile();
+    else if (action === 'import-save') {
+      const input = document.getElementById('player-save-import');
+      if (input) input.click();
+    } else if (action === 'restore-save-id') promptRestoreSaveId();
   } else if ((state === 'achievements' || state === 'zone-select' || state === 'statistics') && action === 'back-to-options') {
     state = 'options';
   } else if (state === 'statistics' && action === 'confirm-reset-stats') {
@@ -4963,7 +5112,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault();
     unlockAudio();
-    if (!e.repeat) startPress();
+    if (!e.repeat) {
+      keyHolding = true;
+      startPress();
+    }
   } else if (e.code === 'Escape' && !e.repeat) {
     if (state === 'playing') pauseGame();
     else if (state === 'paused') resumeGame();
@@ -4972,31 +5124,38 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault();
+    keyHolding = false;
     endPress();
   }
 });
-// canvas mouse/touch presses go through this wrapper rather than calling
-// startPress() directly -- the home->options transition is deliberately
-// excluded here (it only happens via the explicit "CLICK TO START" button
-// or keyboard) since letting it fire on mousedown/touchstart re-renders
-// the DOM to the Options screen mid-click, and the same press's release
-// can then land on a real Options button underneath the cursor
+// Pointer capture keeps Chrome from dropping the hold when the cursor
+// crosses the pause button, HUD, or window chrome (mouseleave used to
+// call endPress and the ship would just fall).
 function canvasStartPress() {
   unlockAudio();
   if (state === 'home') return;
   startPress();
 }
-canvas.addEventListener('mousedown', canvasStartPress);
-canvas.addEventListener('mouseup', endPress);
-canvas.addEventListener('mouseleave', endPress);
-canvas.addEventListener('touchstart', (e) => {
+function onCanvasPointerDown(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (state === 'home') return;
   e.preventDefault();
+  pointerHolding = true;
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* older engines */ }
   canvasStartPress();
-}, { passive: false });
-canvas.addEventListener('touchend', (e) => {
-  e.preventDefault();
+}
+function onCanvasPointerRelease(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  pointerHolding = false;
   endPress();
-}, { passive: false });
+}
+canvas.addEventListener('pointerdown', onCanvasPointerDown, { passive: false });
+canvas.addEventListener('pointerup', onCanvasPointerRelease);
+canvas.addEventListener('pointercancel', onCanvasPointerRelease);
+window.addEventListener('blur', () => {
+  pointerHolding = false;
+  if (!keyHolding) endPress();
+});
 
 const pauseToggleBtn = document.getElementById('pause-toggle');
 pauseToggleBtn.addEventListener('pointerup', () => {
@@ -5009,6 +5168,9 @@ function updateBackgroundParticles(theme) {
   if (theme.bgStyle === 'matrix') {
     for (let p of bgParticles) {
       p.y += p.speed;
+      p.x += p.drift || 0;
+      if (p.x < -8) p.x = W + 8;
+      if (p.x > W + 8) p.x = -8;
       if (p.y - p.len > PLAY_BOTTOM) {
         p.y = PLAY_TOP - p.len;
         p.x = Math.random() * W;
@@ -5023,13 +5185,15 @@ function updateBackgroundParticles(theme) {
       }
     }
   } else if (theme.bgStyle === 'embers') {
+    const rushBoost = 0.85 + 0.45 * (theme.scrollMult || 1);
     for (let p of bgParticles) {
-      p.y -= p.speed;
-      p.x += p.drift;
-      if (p.y < PLAY_TOP) {
-        p.y = PLAY_BOTTOM;
-        p.x = Math.random() * W;
+      p.x -= p.speed * rushBoost;
+      if (p.kind === 'spark') p.y -= p.lift || 0;
+      if (p.x < -p.len) {
+        p.x = W + 20 + Math.random() * 40;
+        p.y = PLAY_TOP + Math.random() * playHeight;
       }
+      if (p.kind === 'spark' && p.y < PLAY_TOP) p.y = PLAY_BOTTOM;
     }
   } else if (theme.bgStyle === 'ruins') {
     for (let p of bgParticles) {
@@ -5042,8 +5206,9 @@ function updateBackgroundParticles(theme) {
     }
   } else if (theme.bgStyle === 'toxic') {
     for (let p of bgParticles) {
+      p.wobble = (p.wobble || 0) + 0.02;
       p.y -= p.speed;
-      p.x += p.drift;
+      p.x += p.drift + Math.sin(p.wobble) * 0.12;
       if (p.y < PLAY_TOP) {
         p.y = PLAY_BOTTOM;
         p.x = Math.random() * W;
@@ -5218,6 +5383,15 @@ function updateCoreSparks(phaseStartFrame, targetCount, shipTop, shipBottom, shi
   }
 }
 
+function beginCoreBulkhead(moving) {
+  miniBossAttackState = 'coreBulkheadTelegraph';
+  coreBulkheadIsMoving = !!moving;
+  coreBulkheadX = ship.x + 150;
+  if (!moving) coreBulkheadGapCenter = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.5;
+  miniBossAttackStateStartFrame = frame;
+  sfxCoreBulkheadTelegraph();
+}
+
 function updateReactorCoreBoss() {
   if (coreBossDefeated) {
     if (!shipFlyOffActive && frame - coreBossDefeatFrame >= CORE_BOSS_DEFEAT_PAUSE) {
@@ -5238,9 +5412,14 @@ function updateReactorCoreBoss() {
   const shipTop = ship.y - SHIP_H / 2, shipBottom = ship.y + SHIP_H / 2;
   const shipR = SHIP_W * 0.4;
 
-  if (coreBossPhase === 6 && (miniBossAttackState === 'coreCrossfireTelegraph' ||
+  let sparkTarget = coreSparkSpawned;
+  if (miniBossAttackState === 'coreSparkDeploy') sparkTarget = CORE_SPARK_COUNT;
+  else if (coreBossPhase === 6 && (miniBossAttackState === 'coreCrossfireTelegraph' ||
       miniBossAttackState === 'coreCrossfireActive' || miniBossAttackState === 'coreCrossfireGap')) {
-    updateCoreSparks(coreSparkPhaseStartFrame, CORE_P6_SPARK_COUNT, shipTop, shipBottom, shipR);
+    sparkTarget = CORE_P6_SPARK_COUNT;
+  }
+  if (sparkTarget > 0 || coreSparks.length > 0) {
+    updateCoreSparks(coreSparkPhaseStartFrame, sparkTarget, shipTop, shipBottom, shipR);
   }
 
   if (miniBossAttackState === 'coreFloating') {
@@ -5261,6 +5440,11 @@ function updateReactorCoreBoss() {
         });
       }
       coreDeathDebris = [];
+      return;
+    }
+
+    if (coreBossPhase === 7) {
+      if (coreSparks.length === 0) beginCoreBulkhead(true);
       return;
     }
 
@@ -5370,7 +5554,6 @@ function updateReactorCoreBoss() {
       miniBossAttackStateStartFrame = frame;
     }
   } else if (miniBossAttackState === 'coreSparkDeploy') {
-    updateCoreSparks(coreSparkPhaseStartFrame, CORE_SPARK_COUNT, shipTop, shipBottom, shipR);
     // beam volleys, firing simultaneously alongside the weaving sparks
     if (coreP3BeamState === 'none' && coreP3BeamVolleysFired < CORE_P3_BEAM_TRIGGER_TIMES.length &&
         stateElapsed >= CORE_P3_BEAM_TRIGGER_TIMES[coreP3BeamVolleysFired]) {
@@ -5399,8 +5582,7 @@ function updateReactorCoreBoss() {
     if (coreSparkSpawned >= CORE_SPARK_COUNT && coreSparks.length === 0 &&
         coreP3BeamVolleysFired >= CORE_P3_BEAM_TRIGGER_TIMES.length && coreP3BeamState === 'none') {
       coreBossPhase = 4;
-      miniBossAttackState = 'coreFloating';
-      miniBossAttackStateStartFrame = frame;
+      beginCoreBulkhead(true);
     }
   } else if (miniBossAttackState === 'coreEmpTelegraph') {
     if (stateElapsed >= CORE_EMP_TELEGRAPH) {
@@ -5466,8 +5648,12 @@ function updateReactorCoreBoss() {
       coreCrossfireRound++;
       if (coreCrossfireRound >= CORE_CROSSFIRE_ROUNDS) {
         coreBossPhase = 7;
-        miniBossAttackState = 'coreFloating';
-        miniBossAttackStateStartFrame = frame;
+        if (coreSparks.length === 0) {
+          beginCoreBulkhead(true);
+        } else {
+          miniBossAttackState = 'coreFloating';
+          miniBossAttackStateStartFrame = frame;
+        }
       } else {
         miniBossAttackState = 'coreCrossfireGap';
         miniBossAttackStateStartFrame = frame;
@@ -6471,8 +6657,10 @@ function update() {
     // stay in sync without needing separate collision logic)
     if (!warpActive && (miniBossEscapeRunActive || (!th.isBossZone && !th.isMiniBossZone))) {
       const remaining = zoneEndRemainingDistance();
-      if (!portalObject && remaining > 0 && remaining <= PORTAL_LEAD_DISTANCE) {
-        portalObject = { x: ship.x + remaining * 10, forLevel: themeLevelReached };
+      const remainingPx = remaining * 10;
+      const appearPx = Math.max(PORTAL_LEAD_DISTANCE * 10, (W - ship.x) + 80);
+      if (!portalObject && remaining > 0 && remainingPx <= appearPx) {
+        portalObject = { x: ship.x + remainingPx, forLevel: themeLevelReached };
         // nothing should exist beyond the portal -- clear out anything that
         // was already pre-spawned further out than where the portal now sits.
         // the portal ring itself is rendered with a halfWidth (oscillating
@@ -6628,23 +6816,17 @@ function update() {
       }
       if (th.movingDoorPattern && !portalObject) {
         const zoneProgress = distance - zoneStartDistance;
-        // only the last special door event gets protected -- that was the
-        // one specific spot that looked bad; the earlier events are left
-        // alone since the original unrestricted timing felt right there
-        const lastEvent = th.specialDoorEvents && th.specialDoorEvents.length
-          ? th.specialDoorEvents[th.specialDoorEvents.length - 1] : null;
-        const nearLastEvent = lastEvent &&
-          zoneProgress >= lastEvent.triggerDistance - lastEvent.keyLeadDistance - 40 &&
-          zoneProgress <= lastEvent.triggerDistance + 40;
-        // First key shares a lane with the 2-gap moving door. On typical
-        // window widths that door spawns ~50px behind the key, so the slab
-        // arrives first and the card sits in the metal. Hold the door until
-        // the key is clearly closer to the ship.
-        const movingDoorSpawnX = W + 60;
-        const keyBlocksMovingDoor = gates.some((g) => (
-          g.type === 'accesskey' && !g.collected && g.x > movingDoorSpawnX - 280
+        const nearSpecialDoor = !!(th.specialDoorEvents || []).some((event) => (
+          zoneProgress >= event.triggerDistance - event.keyLeadDistance - 50 &&
+          zoneProgress <= event.triggerDistance + 70
         ));
-        if (!nearLastEvent && !keyBlocksMovingDoor) {
+        const movingDoorSpawnX = W + 60;
+        const keyOrGateBlocksMovingDoor = gates.some((g) => {
+          if (g.type === 'accesskey' && !g.collected && Math.abs(g.x - movingDoorSpawnX) < 340) return true;
+          if (g.type === 'specialdoor' && Math.abs(g.x - movingDoorSpawnX) < 300) return true;
+          return false;
+        });
+        if (!nearSpecialDoor && !keyOrGateBlocksMovingDoor) {
           extraMovingDoorCounter++;
           const nextInterval = th.movingDoorPattern[extraMovingDoorPatternIndex % th.movingDoorPattern.length].interval;
           if (extraMovingDoorCounter >= nextInterval) {
@@ -6704,7 +6886,7 @@ function update() {
           }
         });
       }
-      if (th.droneSwarmEvents && !portalObject) {
+      if (th.droneSwarmEvents) {
         const zoneProgress = distance - zoneStartDistance;
         th.droneSwarmEvents.forEach((event, i) => {
           if (!droneSwarmEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
@@ -6767,7 +6949,7 @@ function update() {
           }
         });
       }
-      if (th.boomerangEvents && !portalObject) {
+      if (th.boomerangEvents) {
         const zoneProgress = distance - zoneStartDistance;
         th.boomerangEvents.forEach((event, i) => {
           if (!boomerangEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
@@ -7444,13 +7626,14 @@ function saveAudioSettings() {
       respawn: audioSettings.respawn,
     }));
   } catch (e) { /* storage unavailable -- fail silently, never crash the game over a preference */ }
+  if (!durableWriteLock) queueDurableSave();
 }
 const __loadedAudioSettings = loadAudioSettings();
 
 const audioSettings = {
   masterVolume: 1.0,
-  sfxVolume: 0.58,
-  bgmVolume: 0.3,
+  sfxVolume: 0.64,
+  bgmVolume: 0.26,
   muted: false,
   sfxEnabled: __loadedAudioSettings.sfxEnabled,
   bgmEnabled: __loadedAudioSettings.bgmEnabled,
@@ -7467,6 +7650,308 @@ function applyAudioSettings() {
   masterGain.gain.value = audioSettings.muted ? 0 : audioSettings.masterVolume;
   sfxGain.gain.value = audioSettings.sfxEnabled ? audioSettings.sfxVolume : 0;
   bgmGain.gain.value = audioSettings.bgmEnabled ? audioSettings.bgmVolume : 0;
+}
+
+function normalizeSaveId(raw) {
+  const id = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return id.length >= 6 && id.length <= 16 ? id : '';
+}
+function generateSaveId() {
+  let id = '';
+  const cryptoObj = typeof crypto !== 'undefined' ? crypto : null;
+  for (let i = 0; i < 8; i++) {
+    let n = 0;
+    if (cryptoObj && cryptoObj.getRandomValues) {
+      const buf = new Uint8Array(1);
+      cryptoObj.getRandomValues(buf);
+      n = buf[0] % SAVE_ID_ALPHABET.length;
+    } else {
+      n = Math.floor(Math.random() * SAVE_ID_ALPHABET.length);
+    }
+    id += SAVE_ID_ALPHABET[n];
+  }
+  return id;
+}
+function readSaveIdCookie() {
+  try {
+    const parts = String(document.cookie || '').split(';');
+    for (let i = 0; i < parts.length; i++) {
+      const piece = parts[i].trim();
+      if (piece.indexOf(SAVE_ID_COOKIE + '=') === 0) return normalizeSaveId(piece.slice(SAVE_ID_COOKIE.length + 1));
+    }
+  } catch (e) { /* cookies blocked */ }
+  return '';
+}
+function persistSaveId(id) {
+  playerSaveId = normalizeSaveId(id) || playerSaveId || generateSaveId();
+  try { localStorage.setItem(SAVE_ID_STORAGE_KEY, playerSaveId); } catch (e) { /* storage blocked */ }
+  try { document.cookie = SAVE_ID_COOKIE + '=' + playerSaveId + '; Max-Age=63072000; Path=/; SameSite=Lax'; } catch (e) { /* cookies blocked */ }
+  try {
+    const nextHash = '#sf=' + playerSaveId;
+    if (location.hash !== nextHash) history.replaceState(null, '', location.pathname + location.search + nextHash);
+  } catch (e) { /* file:// or locked history */ }
+  return playerSaveId;
+}
+function ensurePlayerSaveId() {
+  if (playerSaveId) return persistSaveId(playerSaveId);
+  const fromHash = normalizeSaveId((location.hash.match(/sf=([A-Za-z0-9]+)/) || [])[1]);
+  let fromStore = '';
+  try { fromStore = normalizeSaveId(localStorage.getItem(SAVE_ID_STORAGE_KEY)); } catch (e) { fromStore = ''; }
+  return persistSaveId(fromHash || fromStore || readSaveIdCookie() || generateSaveId());
+}
+function collectDurableSave() {
+  return {
+    v: 1,
+    saveId: ensurePlayerSaveId(),
+    savedAt: Date.now(),
+    profile: {
+      best,
+      extraDifficultyUnlocked,
+      unlockedZones: Array.from(unlockedZones),
+      completedZones: Array.from(completedZones),
+      deathlessZones: Array.from(deathlessZones),
+      beatenDifficulties: Array.from(beatenDifficulties),
+      totalDistanceTraveled,
+      lifetimeDeathsByZone: lifetimeDeathsByZone.slice(),
+      zoneCompletionCounts: zoneCompletionCounts.slice(),
+      achievedRanks: Array.from(achievedRanks),
+      shipTrail: shipTrailStyle,
+      shipSkin: shipSkinStyle,
+    },
+    audio: {
+      sfxEnabled: audioSettings.sfxEnabled,
+      bgmEnabled: audioSettings.bgmEnabled,
+      chargeTelegraph: audioSettings.chargeTelegraph,
+      glowDanger: audioSettings.glowDanger,
+      lifeLost: audioSettings.lifeLost,
+      respawn: audioSettings.respawn,
+    },
+  };
+}
+function durableProgressScore(blob) {
+  if (!blob || !blob.profile) return 0;
+  const p = normalizePlayerProfile(blob.profile);
+  const deaths = p.lifetimeDeathsByZone.reduce((a, b) => a + b, 0);
+  const clears = p.zoneCompletionCounts.reduce((a, b) => a + b, 0);
+  return p.best + p.totalDistanceTraveled + deaths + clears * 10 + p.unlockedZones.length + p.completedZones.length + (p.extraDifficultyUnlocked ? 1000 : 0);
+}
+function mergeDurableSaves(blobs) {
+  const live = [];
+  for (let i = 0; i < blobs.length; i++) {
+    if (blobs[i] && blobs[i].profile) live.push(blobs[i]);
+  }
+  if (!live.length) return collectDurableSave();
+  live.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  const newest = live[0];
+  const profiles = live.map((b) => normalizePlayerProfile(b.profile));
+  const union = (key) => {
+    const set = new Set();
+    profiles.forEach((p) => (p[key] || []).forEach((v) => set.add(v)));
+    return Array.from(set);
+  };
+  const maxArr = (key) => {
+    const out = new Array(13).fill(0);
+    profiles.forEach((p) => {
+      const arr = p[key] || [];
+      for (let i = 0; i < 13; i++) out[i] = Math.max(out[i], arr[i] || 0);
+    });
+    return out;
+  };
+  const newestProfile = normalizePlayerProfile(newest.profile);
+  const newestAudio = newest.audio || {};
+  return {
+    v: 1,
+    saveId: ensurePlayerSaveId(),
+    savedAt: Date.now(),
+    profile: {
+      best: Math.max.apply(null, profiles.map((p) => p.best || 0)),
+      extraDifficultyUnlocked: profiles.some((p) => p.extraDifficultyUnlocked),
+      unlockedZones: union('unlockedZones').length ? union('unlockedZones') : [0],
+      completedZones: union('completedZones'),
+      deathlessZones: union('deathlessZones'),
+      beatenDifficulties: union('beatenDifficulties'),
+      totalDistanceTraveled: Math.max.apply(null, profiles.map((p) => p.totalDistanceTraveled || 0)),
+      lifetimeDeathsByZone: maxArr('lifetimeDeathsByZone'),
+      zoneCompletionCounts: maxArr('zoneCompletionCounts'),
+      achievedRanks: union('achievedRanks'),
+      shipTrail: newestProfile.shipTrail,
+      shipSkin: newestProfile.shipSkin,
+    },
+    audio: {
+      sfxEnabled: typeof newestAudio.sfxEnabled === 'boolean' ? newestAudio.sfxEnabled : audioSettings.sfxEnabled,
+      bgmEnabled: typeof newestAudio.bgmEnabled === 'boolean' ? newestAudio.bgmEnabled : audioSettings.bgmEnabled,
+      chargeTelegraph: typeof newestAudio.chargeTelegraph === 'string' ? newestAudio.chargeTelegraph : audioSettings.chargeTelegraph,
+      glowDanger: typeof newestAudio.glowDanger === 'string' ? newestAudio.glowDanger : audioSettings.glowDanger,
+      lifeLost: typeof newestAudio.lifeLost === 'string' ? newestAudio.lifeLost : audioSettings.lifeLost,
+      respawn: typeof newestAudio.respawn === 'string' ? newestAudio.respawn : audioSettings.respawn,
+    },
+  };
+}
+function applyDurableSave(blob) {
+  if (!blob || !blob.profile) return;
+  const p = normalizePlayerProfile(blob.profile);
+  durableWriteLock = true;
+  best = p.best;
+  extraDifficultyUnlocked = p.extraDifficultyUnlocked;
+  unlockedZones = new Set(p.unlockedZones.length ? p.unlockedZones : [0]);
+  completedZones = new Set(p.completedZones);
+  deathlessZones = new Set(p.deathlessZones);
+  beatenDifficulties = new Set(p.beatenDifficulties);
+  totalDistanceTraveled = p.totalDistanceTraveled;
+  lifetimeDeathsByZone = p.lifetimeDeathsByZone;
+  zoneCompletionCounts = p.zoneCompletionCounts;
+  achievedRanks = new Set(p.achievedRanks);
+  if (typeof SHIP_TRAILS !== 'undefined' && SHIP_TRAILS.some((t) => t.id === p.shipTrail)) shipTrailStyle = p.shipTrail;
+  if (typeof SHIP_SKINS !== 'undefined' && SHIP_SKINS.some((s) => s.id === p.shipSkin)) shipSkinStyle = p.shipSkin;
+  if (blob.audio) {
+    if (typeof blob.audio.sfxEnabled === 'boolean') audioSettings.sfxEnabled = blob.audio.sfxEnabled;
+    if (typeof blob.audio.bgmEnabled === 'boolean') audioSettings.bgmEnabled = blob.audio.bgmEnabled;
+    if (typeof blob.audio.chargeTelegraph === 'string' && blob.audio.chargeTelegraph !== 'xCharge') audioSettings.chargeTelegraph = blob.audio.chargeTelegraph;
+    if (typeof blob.audio.glowDanger === 'string') audioSettings.glowDanger = blob.audio.glowDanger;
+    if (typeof blob.audio.lifeLost === 'string') audioSettings.lifeLost = blob.audio.lifeLost;
+    if (typeof blob.audio.respawn === 'string') audioSettings.respawn = blob.audio.respawn;
+  }
+  savePlayerProfile();
+  saveAudioSettings();
+  applyAudioSettings();
+  durableWriteLock = false;
+}
+function openDurableDb() {
+  return new Promise((resolve) => {
+    if (!window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    const req = indexedDB.open(DURABLE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(DURABLE_STORE)) db.createObjectStore(DURABLE_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+async function readIndexedDbSave() {
+  try {
+    const db = await openDurableDb();
+    if (!db) return null;
+    return await new Promise((resolve) => {
+      const tx = db.transaction(DURABLE_STORE, 'readonly');
+      const get = tx.objectStore(DURABLE_STORE).get('current');
+      get.onsuccess = () => resolve(get.result || null);
+      get.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+async function writeIndexedDbSave(blob) {
+  try {
+    const db = await openDurableDb();
+    if (!db) return;
+    await new Promise((resolve) => {
+      const tx = db.transaction(DURABLE_STORE, 'readwrite');
+      tx.objectStore(DURABLE_STORE).put(blob, 'current');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch (e) { /* private mode / quota */ }
+}
+async function fetchServerSave(id) {
+  const saveId = normalizeSaveId(id);
+  if (!saveId || location.protocol === 'file:') return null;
+  try {
+    const res = await fetch('/api/player-save/' + saveId, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const blob = await res.json();
+    return blob && blob.profile ? blob : null;
+  } catch (e) {
+    return null;
+  }
+}
+async function putServerSave(blob) {
+  if (!blob || location.protocol === 'file:') return;
+  try {
+    await fetch('/api/player-save/' + ensurePlayerSaveId(), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(blob),
+    });
+  } catch (e) { /* offline or static host */ }
+}
+async function writeAllDurableLayers(blob) {
+  const payload = blob || collectDurableSave();
+  payload.saveId = ensurePlayerSaveId();
+  payload.savedAt = Date.now();
+  durableWriteLock = true;
+  savePlayerProfile();
+  saveAudioSettings();
+  durableWriteLock = false;
+  await writeIndexedDbSave(payload);
+  await putServerSave(payload);
+}
+function queueDurableSave() {
+  if (durableWriteLock) return;
+  clearTimeout(durableSaveTimer);
+  durableSaveTimer = setTimeout(() => {
+    writeAllDurableLayers(collectDurableSave());
+  }, 700);
+}
+async function hydrateDurableSave() {
+  ensurePlayerSaveId();
+  const local = collectDurableSave();
+  const [idb, server] = await Promise.all([readIndexedDbSave(), fetchServerSave(playerSaveId)]);
+  const merged = mergeDurableSaves([idb, server, local]);
+  if (durableProgressScore(merged) >= durableProgressScore(local) || (server && durableProgressScore(server) > 0) || (idb && durableProgressScore(idb) > durableProgressScore(local))) {
+    applyDurableSave(merged);
+  }
+  await writeAllDurableLayers(collectDurableSave());
+  durableHydrated = true;
+  if (state === 'settings' || state === 'options' || state === 'home' || state === 'statistics' || state === 'achievements') updateOverlay();
+}
+function exportPlayerSaveFile() {
+  const blob = collectDurableSave();
+  const text = JSON.stringify(blob, null, 2);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.download = 'synth-flight-save-' + blob.saveId + '.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 500);
+  writeAllDurableLayers(blob);
+}
+async function importPlayerSaveObject(parsed) {
+  if (!parsed || typeof parsed !== 'object' || !parsed.profile) throw new Error('Not a Synth Flight save');
+  if (parsed.saveId) persistSaveId(parsed.saveId);
+  applyDurableSave(mergeDurableSaves([parsed, collectDurableSave()]));
+  await writeAllDurableLayers(collectDurableSave());
+  updateOverlay();
+}
+function promptRestoreSaveId() {
+  const next = normalizeSaveId(window.prompt('Enter your SAVE ID to restore this profile (from another device or after clearing site data).', playerSaveId));
+  if (!next) return;
+  persistSaveId(next);
+  fetchServerSave(next).then(async (server) => {
+    const idb = await readIndexedDbSave();
+    if (!server && !idb) {
+      window.alert('No cloud save found for ' + next + '. Import a backup file, or keep playing to create a new save under this ID.');
+      return;
+    }
+    applyDurableSave(mergeDurableSaves([server, idb, collectDurableSave()]));
+    await writeAllDurableLayers(collectDurableSave());
+    updateOverlay();
+  });
+}
+function copySaveIdToClipboard() {
+  const id = ensurePlayerSaveId();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(id).catch(() => { window.alert('SAVE ID: ' + id); });
+  } else {
+    window.alert('SAVE ID: ' + id);
+  }
 }
 
 function toggleSfxEnabled() {
@@ -13223,11 +13708,12 @@ const BGM_FILE_TRACKS = [
   { id: 'bgm-02-gravity-well', src: 'audio/bgm/bgm-02-gravity-well.mp3', themeIndex: 1, start: 0, loopStart: 0 },
   { id: 'bgm-03-deep-space', src: 'audio/bgm/bgm-03-deep-space.mp3', themeIndex: 2, start: 0, loopStart: 0, loopEnd: 22 },
   { id: 'bgm-04-inferno', src: 'audio/bgm/bgm-04-inferno.mp3', themeIndex: 3, start: 0, loopStart: 0, loopEnd: 104 },
-  { id: 'bgm-05-molten-core', src: 'audio/bgm/bgm-05-molten-core.mp3', themeIndex: 4, start: 0, loopStart: 0, loopEnd: 104 },
+  { id: 'bgm-05-molten-core-boss', src: 'audio/bgm/bgm-05-molten-core-boss.mp3?v=snes272', themeIndex: 4, phaseMin: 1, phaseMax: 1, start: 0, loopStart: 0 },
+  { id: 'bgm-05-molten-core', src: 'audio/bgm/bgm-05-molten-core.mp3', themeIndex: 4, phaseMin: 2, phaseMax: 99, start: 0, loopStart: 0, loopEnd: 104 },
   { id: 'bgm-06-storm-skies', src: 'audio/bgm/bgm-06-storm-skies.mp3', themeIndex: 5, start: 0, loopStart: 0 },
   { id: 'bgm-07-ancient-ruins', src: 'audio/bgm/bgm-07-ancient-ruins.ogg', themeIndex: 6, start: 0, loopStart: 0 },
   { id: 'bgm-08-toxic-wasteland', src: 'audio/bgm/bgm-08-toxic-wasteland.mp3', themeIndex: 7, start: 0, loopStart: 0, loopEnd: 46 },
-  { id: 'bgm-09-derelict-station', src: 'audio/bgm/bgm-09-derelict-station.mp3', themeIndex: 8, start: 0, loopStart: 0 },
+  { id: 'bgm-09-derelict-station', src: 'audio/bgm/bgm-09-derelict-station.mp3?v=snes271', themeIndex: 8, start: 2, loopStart: 2, loopEnd: 101 },
   { id: 'bgm-10-reactor-core-p1', src: 'audio/bgm/bgm-10-reactor-core-p1.mp3', themeIndex: 9, phaseMin: 1, phaseMax: 7, start: 0, loopStart: 0 },
   { id: 'bgm-10-reactor-core-p8', src: 'audio/bgm/bgm-10-reactor-core-p8.mp3?v=snes267', themeIndex: 9, phaseMin: 8, phaseMax: 99, start: 50, loopStart: 50 },
   { id: 'bgm-11-the-void', src: 'audio/bgm/bgm-11-the-void.mp3', themeIndex: 10, start: 1, loopStart: 1, loopEnd: 38 },
@@ -13256,6 +13742,7 @@ function currentPlayPhase() {
     return bossPhase || 1;
   }
   if (th.miniBossVariant === 'core') return coreBossPhase || 1;
+  if (th.isMiniBossZone) return (miniBossDefeated || miniBossEscapeRunActive) ? 2 : 1;
   return 1;
 }
 
@@ -13341,10 +13828,11 @@ function startHtmlBgm(track) {
   const media = getBgmMediaNode(track.src, el);
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0.0001, t0);
-  gain.gain.exponentialRampToValueAtTime(1, t0 + fade);
+  gain.gain.exponentialRampToValueAtTime(0.8, t0 + fade);
   try { media.disconnect(); } catch (e) { /* first connect */ }
   media.connect(gain);
   gain.connect(bgmGain);
+  el.volume = 1;
   el.loop = track.loopEnd == null;
   const offset = track.start != null ? track.start : 0;
   try { el.currentTime = offset; } catch (e) { /* not seekable yet */ }
@@ -13817,7 +14305,8 @@ const SFX_CATALOG = [
   { id: 'bgm02', section: '6. Background Music', name: '02 Gravity Well', kind: 'bgm', trackId: 'bgm-02-gravity-well', play: () => {} },
   { id: 'bgm03', section: '6. Background Music', name: '03 Deep Space', kind: 'bgm', trackId: 'bgm-03-deep-space', play: () => {} },
   { id: 'bgm04', section: '6. Background Music', name: '04 Inferno', kind: 'bgm', trackId: 'bgm-04-inferno', play: () => {} },
-  { id: 'bgm05', section: '6. Background Music', name: '05 Molten Core', kind: 'bgm', trackId: 'bgm-05-molten-core', play: () => {} },
+  { id: 'bgm05a', section: '6. Background Music', name: '05 Molten Core (boss)', kind: 'bgm', trackId: 'bgm-05-molten-core-boss', play: () => {} },
+  { id: 'bgm05b', section: '6. Background Music', name: '05 Molten Core (escape)', kind: 'bgm', trackId: 'bgm-05-molten-core', play: () => {} },
   { id: 'bgm06', section: '6. Background Music', name: '06 Storm Skies', kind: 'bgm', trackId: 'bgm-06-storm-skies', play: () => {} },
   { id: 'bgm07', section: '6. Background Music', name: '07 Ancient Ruins', kind: 'bgm', trackId: 'bgm-07-ancient-ruins', play: () => {} },
   { id: 'bgm08', section: '6. Background Music', name: '08 Toxic Wasteland', kind: 'bgm', trackId: 'bgm-08-toxic-wasteland', play: () => {} },
@@ -14655,10 +15144,7 @@ function drawReactorCoreAttacks(theme) {
   const state = miniBossAttackState;
   ctx.save();
 
-  if (coreBossPhase === 6 && (state === 'coreCrossfireTelegraph' ||
-      state === 'coreCrossfireActive' || state === 'coreCrossfireGap')) {
-    drawCoreSparks();
-  }
+  if (coreSparks.length) drawCoreSparks();
 
   if (state === 'coreLaserTelegraph') {
     const stateElapsed = frame - miniBossAttackStateStartFrame;
@@ -14740,7 +15226,6 @@ function drawReactorCoreAttacks(theme) {
       }
     }
   } else if (state === 'coreSparkDeploy') {
-    drawCoreSparks();
     // beam volleys, drawn on top of the sparks when active
     if (coreP3BeamState === 'telegraph') {
       const stateElapsed = frame - coreP3BeamStateStartFrame;
@@ -16340,6 +16825,196 @@ function drawMenuBackground() {
   drawSynthwaveScene(PLAY_TOP, PLAY_BOTTOM);
 }
 
+function drawInfernoHeatBackdrop(theme) {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+
+  const floorGlow = ctx.createLinearGradient(0, PLAY_BOTTOM - playHeight * 0.28, 0, PLAY_BOTTOM);
+  floorGlow.addColorStop(0, 'rgba(255, 40, 0, 0)');
+  floorGlow.addColorStop(0.55, 'rgba(255, 70, 10, 0.10)');
+  floorGlow.addColorStop(1, 'rgba(255, 140, 20, 0.22)');
+  ctx.fillStyle = floorGlow;
+  ctx.fillRect(0, PLAY_BOTTOM - playHeight * 0.28, W, playHeight * 0.28);
+
+  const roofGlow = ctx.createLinearGradient(0, PLAY_TOP, 0, PLAY_TOP + playHeight * 0.16);
+  roofGlow.addColorStop(0, 'rgba(255, 80, 20, 0.14)');
+  roofGlow.addColorStop(1, 'rgba(255, 40, 0, 0)');
+  ctx.fillStyle = roofGlow;
+  ctx.fillRect(0, PLAY_TOP, W, playHeight * 0.16);
+
+  ctx.strokeStyle = 'rgba(255, 90, 20, 0.18)';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < bgParticles.length; i++) {
+    const p = bgParticles[i];
+    ctx.beginPath();
+    ctx.moveTo(p.x + (p.len || 12), p.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+}
+
+function drawToxicWastelandBackdrop(theme) {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const scroll = frame * 0.22;
+
+  const sunX = W * 0.78;
+  const sunY = PLAY_TOP + playHeight * 0.28;
+  const sunR = playHeight * 0.34;
+  const sun = ctx.createRadialGradient(sunX, sunY, sunR * 0.12, sunX, sunY, sunR);
+  sun.addColorStop(0, 'rgba(210, 190, 70, 0.16)');
+  sun.addColorStop(0.35, 'rgba(120, 130, 40, 0.08)');
+  sun.addColorStop(1, 'rgba(40, 50, 10, 0)');
+  ctx.fillStyle = sun;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, PLAY_TOP, W, playHeight);
+  ctx.clip();
+
+  for (let i = 0; i < 3; i++) {
+    const fy = PLAY_TOP + playHeight * (0.22 + i * 0.2);
+    const fx = ((W * 0.45 * i - scroll * (0.4 + i * 0.12)) % (W + 320)) - 160;
+    const haze = ctx.createRadialGradient(fx, fy, 0, fx, fy, 220);
+    haze.addColorStop(0, `rgba(140, 150, 55, ${0.07 - i * 0.015})`);
+    haze.addColorStop(1, 'rgba(40, 50, 15, 0)');
+    ctx.fillStyle = haze;
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, 240, 36 + i * 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = 'rgba(10, 16, 6, 0.38)';
+  ctx.beginPath();
+  ctx.moveTo(0, PLAY_BOTTOM);
+  const hillScroll = (scroll * 0.45) % 90;
+  for (let hx = -hillScroll; hx <= W + 90; hx += 18) {
+    const hill = 28 + Math.sin(hx * 0.018 + 0.4) * 18 + Math.sin(hx * 0.05) * 8;
+    ctx.lineTo(hx, PLAY_BOTTOM - hill);
+  }
+  ctx.lineTo(W, PLAY_BOTTOM);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(18, 28, 10, 0.55)';
+  ctx.beginPath();
+  ctx.moveTo(0, PLAY_BOTTOM);
+  const bermStep = 48;
+  const bermScroll = scroll % bermStep;
+  for (let bx = -bermScroll; bx <= W + bermStep; bx += bermStep) {
+    const hump = 16 + (Math.sin(bx * 0.035 + frame * 0.01) * 0.5 + 0.5) * 14;
+    ctx.lineTo(bx, PLAY_BOTTOM - hump);
+  }
+  ctx.lineTo(W, PLAY_BOTTOM);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(22, 32, 12, 0.4)';
+  ctx.beginPath();
+  ctx.moveTo(0, PLAY_TOP);
+  for (let tx = -((scroll * 0.6) % 40); tx <= W + 40; tx += 40) {
+    const hang = 8 + Math.abs(Math.sin(tx * 0.08 + 1.2)) * 11;
+    ctx.lineTo(tx, PLAY_TOP + hang);
+  }
+  ctx.lineTo(W, PLAY_TOP);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  for (let p of bgParticles) {
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = '#6d7c38';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.r * (p.stretch || 1), p.r, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Zone 1's decorative sun is the same orb that later becomes The Signal.
+// At 900 m it glitches, shrinks, and leaves the sky so the last stretch
+// of Synthwave plays without it -- purely visual, no gameplay change.
+function getSynthwaveSunVanishT(theme) {
+  if (!theme || theme.name !== 'SYNTHWAVE' || theme.isBossZone) return 0;
+  const t = (distance - zoneStartDistance - SYNTHWAVE_SUN_VANISH_START) / SYNTHWAVE_SUN_VANISH_DURATION;
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t;
+}
+
+function drawSynthwaveBackdropSun(theme) {
+  const vanishT = getSynthwaveSunVanishT(theme);
+  if (vanishT >= 1) return;
+
+  const ease = vanishT * vanishT * (3 - 2 * vanishT);
+  const playH = PLAY_BOTTOM - PLAY_TOP;
+  const baseCX = W * 0.78;
+  const baseCY = PLAY_TOP + playH * 0.32;
+  const baseR = playH * 0.22;
+  const jitter = vanishT > 0 ? Math.sin(frame * 0.55 + vanishT * 14) * ease * 7 : 0;
+  const sunCX = baseCX + jitter;
+  const sunCY = baseCY - ease * baseR * 0.42;
+  const sunR = baseR * (1 - ease * 0.9);
+  const alpha = 1 - Math.pow(ease, 1.25);
+  if (sunR < 1 || alpha <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (vanishT > 0 && vanishT < 0.62) {
+    const bloomPulse = 0.28 * (1 - vanishT / 0.62);
+    const bloom = ctx.createRadialGradient(sunCX, sunCY, sunR * 0.18, sunCX, sunCY, sunR * (1.75 + vanishT * 0.8));
+    bloom.addColorStop(0, 'rgba(255, 210, 63, ' + bloomPulse + ')');
+    bloom.addColorStop(0.45, 'rgba(255, 32, 121, ' + (bloomPulse * 0.45) + ')');
+    bloom.addColorStop(1, 'rgba(15, 240, 252, 0)');
+    ctx.fillStyle = bloom;
+    ctx.beginPath();
+    ctx.arc(sunCX, sunCY, sunR * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const drawSunBody = (cx, cy, bodyAlpha) => {
+    ctx.save();
+    ctx.globalAlpha = alpha * bodyAlpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, sunR, 0, Math.PI * 2);
+    ctx.clip();
+    const sunGrad = ctx.createLinearGradient(0, cy - sunR, 0, cy + sunR);
+    sunGrad.addColorStop(0, '#ffd23f');
+    sunGrad.addColorStop(0.5, theme.accentA);
+    sunGrad.addColorStop(1, theme.accentB);
+    ctx.fillStyle = sunGrad;
+    ctx.fillRect(cx - sunR, cy - sunR, sunR * 2, sunR * 2);
+    ctx.fillStyle = theme.skyTop;
+    const bandCount = 5 + Math.floor(ease * 8);
+    const bandGap = sunR * (0.15 + ease * 0.08);
+    for (let i = 0; i < bandCount; i++) {
+      const y = cy + bandGap * i - sunR * 0.08 - ease * sunR * 0.2;
+      ctx.fillRect(cx - sunR, y, sunR * 2, (3 + i) * (1 + ease * 2.4));
+    }
+    ctx.restore();
+  };
+
+  if (vanishT > 0.08 && vanishT < 0.88) {
+    const split = ease * 10;
+    drawSunBody(sunCX - split, sunCY, 0.28);
+    drawSunBody(sunCX + split, sunCY + split * 0.25, 0.22);
+  }
+  drawSunBody(sunCX, sunCY, 1);
+
+  if (vanishT > 0.2 && vanishT < 0.95) {
+    ctx.globalAlpha = alpha * 0.55 * (1 - Math.abs(vanishT - 0.55) * 1.6);
+    ctx.strokeStyle = theme.accentB;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(sunCX, sunCY, sunR * (1.12 + vanishT * 0.8), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawBackground(theme) {
   const colorProgress = theme.isBossZone ? getBossColorProgress() : 0;
   const phase5Progress = theme.isBossZone ? getPhase5BackgroundProgress() : 0;
@@ -16365,25 +17040,7 @@ function drawBackground(theme) {
 
   if (theme.bgStyle === 'grid') {
     if (!theme.isBossZone) {
-    const sunCX = W * 0.78;
-    const sunCY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.32;
-    const sunR = (PLAY_BOTTOM - PLAY_TOP) * 0.22;
-    const sunGrad = ctx.createLinearGradient(0, sunCY - sunR, 0, sunCY + sunR);
-    sunGrad.addColorStop(0, '#ffd23f');
-    sunGrad.addColorStop(0.5, theme.accentA);
-    sunGrad.addColorStop(1, theme.accentB);
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(sunCX, sunCY, sunR, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.fillStyle = sunGrad;
-    ctx.fillRect(sunCX - sunR, sunCY - sunR, sunR * 2, sunR * 2);
-    ctx.fillStyle = theme.skyTop;
-    for (let i = 0; i < 5; i++) {
-      const y = sunCY + sunR * 0.15 * i - 2;
-      ctx.fillRect(sunCX - sunR, y, sunR * 2, 3 + i);
-    }
-    ctx.restore();
+      drawSynthwaveBackdropSun(theme);
     }
 
     // the perspective grid fully replaces this one in boss zones once
@@ -16397,29 +17054,34 @@ function drawBackground(theme) {
     ctx.lineWidth = 1;
     ctx.globalAlpha = bossGridFadeEnabled ? 1 - colorProgress : 1;
     const gridSpacing = 40;
-    const offset = (frame * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing;
+    const offset = Math.round((frame * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing);
     for (let x = -offset; x < W; x += gridSpacing) {
+      const px = Math.round(x) + 0.5;
       ctx.beginPath();
-      ctx.moveTo(x, PLAY_TOP);
-      ctx.lineTo(x, PLAY_BOTTOM);
+      ctx.moveTo(px, PLAY_TOP);
+      ctx.lineTo(px, PLAY_BOTTOM);
       ctx.stroke();
     }
     for (let y = PLAY_TOP; y < PLAY_BOTTOM; y += gridSpacing) {
+      const py = Math.round(y) + 0.5;
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(W, y);
+      ctx.moveTo(0, py);
+      ctx.lineTo(W, py);
       ctx.stroke();
     }
     ctx.restore();
     }
   } else if (theme.bgStyle === 'matrix') {
+    drawGravityWellBackdrop(theme);
+    const tints = [theme.accentA, theme.accentB, theme.wellAccent || '#e85cff'];
     for (let p of bgParticles) {
+      const col = tints[p.tint] || theme.accentA;
       const grad = ctx.createLinearGradient(p.x, p.y - p.len, p.x, p.y);
       grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, theme.accentA);
+      grad.addColorStop(1, col);
       ctx.strokeStyle = grad;
       ctx.globalAlpha = p.alpha;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = p.tint === 2 ? 1.5 : 2;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y - p.len);
       ctx.lineTo(p.x, p.y);
@@ -16436,14 +17098,7 @@ function drawBackground(theme) {
     }
     ctx.globalAlpha = 1;
   } else if (theme.bgStyle === 'embers') {
-    for (let p of bgParticles) {
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle = theme.accentA;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    drawInfernoHeatBackdrop(theme);
   } else if (theme.bgStyle === 'ruins') {
     const playHeight = PLAY_BOTTOM - PLAY_TOP;
 
@@ -16514,44 +17169,7 @@ function drawBackground(theme) {
     }
     ctx.globalAlpha = 1;
   } else if (theme.bgStyle === 'toxic') {
-    const playHeight = PLAY_BOTTOM - PLAY_TOP;
-
-    // drifting toxic fog banks
-    for (let i = 0; i < 4; i++) {
-      const fx = ((W * 0.3 * i - frame * 0.25) % (W + 260)) - 130;
-      const fy = PLAY_TOP + playHeight * (0.15 + i * 0.22);
-      const fgrad = ctx.createRadialGradient(fx, fy, 0, fx, fy, 150);
-      fgrad.addColorStop(0, 'rgba(138,255,77,0.12)');
-      fgrad.addColorStop(1, 'rgba(138,255,77,0)');
-      ctx.fillStyle = fgrad;
-      ctx.beginPath();
-      ctx.ellipse(fx, fy, 150, 45, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // sickly bubbling ground texture near top and bottom edges
-    ctx.fillStyle = 'rgba(60,80,20,0.35)';
-    const oozeSpacing = 60;
-    const oozeOffset = (frame * 0.7) % oozeSpacing;
-    for (let ox = -oozeOffset; ox < W + oozeSpacing; ox += oozeSpacing) {
-      const bob = Math.sin(frame * 0.05 + ox * 0.05) * 4;
-      ctx.beginPath();
-      ctx.arc(ox, PLAY_TOP + 6 + bob, 10, 0, Math.PI);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(ox + oozeSpacing / 2, PLAY_BOTTOM - 6 - bob, 10, Math.PI, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // rising toxic bubbles/spores
-    for (let p of bgParticles) {
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle = theme.accentA;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    drawToxicWastelandBackdrop(theme);
   } else if (theme.bgStyle === 'station') {
     const playHeight = PLAY_BOTTOM - PLAY_TOP;
 
@@ -17822,38 +18440,36 @@ function drawZone2Storm(g, theme) {
 
   // outer layer -- darkest, largest, sets the overall silhouette
   scallopedPath(g.r * 0.8 * pulse1, 9, g.r * 0.2, phase1);
-  ctx.fillStyle = '#6b5a38';
+  ctx.fillStyle = '#1a2858';
   ctx.fill();
 
-  // mid layer -- main tone
+  // mid layer -- cyan well mass
   scallopedPath(g.r * 0.62 * pulse2, 8, g.r * 0.16, phase2);
-  ctx.fillStyle = '#c4a86a';
+  ctx.fillStyle = theme.accentB || '#6ec8ff';
+  ctx.globalAlpha = 0.92;
   ctx.fill();
+  ctx.globalAlpha = 1;
 
-  // inner layer -- lightest, brightest, gives the sense of a glowing core
+  // inner layer -- magenta/white core
   scallopedPath(g.r * 0.38 * pulse3, 7, g.r * 0.1, phase3);
-  ctx.fillStyle = '#e8dcb8';
+  ctx.fillStyle = theme.wellAccent || '#e85cff';
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath();
+  ctx.arc(0, 0, g.r * 0.16, 0, Math.PI * 2);
   ctx.fill();
 
-  // burst spike lines radiating from a few fixed points around the edge,
-  // matching the reference image's cartoon dust-poof look
-  const spikeAngles = [-2.1, -0.6, 1.2, 2.6];
-  spikeAngles.forEach((baseAng) => {
-    const ang = baseAng + phase1 * 0.3;
-    const r1 = g.r * 0.78;
-    const r2 = g.r * 1.05;
-    const perpAng = ang + Math.PI / 2;
-    const spread = g.r * 0.1;
-    ctx.strokeStyle = '#c4a86a';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
+  ctx.strokeStyle = theme.accentA || '#3dffc8';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.globalAlpha = 0.7;
+  for (let i = 0; i < 5; i++) {
+    const ang = phase1 + i * (Math.PI * 2 / 5);
     ctx.beginPath();
-    ctx.moveTo(Math.cos(ang) * r1 + Math.cos(perpAng) * spread, Math.sin(ang) * r1 + Math.sin(perpAng) * spread);
-    ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
-    ctx.moveTo(Math.cos(ang) * r1 - Math.cos(perpAng) * spread, Math.sin(ang) * r1 - Math.sin(perpAng) * spread);
-    ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
+    ctx.arc(0, 0, g.r * (0.45 + (i % 2) * 0.12), ang, ang + 1.1);
     ctx.stroke();
-  });
+  }
+  ctx.globalAlpha = 1;
 
   ctx.restore();
 }
@@ -18084,8 +18700,8 @@ function drawFireball(g, theme) {
   ctx.strokeStyle = '#4fd6ff';
   ctx.lineWidth = Math.max(2, r * 0.15);
   const cycleLen = r * 4.5;
-  for (let i = 0; i < 5; i++) {
-    const phase = (frame * 1.6 + i * (cycleLen / 5)) % cycleLen;
+  for (let i = 0; i < 2; i++) {
+    const phase = (frame * 1.6 + i * (cycleLen / 2)) % cycleLen;
     const off = 42 * s + phase;
     const fade = 1 - phase / cycleLen;
     ctx.globalAlpha = 0.38 * fade;
@@ -18098,8 +18714,7 @@ function drawFireball(g, theme) {
   }
   ctx.globalAlpha = 1;
 
-  ctx.shadowColor = '#4fd6ff';
-  ctx.shadowBlur = 14;
+  ctx.shadowBlur = 0;
 
   // outer jagged flame silhouette -- fixed shape, no pulsing (only the
   // ship-relative position moves, so the slide reads clearly)
@@ -18135,19 +18750,60 @@ function drawFireball(g, theme) {
   ctx.restore();
 }
 
+function drawGravityWellBackdrop(theme) {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const cx = W * 0.72;
+  const cy = PLAY_TOP + playHeight * 0.48;
+  const magenta = theme.wellAccent || '#e85cff';
+  ctx.save();
+  const well = ctx.createRadialGradient(cx, cy, 8, cx, cy, playHeight * 0.95);
+  well.addColorStop(0, 'rgba(232, 92, 255, 0.18)');
+  well.addColorStop(0.28, 'rgba(110, 200, 255, 0.10)');
+  well.addColorStop(0.62, 'rgba(61, 255, 200, 0.05)');
+  well.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = well;
+  ctx.fillRect(0, PLAY_TOP, W, playHeight);
+
+  ctx.strokeStyle = magenta;
+  ctx.globalAlpha = 0.16;
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 6; i++) {
+    const wobble = 1 + Math.sin(frame * 0.012 + i * 0.7) * 0.04;
+    const rx = (70 + i * 42) * wobble;
+    const ry = (38 + i * 22) * wobble;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0.18, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.16 - i * 0.018;
+  }
+
+  ctx.globalAlpha = 0.55;
+  const core = ctx.createRadialGradient(cx - 6, cy - 6, 2, cx, cy, 22);
+  core.addColorStop(0, '#ffffff');
+  core.addColorStop(0.35, magenta);
+  core.addColorStop(1, 'rgba(12, 24, 40, 0)');
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawHBar(g, theme) {
   const y = liveGateCenter(g);
   const left = g.x - g.width / 2;
   const top = y - g.thickness / 2;
+  const magenta = theme.wellAccent || '#e85cff';
+  const palettes = [
+    { rim: theme.accentA, body: '#102a28', gem: '#d4ff8a' },
+    { rim: theme.accentB, body: '#0c2438', gem: '#9ee7ff' },
+    { rim: magenta, body: '#24102e', gem: '#ffb3e8' }
+  ];
+  const pal = palettes[Math.abs(Math.floor((g.phase || 0) * 8)) % palettes.length];
 
   ctx.save();
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 12;
-  const grad = ctx.createLinearGradient(left, top, left + g.width, top + g.thickness);
-  grad.addColorStop(0, theme.accentA);
-  grad.addColorStop(1, theme.accentB);
-  ctx.fillStyle = grad;
-
+  ctx.shadowColor = pal.rim;
+  ctx.shadowBlur = 14;
   const r = Math.min(6, g.thickness / 2);
   ctx.beginPath();
   ctx.moveTo(left + r, top);
@@ -18160,12 +18816,27 @@ function drawHBar(g, theme) {
   ctx.lineTo(left, top + r);
   ctx.quadraticCurveTo(left, top, left + r, top);
   ctx.closePath();
+  const body = ctx.createLinearGradient(left, top, left, top + g.thickness);
+  body.addColorStop(0, pal.rim);
+  body.addColorStop(0.35, pal.body);
+  body.addColorStop(0.65, pal.body);
+  body.addColorStop(1, pal.rim);
+  ctx.fillStyle = body;
   ctx.fill();
-
-  ctx.strokeStyle = theme.accentB;
-  ctx.lineWidth = 1.5;
-  ctx.globalAlpha = 0.7;
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = pal.rim;
+  ctx.lineWidth = 1.6;
+  ctx.globalAlpha = 0.85;
   ctx.stroke();
+
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = pal.gem;
+  const gemH = Math.max(3, g.thickness * 0.28);
+  ctx.fillRect(left + 10, y - gemH / 2, g.width - 20, gemH);
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.arc(g.x, y, Math.min(4.5, g.thickness * 0.28), 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -19305,17 +19976,27 @@ function traceShipDart() {
   ctx.closePath();
 }
 
+function classicShipPalette(theme) {
+  if (theme && theme.bgStyle === 'toxic' && currentShipSkin().id === 'classic') {
+    return { accentA: '#0ff0fc', accentB: '#7af6ff', hull: '#1a2a44', hullMid: '#3d5a78', nose: '#e8fbff' };
+  }
+  return { accentA: theme.accentA, accentB: theme.accentB };
+}
+
 function drawShipSkinClassic(theme) {
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 12;
+  const pal = classicShipPalette(theme);
+  const toxicReadability = theme && theme.bgStyle === 'toxic';
+  ctx.shadowColor = toxicReadability ? pal.accentA : pal.accentB;
+  ctx.shadowBlur = toxicReadability ? 14 : 12;
   const bodyGrad = ctx.createLinearGradient(-SHIP_W / 2, 0, SHIP_W / 2, 0);
-  bodyGrad.addColorStop(0, theme.accentB);
-  bodyGrad.addColorStop(1, '#ffffff');
+  bodyGrad.addColorStop(0, toxicReadability ? pal.hull : pal.accentB);
+  if (toxicReadability) bodyGrad.addColorStop(0.55, pal.hullMid);
+  bodyGrad.addColorStop(1, toxicReadability ? pal.nose : '#ffffff');
   ctx.fillStyle = bodyGrad;
   traceShipDart();
   ctx.fill();
-  ctx.strokeStyle = theme.accentA;
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = pal.accentA;
+  ctx.lineWidth = toxicReadability ? 2 : 1.5;
   ctx.stroke();
 }
 
@@ -19926,9 +20607,10 @@ function drawShipTrailWorld(theme) {
 function drawShipTrailLocal(theme) {
   const skin = currentShipSkin().id;
   if (skin === 'molten' || skin === 'void' || skin === 'toxic' || skin === 'signal') return;
+  const pal = classicShipPalette(theme);
   const id = currentShipTrail().id;
   if (id === 'classic' || id === 'echo' || id === 'ribbon') {
-    drawClassicFlame(theme, 0, theme.accentA, theme.accentB);
+    drawClassicFlame(theme, 0, pal.accentA, pal.accentB);
     return;
   }
   if (id === 'pulse') {
@@ -19936,7 +20618,7 @@ function drawShipTrailLocal(theme) {
       const pulse = 0.55 + 0.45 * Math.abs(Math.sin(frame * 0.28 + i * 0.9));
       const len = (10 + i * 7 + (holding ? 8 : 0)) * pulse;
       ctx.globalAlpha = 0.35 + pulse * 0.4;
-      ctx.strokeStyle = i % 2 === 0 ? theme.accentB : theme.accentA;
+      ctx.strokeStyle = i % 2 === 0 ? pal.accentB : pal.accentA;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(-SHIP_W / 2 - 2, -5 + i);
@@ -19948,7 +20630,7 @@ function drawShipTrailLocal(theme) {
     return;
   }
   if (id === 'sparks') {
-    drawClassicFlame(theme, -4, theme.accentB, '#ffffff');
+    drawClassicFlame(theme, -4, pal.accentB, '#ffffff');
     return;
   }
   if (id === 'glitch') {
@@ -19962,7 +20644,7 @@ function drawShipTrailLocal(theme) {
       const len = baseLen + ((frame * 2 + i * 7) % 16) - (i * 2);
       const xOff = ((frame + i * 13) % 9) - 4;
       ctx.globalAlpha = 0.55 + (i % 2) * 0.25;
-      ctx.fillStyle = i % 2 === 0 ? theme.accentB : theme.accentA;
+      ctx.fillStyle = i % 2 === 0 ? pal.accentB : pal.accentA;
       ctx.fillRect(-SHIP_W / 2 - len + xOff, y, len, 2.2);
     }
     if ((frame % 6) < 2) {
@@ -20020,22 +20702,22 @@ function drawShipTrailLocal(theme) {
   if (id === 'twin') {
     ctx.save();
     ctx.translate(0, -8);
-    drawClassicFlame(theme, -2, theme.accentB, '#ffffff');
+    drawClassicFlame(theme, -2, pal.accentB, '#ffffff');
     ctx.restore();
     ctx.save();
     ctx.translate(0, 8);
-    drawClassicFlame(theme, -2, theme.accentA, '#ffffff');
+    drawClassicFlame(theme, -2, pal.accentA, '#ffffff');
     ctx.restore();
     return;
   }
   if (id === 'helix') {
-    drawClassicFlame(theme, -8, theme.accentB, theme.accentA);
+    drawClassicFlame(theme, -8, pal.accentB, pal.accentA);
     return;
   }
   if (id === 'rings') {
-    drawClassicFlame(theme, -10, theme.accentB, '#ffffff');
+    drawClassicFlame(theme, -10, pal.accentB, '#ffffff');
     ctx.save();
-    ctx.strokeStyle = theme.accentA;
+    ctx.strokeStyle = pal.accentA;
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 3; i++) {
       const age = (frame * 2.4 + i * 11) % 28;
@@ -20211,7 +20893,7 @@ function drawBars(theme) {
   ctx.shadowBlur = 0;
   ctx.font = '9px Courier New';
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.fillText('build 2026-08-28-vortex-overlap-check', 14, BAR_HEIGHT + 10);
+  if (DEV_TOOLS_ENABLED) ctx.fillText('build 2026-08-28-vortex-overlap-check', 14, BAR_HEIGHT + 10);
   ctx.textAlign = 'right';
   ctx.font = 'bold 13px Courier New';
   ctx.fillStyle = theme.accentA;
@@ -20237,9 +20919,15 @@ function drawBars(theme) {
   ctx.font = 'bold 15px Courier New';
   ctx.fillStyle = theme.accentA;
   ctx.textAlign = 'left';
-  ctx.fillText('DISTANCE: ' + Math.floor(distance - zoneStartDistance) + ' / ' + THEME_DISTANCE, 14, H - BAR_HEIGHT / 2 + 1);
-  ctx.textAlign = 'right';
-  ctx.fillText('BEST: ' + best, W - 14, H - BAR_HEIGHT / 2 + 1);
+  const zoneDist = Math.floor(distance - zoneStartDistance);
+  const distLabel = (theme.isBossZone || theme.isMiniBossZone)
+    ? ('DISTANCE: ' + zoneDist)
+    : ('DISTANCE: ' + zoneDist + ' / ' + THEME_DISTANCE);
+  ctx.fillText(distLabel, 14, H - BAR_HEIGHT / 2 + 1);
+  if (!theme.isBossZone && !theme.isMiniBossZone) {
+    ctx.textAlign = 'right';
+    ctx.fillText('BEST: ' + best, W - 14, H - BAR_HEIGHT / 2 + 1);
+  }
 }
 
 function drawWarpEffect() {
@@ -20292,8 +20980,8 @@ function drawTerrain(theme) {
   if (terrainSegments.length < 2) return;
 
   ctx.save();
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 12;
+  // shadowBlur on these giant cave fills is what tanks Inferno in Chrome
+  ctx.shadowBlur = 0;
 
   // top land mass
   const topGrad = ctx.createLinearGradient(0, PLAY_TOP, 0, PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.55);
@@ -20502,6 +21190,7 @@ function updateBgmForState() {
     const fileTrack = currentFileBgmTrack();
     if (fileTrack) {
       playFileBgm(fileTrack.id);
+      if (fileTrack.id === 'bgm-05-molten-core-boss') prefetchBgmTrack('bgm-05-molten-core');
       if (fileTrack.id === 'bgm-10-reactor-core-p1') prefetchBgmTrack('bgm-10-reactor-core-p8');
       if (fileTrack.id === 'bgm-13-the-signal-p1') prefetchBgmTrack('bgm-13-the-signal-p3');
       if (fileTrack.id === 'bgm-13-the-signal-p3') prefetchBgmTrack('bgm-13-the-signal-p5');
@@ -20529,7 +21218,9 @@ function draw() {
 
   const shakeOffset = getBossShakeOffset();
   ctx.save();
-  ctx.translate(shakeOffset.x, shakeOffset.y);
+  if (shakeOffset.x || shakeOffset.y) {
+    ctx.translate(Math.round(shakeOffset.x), Math.round(shakeOffset.y));
+  }
 
   const theme = currentTheme();
   if (state === 'home') {
@@ -20578,16 +21269,14 @@ function draw() {
 let lastRenderedOverlayState = null;
 const STATIC_OVERLAY_STATES = new Set(['zone-select', 'settings', 'achievements', 'paused', 'statistics', 'confirm-reset-stats', 'victory']);
 function updateOverlay() {
+  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state;
+  if (__renderKey === lastRenderedOverlayState) return;
   overlay.classList.toggle('home-layout', state === 'home');
   pauseToggleBtn.style.display = (state === 'playing' || state === 'paused') ? 'block' : 'none';
-  pauseToggleBtn.style.top = (BAR_HEIGHT + 8) + 'px';
+  positionPauseButton();
   pauseToggleBtn.textContent = (state === 'paused') ? '\u25B6' : 'II';
   pauseToggleBtn.title = (state === 'paused') ? 'Resume (Esc)' : 'Pause (Esc)';
   overlay.style.pointerEvents = (state === 'playing' || state === 'ready' || state === 'respawn' || state === 'gameover' || state === 'victory') ? 'none' : 'auto';
-  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state;
-  if (__renderKey === lastRenderedOverlayState) {
-    return;
-  }
   lastRenderedOverlayState = __renderKey;
   const __scrollList = (typeof overlay.querySelector === 'function') ? overlay.querySelector('.scrollable-overlay-list') : null;
   const __savedScrollTop = __scrollList ? __scrollList.scrollTop : null;
@@ -20646,6 +21335,7 @@ function updateOverlay() {
     overlay.innerHTML = `
       <div class="menu-panel">
         <div id="title" style="font-size:32px;">SETTINGS</div>
+        ${BROWSER_NOTE_HTML}
         <div id="subtitle" class="overlay-recap">Audio</div>
         <div class="settings-diff-list scrollable-overlay-list">
           <div class="menu-btn-row" data-action="toggle-sfx">
@@ -20674,6 +21364,24 @@ function updateOverlay() {
             </div>
           </div>
           <div class="settings-trail-hint">${currentShipSkin().hint} &middot; ${unlockedShipSkins().length} / ${SHIP_SKINS.length} unlocked</div>
+          <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
+          <div class="menu-btn-row" data-action="copy-save-id">
+            <span class="menu-btn-label">SAVE ID</span>
+            <span class="row-action-indicator settings-save-id">${ensurePlayerSaveId()}</span>
+          </div>
+          <div class="settings-trail-hint">Keep this ID or bookmark the page (the address ends with #sf=${ensurePlayerSaveId()}). Clearing cache does not erase a server save. Export a file for a copy that lives outside the browser.</div>
+          <div class="menu-btn-row" data-action="export-save">
+            <span class="menu-btn-label">EXPORT SAVE</span>
+            <span class="row-action-indicator">FILE &#9660;</span>
+          </div>
+          <div class="menu-btn-row" data-action="import-save">
+            <span class="menu-btn-label">IMPORT SAVE</span>
+            <span class="row-action-indicator">FILE &#9654;</span>
+          </div>
+          <div class="menu-btn-row" data-action="restore-save-id">
+            <span class="menu-btn-label">RESTORE ID</span>
+            <span class="row-action-indicator">LOAD &#9654;</span>
+          </div>
           <div class="achievement-section-header" style="margin-top:14px;">DIFFICULTY DETAILS</div>
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-easy">EASY</div>
@@ -20992,9 +21700,11 @@ function updateOverlay() {
 const devToggle = document.getElementById('dev-toggle');
 const devPanel = document.getElementById('dev-panel');
 
-devToggle.addEventListener('click', () => {
-  devPanel.classList.toggle('active');
-});
+if (DEV_TOOLS_ENABLED && devToggle && devPanel) {
+  devToggle.addEventListener('click', () => {
+    devPanel.classList.toggle('active');
+  });
+}
 
 function devStatus(msg) {
   const el = document.getElementById('dev-status');
@@ -21431,13 +22141,16 @@ devPanel.appendChild(exportTextarea);
 
 const fireballSpeedSlider = document.getElementById('fireball-speed-slider');
 const fireballSpeedValue = document.getElementById('fireball-speed-value');
-fireballSpeedSlider.addEventListener('input', () => {
-  fireballSpeedMult = parseFloat(fireballSpeedSlider.value);
-  fireballSpeedValue.textContent = fireballSpeedMult.toFixed(1);
-  devStatus('Flame speed set to ' + fireballSpeedMult.toFixed(1) + 'x world scroll.');
-});
+if (DEV_TOOLS_ENABLED && fireballSpeedSlider && fireballSpeedValue) {
+  fireballSpeedSlider.addEventListener('input', () => {
+    fireballSpeedMult = parseFloat(fireballSpeedSlider.value);
+    fireballSpeedValue.textContent = fireballSpeedMult.toFixed(1);
+    devStatus('Flame speed set to ' + fireballSpeedMult.toFixed(1) + 'x world scroll.');
+  });
+}
 
 window.addEventListener('keydown', (e) => {
+  if (!DEV_TOOLS_ENABLED) return;
   const num = parseInt(e.key, 10);
   if (num >= 1 && num <= THEMES.length) {
     devJumpToTheme(num - 1);
@@ -21736,6 +22449,7 @@ function simulateZonePreview(themeIdx, targetDistance) {
   terrainLevelX = 0;
   terrainWaypointTarget = null;
   terrainWaypointSegLeft = 0;
+  terrainMeanderIndex = 0;
   ship.x = 0;
   ship.y = (PLAY_TOP + PLAY_BOTTOM) / 2;
 
@@ -24533,9 +25247,9 @@ function loop() {
       if (elapsed > 100) elapsed = 100;
 
       if (state === 'playing' || state === 'victory') {
-        // One tick per paint so a 120/144Hz Cursor panel stays at the
-        // speed this game was tuned for. Extra ticks only when a frame
-        // actually ran long (typical ~30fps fullscreen Chrome).
+        // One tick per paint so a 120/144Hz panel stays at the speed this
+        // game was tuned for. Extra ticks only when a frame actually ran
+        // long (dropped frames), not to "catch up" Chrome 60Hz vsync.
         let steps = 1;
         if (elapsed > 20) {
           steps = Math.min(MAX_SIM_STEPS, Math.round(elapsed / SIM_STEP_MS));
@@ -24559,12 +25273,32 @@ function loop() {
 window.addEventListener('resize', checkOrientation);
 window.addEventListener('orientationchange', checkOrientation);
 
+(function bindPlayerSaveImport() {
+  const input = document.getElementById('player-save-import');
+  if (!input) return;
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        importPlayerSaveObject(JSON.parse(String(reader.result || '')));
+      } catch (err) {
+        window.alert('Could not import that file. Use a Synth Flight export JSON.');
+      }
+    };
+    reader.readAsText(file);
+  });
+})();
+
 try {
   checkOrientation();
   resetGame();
   state = 'home';
   updateOverlay();
   window.SYNTH_FLIGHT_BOOTED = true;
+  hydrateDurableSave();
   loop();
 } catch (e) {
   window.SYNTH_FLIGHT_BOOTED = true;
