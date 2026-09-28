@@ -2581,6 +2581,7 @@ const SFX_CATALOG = [
   { id: 'hzSupernova', section: '3. Zone Hazards', name: 'Supernova buildup + explosion', kind: 'oneshot', play: () => sfxHazardFire('supernova') },
   { id: 'hzNovaDebris', section: '3. Zone Hazards', name: 'Supernova debris', kind: 'oneshot', play: () => sfxHazardImpact('supernovadebris') },
   { id: 'hzLaserGrid', section: '3. Zone Hazards', name: 'Laser grid', kind: 'oneshot', play: () => sfxHazardImpact('lasergrid') },
+  { id: 'hzDroneBuzz', section: '3. Zone Hazards', name: 'Security drone hit (Neon City)', kind: 'oneshot', play: () => sfxHazardImpact('securitydrone') },
   { id: 'hzFireball', section: '3. Zone Hazards', name: 'Fireball breath (proximity)', kind: 'oneshot', play: () => playBowserFireball() },
   { id: 'hzGeyser', section: '3. Zone Hazards', name: 'Toxic geyser (proximity)', kind: 'loop', play: () => { startToxicGeyserSound(); updateToxicGeyserMix(0.85); } },
   { id: 'hzGeyserErupt', section: '3. Zone Hazards', name: 'Toxic geyser eruption', kind: 'oneshot', play: () => playGeyserEruption(1) },

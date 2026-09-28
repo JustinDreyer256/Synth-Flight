@@ -2385,8 +2385,18 @@ function playEmpDischarge() {
 }
 
 function playDroneBuzz() {
-  playSynth({ type: 'sawtooth', freq: 168, freqEnd: 132, duration: 0.16, attack: 0.01, decay: 0.05, sustain: 0.5, release: 0.06, volume: 0.16, filterType: 'lowpass', filterFreq: 900, delaySend: 0.08 });
-  playNoiseBurst({ duration: 0.12, filterFreq: 700, filterType: 'bandpass', filterQ: 1.2, volume: 0.14 });
+  playSecurityDroneHit();
+}
+
+function playSecurityDroneHit() {
+  if (!audioUnlocked || !audioCtx) return;
+  const t0 = audioCtx.currentTime;
+  playNoiseBurst({ duration: 0.05, filterFreq: 3800, filterType: 'highpass', volume: 0.22, when: t0 });
+  playNoiseBurst({ duration: 0.11, filterFreq: 340, filterEnd: 110, filterType: 'lowpass', filterQ: 0.55, volume: 0.4, when: t0 });
+  playNoiseBurst({ duration: 0.045, filterFreq: 1700, filterType: 'bandpass', filterQ: 2.2, volume: 0.2, when: t0 + 0.016 });
+  playSynth({ type: 'sine', freq: 86, freqEnd: 36, duration: 0.14, attack: 0.001, decay: 0.04, sustain: 0.3, release: 0.06, volume: 0.28, filterFreq: 220, delaySend: 0, when: t0 });
+  playSynth({ type: 'triangle', freq: 280, freqEnd: 95, duration: 0.09, attack: 0.001, decay: 0.025, sustain: 0.22, release: 0.04, volume: 0.12, filterFreq: 700, delaySend: 0, when: t0 });
+  playSynth({ type: 'sine', freq: 980, freqEnd: 240, duration: 0.07, attack: 0.001, decay: 0.018, sustain: 0.18, release: 0.04, volume: 0.12, filterFreq: 2600, delaySend: 0.08, when: t0 });
 }
 
 function playAlienDroneSpawn() {
@@ -2607,7 +2617,7 @@ function sfxHazardFire(type) {
     playNoiseBurst({ duration: 0.28, filterFreq: 700, filterEnd: 180, filterType: 'lowpass', volume: 0.42, when: audioCtx.currentTime + 0.12 });
     playSynth({ type: 'sine', freq: 140, freqEnd: 40, duration: 0.22, attack: 0.004, decay: 0.06, sustain: 0.35, release: 0.08, volume: 0.24, filterFreq: 300, delaySend: 0, when: audioCtx.currentTime + 0.12 });
   } else if (family === 'drone') {
-    playDroneBuzz();
+    playSecurityDroneHit();
   } else if (family === 'metal') {
     playMetalClank();
   } else if (family === 'bossHeavy') {
@@ -2709,8 +2719,7 @@ function sfxHazardImpact(type) {
     playPlasmaShot();
     playSynth({ type: 'sine', freq: 90, freqEnd: 40, duration: 0.12, attack: 0.002, decay: 0.04, sustain: 0.3, release: 0.06, volume: 0.16, filterFreq: 300, delaySend: 0 });
   } else if (family === 'drone') {
-    playDroneBuzz();
-    playNoiseBurst({ duration: 0.1, filterFreq: 500, filterType: 'lowpass', volume: 0.22 });
+    playSecurityDroneHit();
   } else if (family === 'bossHeavy') {
     playBossSlam();
   } else if (family === 'key') {
