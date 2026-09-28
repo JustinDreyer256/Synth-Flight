@@ -1456,13 +1456,34 @@ const DIFFICULTY_CONFIG = {
   hard: { lives: 9, continues: 1, invincibilityFrames: false, freeHitsPerLife: 0 },
   extra: { lives: 1, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
 };
-const INVINCIBILITY_DURATION_MS = 1500; // 1.5 real seconds -- how long a granted protection window actually lasts, measured against the system clock so it's accurate regardless of frame rate
-const FREE_HIT_COOLDOWN_MS = 4000; // 4 real seconds -- how often a hazard touch can be forgiven outright (Easy / Overdrive, or Normal's single first hit). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
+const INVINCIBILITY_DURATION_MS = 1500; // 1.5 seconds of play time -- how long a granted protection window lasts. Measured on the game clock so pause does not burn it down.
+const FREE_HIT_COOLDOWN_MS = 4000; // 4 seconds of play time -- how often a hazard touch can be forgiven outright (Easy / Overdrive, or Normal's single first hit). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
 function nowMs() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
+let hitCyclePauseStartedAt = 0; // wall clock when the current pause froze the hit cycle; 0 if the cycle is running
+let hitCyclePausedAccumMs = 0; // total time spent paused this run, subtracted from wall clock for i-frames / death window
+function gameNowMs() {
+  const t = nowMs();
+  let paused = hitCyclePausedAccumMs;
+  if (hitCyclePauseStartedAt > 0) paused += t - hitCyclePauseStartedAt;
+  return t - paused;
+}
+function beginHitCyclePauseClock() {
+  if (hitCyclePauseStartedAt > 0) return;
+  hitCyclePauseStartedAt = nowMs();
+}
+function endHitCyclePauseClock() {
+  if (hitCyclePauseStartedAt <= 0) return;
+  hitCyclePausedAccumMs += nowMs() - hitCyclePauseStartedAt;
+  hitCyclePauseStartedAt = 0;
+}
+function resetHitCyclePauseClock() {
+  hitCyclePauseStartedAt = 0;
+  hitCyclePausedAccumMs = 0;
+}
 let MAX_LIVES = 3; // recalculated from DIFFICULTY_CONFIG each time resetGame() runs
 let continuesRemaining = 0;
-let invincibilityEndTime = -1; // real timestamp (ms); -1 means no active window
-let freeHitCooldownEndTime = -1; // real timestamp (ms) at which a hazard touch can next be forgiven outright, rather than costing a life
+let invincibilityEndTime = -1; // game-clock timestamp (ms); -1 means no active window
+let freeHitCooldownEndTime = -1; // game-clock timestamp (ms) at which a hazard touch can next be forgiven outright, rather than costing a life
 let freeHitsUsedThisLife = 0; // forgiven hazard hits on the current life -- reset on respawn / new run
 let pendingRespawnMercyEligible = false; // true only when the death that caused the current respawn was a hazard death -- wall deaths are never eligible for the post-respawn mercy window
 let maxDistanceReached = 0;
@@ -2029,7 +2050,7 @@ function clampGhostShipToPlayfield() {
 function tryEndGame(hazardType) {
   if (ghostMode) return;
   if (bossFinalChargeActive || bossExplosionActive || bossFullyDefeated) return; // victory is already secured -- nothing can kill the player during the boss's death sequence or the fly-off that follows
-  const t = nowMs();
+  const t = gameNowMs();
   if (t < invincibilityEndTime) return; // currently within an active protection window -- ignore this collision entirely
   sfxHazardImpact(hazardType);
   const maxFreeHits = DIFFICULTY_CONFIG[selectedDifficulty]?.freeHitsPerLife || 0;
@@ -4955,6 +4976,7 @@ function resetGame() {
   continuesRemaining = diffConfig.continues;
   invincibilityEndTime = -1;
   freeHitCooldownEndTime = -1;
+  resetHitCyclePauseClock();
   freeHitsUsedThisLife = 0;
   pendingRespawnMercyEligible = false;
   diedInCurrentZone = false;
@@ -5034,7 +5056,7 @@ function startPress() {
     sfxRespawn();
     state = 'playing';
     if (pendingRespawnMercyEligible && DIFFICULTY_CONFIG[selectedDifficulty]?.invincibilityFrames) {
-      invincibilityEndTime = nowMs() + INVINCIBILITY_DURATION_MS;
+      invincibilityEndTime = gameNowMs() + INVINCIBILITY_DURATION_MS;
     }
     pendingRespawnMercyEligible = false;
   } else if (state === 'gameover' || state === 'victory') {
@@ -5067,6 +5089,7 @@ function cycleDifficulty(direction) {
 function pauseGame() {
   if (state !== 'playing') return;
   state = 'paused';
+  beginHitCyclePauseClock();
   pointerHolding = false;
   holding = keyHolding;
   stopLiftSound();
@@ -5076,6 +5099,7 @@ function pauseGame() {
 
 function resumeGame() {
   if (state !== 'paused') return;
+  endHitCyclePauseClock();
   state = 'playing';
 }
 
@@ -13248,7 +13272,7 @@ let glowDangerPreviewTimer = null;
 
 function isEasyGlowDangerActive() {
   if (state !== 'playing' || ghostMode) return false;
-  const t = nowMs();
+  const t = gameNowMs();
   return t >= invincibilityEndTime && t < freeHitCooldownEndTime;
 }
 
@@ -13594,7 +13618,7 @@ function stopGlowDangerSound() {
 
 function glowDangerUrgencyValue() {
   if (glowDangerPreviewUrgency >= 0) return glowDangerPreviewUrgency;
-  const remaining = Math.max(0, freeHitCooldownEndTime - nowMs());
+  const remaining = Math.max(0, freeHitCooldownEndTime - gameNowMs());
   const windowMs = Math.max(1, FREE_HIT_COOLDOWN_MS - INVINCIBILITY_DURATION_MS);
   return 1 - Math.min(1, remaining / windowMs);
 }
@@ -20927,10 +20951,10 @@ function drawShip(theme) {
   // classic NES-style blinking sprite while invincible -- hard on/off
   // toggle rather than a smooth fade, matching the authentic retro look
   // real hardware produced (no alpha blending, just skipping the draw
-  // entirely every other interval). Tied to real time so the blink rate
-  // itself stays consistent regardless of frame rate.
-  const isInvincible = ghostMode || nowMs() < invincibilityEndTime;
-  if (isInvincible && Math.floor(nowMs() / INVINCIBILITY_BLINK_INTERVAL_MS) % 2 === 0) return;
+  // entirely every other interval). Tied to the game clock so pause
+  // freezes the blink instead of burning through the protection window.
+  const isInvincible = ghostMode || gameNowMs() < invincibilityEndTime;
+  if (isInvincible && Math.floor(gameNowMs() / INVINCIBILITY_BLINK_INTERVAL_MS) % 2 === 0) return;
 
   drawShipTrailWorld(theme);
 
@@ -20946,7 +20970,7 @@ function drawShip(theme) {
   // here costs a real life. A slow, calm pulse signals "not safe anymore"
   // without the urgency of the blink, since there's no immediate threat,
   // just a used-up grace period.
-  const nowForGlow = nowMs();
+  const nowForGlow = gameNowMs();
   if (!isInvincible && nowForGlow < freeHitCooldownEndTime) {
     const pulse = 0.4 + 0.3 * Math.sin(nowForGlow * 0.004);
     const glowR = SHIP_W * 1.1;

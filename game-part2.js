@@ -2823,6 +2823,7 @@ function resetGame() {
   continuesRemaining = diffConfig.continues;
   invincibilityEndTime = -1;
   freeHitCooldownEndTime = -1;
+  resetHitCyclePauseClock();
   freeHitsUsedThisLife = 0;
   pendingRespawnMercyEligible = false;
   diedInCurrentZone = false;
@@ -2902,7 +2903,7 @@ function startPress() {
     sfxRespawn();
     state = 'playing';
     if (pendingRespawnMercyEligible && DIFFICULTY_CONFIG[selectedDifficulty]?.invincibilityFrames) {
-      invincibilityEndTime = nowMs() + INVINCIBILITY_DURATION_MS;
+      invincibilityEndTime = gameNowMs() + INVINCIBILITY_DURATION_MS;
     }
     pendingRespawnMercyEligible = false;
   } else if (state === 'gameover' || state === 'victory') {
@@ -2935,6 +2936,7 @@ function cycleDifficulty(direction) {
 function pauseGame() {
   if (state !== 'playing') return;
   state = 'paused';
+  beginHitCyclePauseClock();
   pointerHolding = false;
   holding = keyHolding;
   stopLiftSound();
@@ -2944,6 +2946,7 @@ function pauseGame() {
 
 function resumeGame() {
   if (state !== 'paused') return;
+  endHitCyclePauseClock();
   state = 'playing';
 }
 

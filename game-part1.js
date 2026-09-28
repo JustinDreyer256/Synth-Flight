@@ -1456,13 +1456,34 @@ const DIFFICULTY_CONFIG = {
   hard: { lives: 9, continues: 1, invincibilityFrames: false, freeHitsPerLife: 0 },
   extra: { lives: 1, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
 };
-const INVINCIBILITY_DURATION_MS = 1500; // 1.5 real seconds -- how long a granted protection window actually lasts, measured against the system clock so it's accurate regardless of frame rate
-const FREE_HIT_COOLDOWN_MS = 4000; // 4 real seconds -- how often a hazard touch can be forgiven outright (Easy / Overdrive, or Normal's single first hit). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
+const INVINCIBILITY_DURATION_MS = 1500; // 1.5 seconds of play time -- how long a granted protection window lasts. Measured on the game clock so pause does not burn it down.
+const FREE_HIT_COOLDOWN_MS = 4000; // 4 seconds of play time -- how often a hazard touch can be forgiven outright (Easy / Overdrive, or Normal's single first hit). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
 function nowMs() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
+let hitCyclePauseStartedAt = 0; // wall clock when the current pause froze the hit cycle; 0 if the cycle is running
+let hitCyclePausedAccumMs = 0; // total time spent paused this run, subtracted from wall clock for i-frames / death window
+function gameNowMs() {
+  const t = nowMs();
+  let paused = hitCyclePausedAccumMs;
+  if (hitCyclePauseStartedAt > 0) paused += t - hitCyclePauseStartedAt;
+  return t - paused;
+}
+function beginHitCyclePauseClock() {
+  if (hitCyclePauseStartedAt > 0) return;
+  hitCyclePauseStartedAt = nowMs();
+}
+function endHitCyclePauseClock() {
+  if (hitCyclePauseStartedAt <= 0) return;
+  hitCyclePausedAccumMs += nowMs() - hitCyclePauseStartedAt;
+  hitCyclePauseStartedAt = 0;
+}
+function resetHitCyclePauseClock() {
+  hitCyclePauseStartedAt = 0;
+  hitCyclePausedAccumMs = 0;
+}
 let MAX_LIVES = 3; // recalculated from DIFFICULTY_CONFIG each time resetGame() runs
 let continuesRemaining = 0;
-let invincibilityEndTime = -1; // real timestamp (ms); -1 means no active window
-let freeHitCooldownEndTime = -1; // real timestamp (ms) at which a hazard touch can next be forgiven outright, rather than costing a life
+let invincibilityEndTime = -1; // game-clock timestamp (ms); -1 means no active window
+let freeHitCooldownEndTime = -1; // game-clock timestamp (ms) at which a hazard touch can next be forgiven outright, rather than costing a life
 let freeHitsUsedThisLife = 0; // forgiven hazard hits on the current life -- reset on respawn / new run
 let pendingRespawnMercyEligible = false; // true only when the death that caused the current respawn was a hazard death -- wall deaths are never eligible for the post-respawn mercy window
 let maxDistanceReached = 0;
@@ -2029,7 +2050,7 @@ function clampGhostShipToPlayfield() {
 function tryEndGame(hazardType) {
   if (ghostMode) return;
   if (bossFinalChargeActive || bossExplosionActive || bossFullyDefeated) return; // victory is already secured -- nothing can kill the player during the boss's death sequence or the fly-off that follows
-  const t = nowMs();
+  const t = gameNowMs();
   if (t < invincibilityEndTime) return; // currently within an active protection window -- ignore this collision entirely
   sfxHazardImpact(hazardType);
   const maxFreeHits = DIFFICULTY_CONFIG[selectedDifficulty]?.freeHitsPerLife || 0;

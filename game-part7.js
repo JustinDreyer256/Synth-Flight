@@ -3299,10 +3299,10 @@ function drawShip(theme) {
   // classic NES-style blinking sprite while invincible -- hard on/off
   // toggle rather than a smooth fade, matching the authentic retro look
   // real hardware produced (no alpha blending, just skipping the draw
-  // entirely every other interval). Tied to real time so the blink rate
-  // itself stays consistent regardless of frame rate.
-  const isInvincible = ghostMode || nowMs() < invincibilityEndTime;
-  if (isInvincible && Math.floor(nowMs() / INVINCIBILITY_BLINK_INTERVAL_MS) % 2 === 0) return;
+  // entirely every other interval). Tied to the game clock so pause
+  // freezes the blink instead of burning through the protection window.
+  const isInvincible = ghostMode || gameNowMs() < invincibilityEndTime;
+  if (isInvincible && Math.floor(gameNowMs() / INVINCIBILITY_BLINK_INTERVAL_MS) % 2 === 0) return;
 
   drawShipTrailWorld(theme);
 
@@ -3318,7 +3318,7 @@ function drawShip(theme) {
   // here costs a real life. A slow, calm pulse signals "not safe anymore"
   // without the urgency of the blink, since there's no immediate threat,
   // just a used-up grace period.
-  const nowForGlow = nowMs();
+  const nowForGlow = gameNowMs();
   if (!isInvincible && nowForGlow < freeHitCooldownEndTime) {
     const pulse = 0.4 + 0.3 * Math.sin(nowForGlow * 0.004);
     const glowR = SHIP_W * 1.1;

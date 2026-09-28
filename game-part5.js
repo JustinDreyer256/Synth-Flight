@@ -1473,7 +1473,7 @@ let glowDangerPreviewTimer = null;
 
 function isEasyGlowDangerActive() {
   if (state !== 'playing' || ghostMode) return false;
-  const t = nowMs();
+  const t = gameNowMs();
   return t >= invincibilityEndTime && t < freeHitCooldownEndTime;
 }
 
@@ -1819,7 +1819,7 @@ function stopGlowDangerSound() {
 
 function glowDangerUrgencyValue() {
   if (glowDangerPreviewUrgency >= 0) return glowDangerPreviewUrgency;
-  const remaining = Math.max(0, freeHitCooldownEndTime - nowMs());
+  const remaining = Math.max(0, freeHitCooldownEndTime - gameNowMs());
   const windowMs = Math.max(1, FREE_HIT_COOLDOWN_MS - INVINCIBILITY_DURATION_MS);
   return 1 - Math.min(1, remaining / windowMs);
 }
