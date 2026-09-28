@@ -4163,7 +4163,7 @@ function updateOverlay() {
       <div class="menu-panel continue-panel">
         <div class="panel-header">PAUSED</div>
         <div class="menu-stack">
-          <button type="button" class="btn-start-game" data-action="resume-game">RESUME &#9654;</button>
+          <button type="button" class="btn-start-game" data-action="resume-game"><span>RESUME</span><span class="cta-arrow">&#9654;</span></button>
           <button type="button" class="btn-continue-secondary" data-action="open-pause-options">OPTIONS</button>
           <button type="button" class="btn-continue-secondary" data-action="quit-to-home">${isPracticeRun ? 'ZONE SELECT' : 'MAIN MENU'}</button>
         </div>
@@ -4181,7 +4181,7 @@ function updateOverlay() {
         <div class="continue-credit">${continuesRemaining}</div>
         <div class="continue-credit-label">${continuesRemaining === 1 ? 'CREDIT REMAINING' : 'CREDITS REMAINING'}</div>
         <div class="menu-stack">
-          <button type="button" class="btn-start-game" data-action="use-continue">CONTINUE &#9654;</button>
+          <button type="button" class="btn-start-game" data-action="use-continue"><span>CONTINUE</span><span class="cta-arrow">&#9654;</span></button>
           <button type="button" class="btn-continue-secondary" data-action="quit-to-home">${isPracticeRun ? 'ZONE SELECT' : 'MAIN MENU'}</button>
         </div>
       </div>

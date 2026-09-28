@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-store">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Synth Flight snes345</title>
+<title>Synth Flight snes351</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -223,7 +223,14 @@
   .options-difficulty-value.difficulty-easy, .stepper-value.difficulty-easy, .settings-diff-name.difficulty-easy { color: #0ff0fc; text-shadow: 0 0 10px rgba(15,240,252,0.8); }
   .options-difficulty-value.difficulty-normal, .stepper-value.difficulty-normal, .settings-diff-name.difficulty-normal { color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,0.8); }
   .options-difficulty-value.difficulty-hard, .stepper-value.difficulty-hard, .settings-diff-name.difficulty-hard { color: #ff2079; text-shadow: 0 0 10px rgba(255,32,121,0.8); }
-  .options-difficulty-value.difficulty-extra, .stepper-value.difficulty-extra, .settings-diff-card.difficulty-extra:not(.locked) .settings-diff-name { color: #ff0000; text-shadow: 0 0 10px rgba(255,0,0,0.9); }
+  .options-difficulty-value.difficulty-extra, .stepper-value.difficulty-extra, .settings-diff-card.difficulty-extra:not(.locked) .settings-diff-name {
+    color: #ff8a96;
+    text-shadow:
+      0 0 2px #2a0510,
+      0 1px 2px rgba(0, 0, 0, 0.9),
+      0 0 10px rgba(255, 50, 80, 0.95),
+      0 0 18px rgba(255, 0, 70, 0.55);
+  }
 
   /* Options panel v2 (uploaded design) */
   .options-panel-v2 {
@@ -243,11 +250,50 @@
     text-align: center;
     font-size: 20px;
     letter-spacing: 4px;
+    padding-left: 4px;
     color: #fff;
     text-shadow: 0 0 8px var(--neon-cyan);
     margin-bottom: 20px;
     padding-bottom: 8px;
     border-bottom: 1px solid rgba(0, 240, 255, 0.25);
+  }
+  .options-panel-v2 .panel-header {
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 10px;
+    padding-left: 10px;
+    color: #ff2ec4;
+    text-shadow:
+      0 0 8px #ff007f,
+      0 0 18px rgba(255, 0, 127, 0.9),
+      0 0 32px rgba(255, 46, 196, 0.55);
+    border-bottom-color: rgba(255, 0, 127, 0.45);
+  }
+  .options-panel-v2 .settings-picker-label {
+    color: #a0f0ff;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.28);
+  }
+  .options-panel-v2 .btn-continue-secondary,
+  .continue-panel .btn-continue-secondary {
+    height: 46px;
+    font-size: 15px;
+    letter-spacing: 2.5px;
+    color: #a0f0ff;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.28);
+    border-color: rgba(160, 240, 255, 0.32);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .options-panel-v2 .btn-continue-secondary:hover,
+  .options-panel-v2 .btn-continue-secondary:focus,
+  .continue-panel .btn-continue-secondary:hover,
+  .continue-panel .btn-continue-secondary:focus {
+    color: #ffffff;
+    text-shadow: 0 0 10px var(--neon-cyan), 0 0 18px rgba(0, 240, 255, 0.75);
+    border-color: var(--neon-cyan);
+    background: rgba(0, 240, 255, 0.14);
+    box-shadow:
+      0 0 18px rgba(0, 240, 255, 0.55),
+      inset 0 0 0 1px rgba(160, 240, 255, 0.85);
   }
   .menu-stack {
     display: flex;
@@ -272,13 +318,9 @@
   .options-panel-v2 .menu-stack {
     width: 100%;
   }
-  .options-panel-v2 .btn-continue-secondary {
-    height: 46px;
-  }
   .continue-panel {
     min-width: 380px;
     padding-top: 24px;
-    transform: translateX(12%);
   }
   .continue-credit {
     font-size: 64px;
@@ -297,8 +339,14 @@
     color: #efe6f8;
     margin-bottom: 18px;
   }
-  .continue-panel .btn-start-game {
-    height: 48px;
+  .continue-panel .btn-start-game,
+  .options-panel-v2 .btn-start-game {
+    height: 52px;
+    font-size: 16px;
+    letter-spacing: 4px;
+  }
+  .continue-panel .cta-arrow {
+    font-size: 14px;
   }
   .continue-panel .menu-stack {
     width: 100%;
@@ -307,7 +355,6 @@
     width: 100%;
     height: 44px;
     margin: 0;
-    padding: 0 16px;
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.42);
     border-radius: 4px;
@@ -318,6 +365,10 @@
     letter-spacing: 2px;
     text-align: center;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px 0 18px;
     text-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
@@ -507,12 +558,27 @@
     font-weight: 900;
     letter-spacing: 3px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 16px 0 19px;
+    text-shadow:
+      0 1px 0 #000,
+      0 0 3px #000,
+      0 0 6px rgba(0, 0, 0, 0.9),
+      0 2px 4px rgba(0, 0, 0, 0.75);
     box-shadow: 0 0 16px rgba(255, 0, 127, 0.4);
     transition: filter 0.2s, box-shadow 0.2s;
   }
   .btn-start-game:hover {
     filter: brightness(1.2);
     box-shadow: 0 0 24px rgba(0, 240, 255, 0.8);
+  }
+  .cta-arrow {
+    letter-spacing: 0;
+    line-height: 1;
+    font-size: 12px;
   }
   .confirm-panel {
     width: 420px;
@@ -2139,15 +2205,15 @@
 })();
 </script>
 <!-- GAME_PARTS -->
-<script src="game-part1.js?v=snes345"></script>
-<script src="game-part2.js?v=snes345"></script>
-<script src="game-part3.js?v=snes345"></script>
-<script src="game-part4.js?v=snes345"></script>
-<script src="game-part5.js?v=snes345"></script>
-<script src="game-part6.js?v=snes345"></script>
-<script src="game-part7.js?v=snes345"></script>
-<script src="game-part8.js?v=snes345"></script>
-<script src="game-part9.js?v=snes345"></script>
+<script src="game-part1.js?v=snes351"></script>
+<script src="game-part2.js?v=snes351"></script>
+<script src="game-part3.js?v=snes351"></script>
+<script src="game-part4.js?v=snes351"></script>
+<script src="game-part5.js?v=snes351"></script>
+<script src="game-part6.js?v=snes351"></script>
+<script src="game-part7.js?v=snes351"></script>
+<script src="game-part8.js?v=snes351"></script>
+<script src="game-part9.js?v=snes351"></script>
 <!-- /GAME_PARTS -->
 </body>
 </html>
