@@ -3859,30 +3859,18 @@ function updateOverlay() {
       <div class="options-panel-v2">
         <div class="panel-header">OPTIONS</div>
         <div class="menu-stack">
-          <div class="menu-btn-row">
-            <span class="menu-btn-label">DIFFICULTY</span>
+          <div class="options-diff-picker">
+            <div class="settings-picker-label">DIFFICULTY</div>
             <div class="stepper-control">
               <button type="button" class="stepper-arrow" data-action="diff-prev">&#9664;</button>
               <span class="stepper-value ${displayClass}">${displayLabel}</span>
               <button type="button" class="stepper-arrow" data-action="diff-next">&#9654;</button>
             </div>
           </div>
-          <div class="menu-btn-row" data-action="open-zone-select">
-            <span class="menu-btn-label">ZONE SELECT</span>
-            <span class="row-action-indicator">WARP &#9654;</span>
-          </div>
-          <div class="menu-btn-row" data-action="open-settings">
-            <span class="menu-btn-label">SETTINGS</span>
-            <span class="row-action-indicator">OPEN &#9654;</span>
-          </div>
-          <div class="menu-btn-row" data-action="open-achievements">
-            <span class="menu-btn-label">ACHIEVEMENTS</span>
-            <span class="row-action-indicator">VIEW &#9654;</span>
-          </div>
-          <div class="menu-btn-row" data-action="open-statistics">
-            <span class="menu-btn-label">STATISTICS</span>
-            <span class="row-action-indicator">VIEW &#9654;</span>
-          </div>
+          <button type="button" class="btn-continue-secondary" data-action="open-zone-select">ZONE SELECT</button>
+          <button type="button" class="btn-continue-secondary" data-action="open-settings">SETTINGS</button>
+          <button type="button" class="btn-continue-secondary" data-action="open-achievements">ACHIEVEMENTS</button>
+          <button type="button" class="btn-continue-secondary" data-action="open-statistics">STATISTICS</button>
         </div>
         <div class="start-action-container">
           <button type="button" class="btn-start-game" data-action="start-game">CLICK TO START</button>
