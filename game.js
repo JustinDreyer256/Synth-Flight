@@ -1446,7 +1446,7 @@ let clearTimeMs = 0;
 const DIFFICULTY_CONFIG = {
   easy: { lives: 9, continues: 3, invincibilityFrames: true, freeHitsPerLife: Infinity },
   normal: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 1 },
-  hard: { lives: 9, continues: 0, invincibilityFrames: false, freeHitsPerLife: 0 },
+  hard: { lives: 9, continues: 1, invincibilityFrames: false, freeHitsPerLife: 0 },
   extra: { lives: 1, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
 };
 const INVINCIBILITY_DURATION_MS = 1500; // 1.5 real seconds -- how long a granted protection window actually lasts, measured against the system clock so it's accurate regardless of frame rate
@@ -21574,7 +21574,7 @@ function updateOverlay() {
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-hard">HARD</div>
             <div class="settings-diff-stats">
-              9 lives &middot; no continues<br>
+              9 lives &middot; 1 continue<br>
               No invincibility frames
             </div>
           </div>

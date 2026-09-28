@@ -3963,7 +3963,7 @@ function updateOverlay() {
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-hard">HARD</div>
             <div class="settings-diff-stats">
-              9 lives &middot; no continues<br>
+              9 lives &middot; 1 continue<br>
               No invincibility frames
             </div>
           </div>
