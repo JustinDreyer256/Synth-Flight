@@ -1209,6 +1209,39 @@ function drawAsteroid(g, theme) {
   ctx.restore();
 }
 
+function drawSplitRock(g, theme) {
+  drawAsteroid(g, theme);
+  if (!g.cracking) return;
+  const t = Math.min(1, (frame - g.crackFrame) / Math.max(1, g.telegraphFrames));
+  const pulse = 0.55 + 0.45 * Math.sin(frame * 0.28);
+  ctx.save();
+  ctx.translate(g.x, g.y);
+  ctx.strokeStyle = theme.accentA;
+  ctx.globalAlpha = 0.18 + t * 0.35 * pulse;
+  ctx.lineWidth = 3;
+  ctx.shadowColor = theme.accentA;
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.arc(0, 0, g.r + 6 + t * 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.rotate(g.rotSeed + frame * g.spin);
+  ctx.strokeStyle = '#fff4c8';
+  ctx.globalAlpha = 0.55 + t * 0.45;
+  ctx.lineWidth = 2.2 + t * 2.6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-g.r * 0.88, -g.r * 0.12);
+  ctx.lineTo(g.r * 0.84, g.r * 0.18);
+  ctx.stroke();
+  ctx.globalAlpha = 0.35 + t * 0.5;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-g.r * 0.22, -g.r * 0.78);
+  ctx.lineTo(g.r * 0.18, g.r * 0.72);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawFireball(g, theme) {
   const y = liveFireballY(g);
   const r = g.r;
@@ -1770,7 +1803,7 @@ function drawShootingStar(g, theme) {
   const framesBack = frame - prevFrame;
   const prevT = Math.min(1, (prevFrame - g.spawnFrame) / g.life);
   const prevY = g.startY + (g.endY - g.startY) * prevT;
-  const dx = -framesBack * effScroll;
+  const dx = g.oncoming ? framesBack * (g.vx || 0) : -framesBack * effScroll;
   const dy = y - prevY;
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const dirX = dx / len, dirY = dy / len;
@@ -2139,6 +2172,10 @@ function drawGates(theme) {
   for (let g of gates) {
     if (g.type === 'asteroid') {
       drawAsteroid(g, theme);
+      continue;
+    }
+    if (g.type === 'splitrock') {
+      drawSplitRock(g, theme);
       continue;
     }
     if (g.type === 'wreckage') {

@@ -313,10 +313,10 @@ const THEMES = [
     // each entry is one cluster: xJitter offsets each rock from the cluster's spawn x,
     // yFrac/rFrac are fractions (0-1) mapped to actual position/radius
     pattern: [
-      { spacing: 260, asteroids: [{ xJitter: -20, yFrac: 0.25, rFrac: 0.6 }, { xJitter: 10, yFrac: 0.55, rFrac: 0.8 }] },
-      { spacing: 280, asteroids: [{ xJitter: -30, yFrac: 0.35, rFrac: 0.9 }, { xJitter: 0, yFrac: 0.70, rFrac: 0.6 }, { xJitter: 35, yFrac: 0.15, rFrac: 0.5 }] },
-      { spacing: 250, asteroids: [{ xJitter: -10, yFrac: 0.20, rFrac: 0.5 }, { xJitter: 20, yFrac: 0.45, rFrac: 0.7 }, { xJitter: 50, yFrac: 0.75, rFrac: 0.9 }] },
-      { spacing: 300, asteroids: [{ xJitter: -25, yFrac: 0.60, rFrac: 0.8 }, { xJitter: 5, yFrac: 0.30, rFrac: 0.6 }, { xJitter: 35, yFrac: 0.85, rFrac: 0.5 }] }
+      { spacing: 340, asteroids: [{ xJitter: -90, yFrac: 0.16, rFrac: 0.5 }, { xJitter: 70, yFrac: 0.72, rFrac: 0.65 }] },
+      { spacing: 360, asteroids: [{ xJitter: 85, yFrac: 0.12, rFrac: 0.7 }, { xJitter: -40, yFrac: 0.50, rFrac: 0.5 }, { xJitter: -110, yFrac: 0.88, rFrac: 0.45 }] },
+      { spacing: 330, asteroids: [{ xJitter: -75, yFrac: 0.14, rFrac: 0.45 }, { xJitter: 95, yFrac: 0.50, rFrac: 0.55 }, { xJitter: 10, yFrac: 0.86, rFrac: 0.7 }] },
+      { spacing: 380, asteroids: [{ xJitter: 60, yFrac: 0.22, rFrac: 0.6 }, { xJitter: -100, yFrac: 0.78, rFrac: 0.5 }, { xJitter: 20, yFrac: 0.48, rFrac: 0.4 }] }
     ],
     // secondary: shooting stars that fly in a straight diagonal line (no
     // arc/curve) from a start height to a different end height, at varied
@@ -328,11 +328,22 @@ const THEMES = [
     // streak with no discrete star shape, the bright head leading and the
     // tail trailing behind in the direction it came from
     extraShootingStarPattern: [
-      { startYFrac: 0.9, endYFrac: 0.35, lifeFrames: 480, radiusPx: 9, interval: 230 },
-      { startYFrac: 0.1, endYFrac: 0.65, lifeFrames: 450, radiusPx: 8, interval: 210 },
-      { startYFrac: 0.5, endYFrac: 0.15, lifeFrames: 520, radiusPx: 10, interval: 260 },
-      { startYFrac: 0.25, endYFrac: 0.75, lifeFrames: 460, radiusPx: 7, interval: 200 },
-      { startYFrac: 0.7, endYFrac: 0.9, lifeFrames: 540, radiusPx: 8, interval: 250 }
+      { startYFrac: 0.9, endYFrac: 0.35, lifeFrames: 480, radiusPx: 9, interval: 280 },
+      { startYFrac: 0.1, endYFrac: 0.65, lifeFrames: 450, radiusPx: 8, interval: 260 },
+      { startYFrac: 0.5, endYFrac: 0.15, lifeFrames: 520, radiusPx: 10, interval: 310 },
+      { startYFrac: 0.25, endYFrac: 0.75, lifeFrames: 460, radiusPx: 7, interval: 250 },
+      { startYFrac: 0.7, endYFrac: 0.9, lifeFrames: 540, radiusPx: 8, interval: 300 }
+    ],
+    // comets that enter from the left and fly right, against the scroll,
+    // so they cross the ship much faster than the usual streaks
+    oncomingCometEvents: [
+      { triggerDistance: 280, startYFrac: 0.72, endYFrac: 0.40, radiusPx: 9, vx: 1.9 },
+      { triggerDistance: 680, startYFrac: 0.24, endYFrac: 0.58, radiusPx: 8, vx: 2.0 }
+    ],
+    splitRockEvents: [
+      { triggerDistance: 180, yFrac: 0.28, r: 28, splitAtPx: 480, telegraphFrames: 96 },
+      { triggerDistance: 400, yFrac: 0.40, r: 30, splitAtPx: 480, telegraphFrames: 96 },
+      { triggerDistance: 760, yFrac: 0.60, r: 28, splitAtPx: 480, telegraphFrames: 96 }
     ]
   },
   {
@@ -1962,6 +1973,8 @@ let empEventsSpawned = [false, false];
 let echoTrailEventsSpawned = [false, false];
 let pulsingOrbEventsSpawned = [false, false];
 let boomerangEventsSpawned = [false, false];
+let oncomingCometEventsSpawned = [false, false];
+let splitRockEventsSpawned = [false, false, false];
 let extraStormCounter = 0;
 let extraStormPatternIndex = 0;
 let extraOrbiterCounter = 0;
@@ -2637,9 +2650,12 @@ function spawnWouldHitPortal(spawnX, forwardExtent) {
 }
 
 function gateClearsPortal(g, portalSafeX) {
-  if (g.type === 'shootingstar') return g.x + g.r * 9 * 1.2 < portalSafeX;
+  if (g.type === 'shootingstar') {
+    if (g.oncoming) return g.x + g.r < portalSafeX;
+    return g.x + g.r * 9 * 1.2 < portalSafeX;
+  }
   if (g.type === 'fireball') return g.x + g.r * 8.5 < portalSafeX;
-  if (g.type === 'asteroid' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'wreckage') return g.x + g.r < portalSafeX;
+  if (g.type === 'splitrock' || g.type === 'asteroid' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'wreckage') return g.x + g.r < portalSafeX;
   if (g.type === 'zone2storm') return g.x + g.r < portalSafeX;
   if (g.type === 'securitydrone') return g.x + g.r < portalSafeX;
   if (g.type === 'turretshot') return g.x + g.r < portalSafeX;
@@ -4120,6 +4136,77 @@ function shootingStarDone(g) {
   return (frame - g.spawnFrame) >= g.life;
 }
 
+function spawnOncomingCometEvent(eventIndex) {
+  const th = currentTheme();
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const margin = 30;
+  const entry = th.oncomingCometEvents[eventIndex];
+  const startY = PLAY_TOP + margin + entry.startYFrac * Math.max(1, playHeight - margin * 2);
+  const endY = PLAY_TOP + margin + entry.endYFrac * Math.max(1, playHeight - margin * 2);
+  const spawnX = -80 - entry.radiusPx * 9;
+  const life = Math.max(220, (W + 140 - spawnX) / entry.vx);
+  gates.push({
+    type: 'shootingstar',
+    oncoming: true,
+    x: spawnX,
+    vx: entry.vx,
+    spawnFrame: frame,
+    startY: startY,
+    endY: endY,
+    life: life,
+    r: entry.radiusPx,
+    passed: false
+  });
+}
+
+function spawnSplitRockEvent(eventIndex) {
+  const th = currentTheme();
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const entry = th.splitRockEvents[eventIndex];
+  let spawnX = ship.x + EVENT_SPAWN_OFFSET;
+  const portalX = predictedPortalX();
+  if (portalX != null) spawnX = Math.min(spawnX, portalX - 48 - entry.r);
+  const y = Math.max(PLAY_TOP + entry.r + 16, Math.min(PLAY_BOTTOM - entry.r - 16, PLAY_TOP + entry.yFrac * playHeight));
+  gates.push({
+    type: 'splitrock',
+    x: spawnX,
+    y: y,
+    r: entry.r,
+    splitAtPx: entry.splitAtPx,
+    telegraphFrames: entry.telegraphFrames,
+    cracking: false,
+    crackFrame: -1,
+    rotSeed: eventIndex * 3.1,
+    spin: 0.018,
+    passed: false
+  });
+}
+
+function splitRockIntoShards(g) {
+  const r = Math.max(12, g.r * 0.52);
+  gates.push({
+    type: 'asteroid',
+    x: g.x - 8,
+    y: g.y - 6,
+    r: r,
+    rotSeed: g.rotSeed,
+    spin: 0.03,
+    vy: -1.6,
+    passed: false
+  });
+  gates.push({
+    type: 'asteroid',
+    x: g.x + 10,
+    y: g.y + 6,
+    r: r,
+    rotSeed: g.rotSeed + 2.2,
+    spin: -0.032,
+    vy: 1.6,
+    passed: false
+  });
+  if (!ghostMode) playAsteroidCrunch();
+}
+
 function spawnAcidDrip(x) {
   const th = currentTheme();
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
@@ -4584,6 +4671,8 @@ function reseedZoneObstacles(startX) {
   echoTrailEventsSpawned = currentTheme().echoTrailEvents ? currentTheme().echoTrailEvents.map(() => false) : [];
   pulsingOrbEventsSpawned = currentTheme().pulsingOrbEvents ? currentTheme().pulsingOrbEvents.map(() => false) : [];
   boomerangEventsSpawned = currentTheme().boomerangEvents ? currentTheme().boomerangEvents.map(() => false) : [];
+  oncomingCometEventsSpawned = currentTheme().oncomingCometEvents ? currentTheme().oncomingCometEvents.map(() => false) : [];
+  splitRockEventsSpawned = currentTheme().splitRockEvents ? currentTheme().splitRockEvents.map(() => false) : [];
   extraStormCounter = 0;
   extraStormPatternIndex = 0;
   extraOrbiterCounter = 0;
@@ -6724,6 +6813,7 @@ function update() {
       }
     } else {
       for (let g of gates) {
+        if (g.type === 'shootingstar' && g.oncoming) continue;
         if (g.type === 'turretshot') continue; // moved separately below via vx/vy
         if (g.type === 'boomerang') continue; // position is computed live from elapsed time, not scrolled
         if (g.type === 'bossattack') continue; // moved separately below via vx/vy
@@ -6737,6 +6827,7 @@ function update() {
       }
       for (const g of gates) {
         if (g.type === 'turretshot') { g.x += g.vx; g.y += g.vy; }
+        if (g.type === 'shootingstar' && g.oncoming) { g.x += g.vx; }
         if (g.type === 'bossattack') { g.x += g.vx; g.y += g.vy; }
         if (g.type === 'bossember') { g.x += g.vx; g.y += g.vy; }
         if (g.type === 'bossashcloud') { g.x += g.vx; }
@@ -6749,6 +6840,22 @@ function update() {
             g.y += g.vy;
           }
         }
+        if (g.type === 'asteroid' && g.vy) {
+          g.y += g.vy;
+          g.y = Math.max(PLAY_TOP + g.r + 4, Math.min(PLAY_BOTTOM - g.r - 4, g.y));
+        }
+        if (g.type === 'splitrock' && !g.cracking && (g.x - ship.x) <= g.splitAtPx) {
+          g.cracking = true;
+          g.crackFrame = frame;
+        }
+      }
+      const splitParents = [];
+      for (const g of gates) {
+        if (g.type === 'splitrock' && g.cracking && (frame - g.crackFrame) >= g.telegraphFrames) splitParents.push(g);
+      }
+      if (splitParents.length) {
+        for (const g of splitParents) splitRockIntoShards(g);
+        gates = gates.filter(g => !splitParents.includes(g));
       }
       // faster hazards (Gravity Well tornados at 1.4x scroll) can catch the
       // portal from the right after it appears -- keep culling so nothing
@@ -6958,6 +7065,24 @@ function update() {
           }
         });
       }
+      if (th.oncomingCometEvents && !portalObject) {
+        const zoneProgress = distance - zoneStartDistance;
+        th.oncomingCometEvents.forEach((event, i) => {
+          if (!oncomingCometEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
+            spawnOncomingCometEvent(i);
+            oncomingCometEventsSpawned[i] = true;
+          }
+        });
+      }
+      if (th.splitRockEvents && !portalObject) {
+        const zoneProgress = distance - zoneStartDistance;
+        th.splitRockEvents.forEach((event, i) => {
+          if (!splitRockEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
+            spawnSplitRockEvent(i);
+            splitRockEventsSpawned[i] = true;
+          }
+        });
+      }
       if (th.echoTrailEvents && !portalObject) {
         const zoneProgress = distance - zoneStartDistance;
         th.echoTrailEvents.forEach((event, i) => {
@@ -7082,7 +7207,7 @@ function update() {
       }
 
       gates = gates.filter(g => {
-        if (g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'wreckage') return g.x + g.r > -80;
+        if (g.type === 'splitrock' || g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'wreckage') return g.x + g.r > -80;
         if (g.type === 'zone2storm') return g.x + g.r > -80;
         if (g.type === 'securitydrone') return g.x + g.r > -80;
         if (g.type === 'turretshot') return g.x + g.r > -80;
@@ -7112,7 +7237,10 @@ function update() {
         if (g.type === 'toxicpool') return g.x + g.baseR + g.pulseAmp > -80;
         if (g.type === 'aciddrip') return liveAcidDripY(g) < PLAY_BOTTOM + g.r && g.x + g.r > -80;
         if (g.type === 'geyser') return g.x + g.width / 2 > -80;
-        if (g.type === 'shootingstar') return !shootingStarDone(g) && g.x + g.r > -80;
+        if (g.type === 'shootingstar') {
+          if (g.oncoming) return !shootingStarDone(g) && g.x - g.r * 9 < W + 80;
+          return !shootingStarDone(g) && g.x + g.r > -80;
+        }
         if (g.type === 'movingdoor' || g.type === 'specialdoor') return g.x + g.width / 2 > -80;
         if (g.type === 'accesskey') return !g.collected && g.x + g.r > -80;
         if (g.type === 'sparkhub') return g.x > -120;
@@ -7187,7 +7315,7 @@ function update() {
       }
 
       for (let g of gates) {
-        if (g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'shootingstar' || g.type === 'wreckage' || g.type === 'zone2storm' || g.type === 'securitydrone' || g.type === 'turretshot' || g.type === 'bossdrone') {
+        if (g.type === 'splitrock' || g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'shootingstar' || g.type === 'wreckage' || g.type === 'zone2storm' || g.type === 'securitydrone' || g.type === 'turretshot' || g.type === 'bossdrone') {
           const gy = g.type === 'fireball' ? liveFireballY(g) : (g.type === 'pendulum' ? livePendulumBobY(g) : (g.type === 'aciddrip' ? liveAcidDripY(g) : (g.type === 'shootingstar' ? liveShootingStarY(g) : (g.type === 'zone2storm' ? liveStormY(g) : g.y))));
           const dx = ship.x - g.x;
           const dy = ship.y - gy;
@@ -8198,7 +8326,7 @@ const HAZARD_FAMILY = {
   searchlight: 'laser', zone2storm: 'whoosh', orbiter: 'plasma', arcplanet: 'plasma',
   signalcorruption: 'electric', emp: 'electric', pulsingorb: 'plasma', boomerang: 'whoosh',
   echotrail: 'echo', lensingzone: 'gravity', supernova: 'nova', supernovadebris: 'nova',
-  wreckage: 'rock', lasergrid: 'laser', asteroid: 'rock', fireball: 'fire',
+  wreckage: 'rock', lasergrid: 'laser', asteroid: 'rock', splitrock: 'rock', fireball: 'fire',
   toxicpool: 'drip', geyser: 'fire', movingdoor: 'metal', sparkhub: 'electric',
   sparkprojectile: 'electric', accesskey: 'key', specialdoor: 'metal', shootingstar: 'whoosh',
   aciddrip: 'drip', terrain: 'rock',
@@ -10263,7 +10391,7 @@ function meteorStreakProximity() {
     const prox = shipHazardProximity(g.x, liveShootingStarY(g), 520 + g.r * 8);
     if (prox > best) {
       best = prox;
-      approach = g.x > ship.x ? 1 : -0.5;
+      approach = g.oncoming ? (g.x < ship.x ? 1 : -0.5) : (g.x > ship.x ? 1 : -0.5);
     }
   }
   return { prox: best, approach };
@@ -11172,7 +11300,7 @@ function sfxHazardImpact(type) {
     playHBarClank();
     return;
   }
-  if (type === 'asteroid') {
+  if (type === 'asteroid' || type === 'splitrock') {
     playAsteroidCrunch();
     return;
   }
@@ -18685,6 +18813,39 @@ function drawAsteroid(g, theme) {
   ctx.restore();
 }
 
+function drawSplitRock(g, theme) {
+  drawAsteroid(g, theme);
+  if (!g.cracking) return;
+  const t = Math.min(1, (frame - g.crackFrame) / Math.max(1, g.telegraphFrames));
+  const pulse = 0.55 + 0.45 * Math.sin(frame * 0.28);
+  ctx.save();
+  ctx.translate(g.x, g.y);
+  ctx.strokeStyle = theme.accentA;
+  ctx.globalAlpha = 0.18 + t * 0.35 * pulse;
+  ctx.lineWidth = 3;
+  ctx.shadowColor = theme.accentA;
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.arc(0, 0, g.r + 6 + t * 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.rotate(g.rotSeed + frame * g.spin);
+  ctx.strokeStyle = '#fff4c8';
+  ctx.globalAlpha = 0.55 + t * 0.45;
+  ctx.lineWidth = 2.2 + t * 2.6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-g.r * 0.88, -g.r * 0.12);
+  ctx.lineTo(g.r * 0.84, g.r * 0.18);
+  ctx.stroke();
+  ctx.globalAlpha = 0.35 + t * 0.5;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-g.r * 0.22, -g.r * 0.78);
+  ctx.lineTo(g.r * 0.18, g.r * 0.72);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawFireball(g, theme) {
   const y = liveFireballY(g);
   const r = g.r;
@@ -19246,7 +19407,7 @@ function drawShootingStar(g, theme) {
   const framesBack = frame - prevFrame;
   const prevT = Math.min(1, (prevFrame - g.spawnFrame) / g.life);
   const prevY = g.startY + (g.endY - g.startY) * prevT;
-  const dx = -framesBack * effScroll;
+  const dx = g.oncoming ? framesBack * (g.vx || 0) : -framesBack * effScroll;
   const dy = y - prevY;
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const dirX = dx / len, dirY = dy / len;
@@ -19615,6 +19776,10 @@ function drawGates(theme) {
   for (let g of gates) {
     if (g.type === 'asteroid') {
       drawAsteroid(g, theme);
+      continue;
+    }
+    if (g.type === 'splitrock') {
+      drawSplitRock(g, theme);
       continue;
     }
     if (g.type === 'wreckage') {
@@ -22689,7 +22854,7 @@ function captureFullZoneRun(themeIdx, targetDistance) {
     droneSwarmEventsSpawned, billboardEventsSpawned, searchlightEventsSpawned,
     turretEventsSpawned, signalCorruptionEventsSpawned, empEventsSpawned,
     echoTrailEventsSpawned, pulsingOrbEventsSpawned, boomerangEventsSpawned,
-    lensingZoneEventsSpawned, supernovaEventsSpawned,
+    oncomingCometEventsSpawned, splitRockEventsSpawned, lensingZoneEventsSpawned, supernovaEventsSpawned,
   };
   // the update() loop this capture drives processes mini boss fight logic
   // exactly like real gameplay -- without saving/restoring it, previewing
@@ -22877,6 +23042,8 @@ function captureFullZoneRun(themeIdx, targetDistance) {
   echoTrailEventsSpawned = savedEventFlags.echoTrailEventsSpawned;
   pulsingOrbEventsSpawned = savedEventFlags.pulsingOrbEventsSpawned;
   boomerangEventsSpawned = savedEventFlags.boomerangEventsSpawned;
+  oncomingCometEventsSpawned = savedEventFlags.oncomingCometEventsSpawned;
+  splitRockEventsSpawned = savedEventFlags.splitRockEventsSpawned;
   lensingZoneEventsSpawned = savedEventFlags.lensingZoneEventsSpawned;
   supernovaEventsSpawned = savedEventFlags.supernovaEventsSpawned;
   miniBoss = savedMiniBossState.miniBoss;
@@ -23017,6 +23184,11 @@ function drawZonePreview(data) {
       previewCtx.fillStyle = 'rgba(200,150,100,0.6)';
       previewCtx.beginPath();
       previewCtx.arc(sx, yToScreen(g.y), Math.max(2, g.r * scale), 0, Math.PI * 2);
+      previewCtx.fill();
+    } else if (g.type === 'splitrock') {
+      previewCtx.fillStyle = 'rgba(220,160,90,0.7)';
+      previewCtx.beginPath();
+      previewCtx.arc(sx, yToScreen(g.y), Math.max(3, g.r * scale), 0, Math.PI * 2);
       previewCtx.fill();
     } else if (g.type === 'fireball') {
       previewCtx.fillStyle = 'rgba(255,120,50,0.5)';

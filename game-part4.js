@@ -1,3 +1,55 @@
+function playChargeHeartbeat({ duration = 2, size = 1, isSuperBeam = false } = {}) {
+  if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
+  stopMegaManCharge(0.02);
+  const now = audioCtx.currentTime;
+  const dur = Math.max(0.12, duration);
+  const s = Math.min(6, Math.max(1, size));
+  const vol = (0.07 + s * 0.026) * (isSuperBeam ? 1.25 : 1);
+
+  const master = audioCtx.createGain();
+  master.gain.setValueAtTime(1, now);
+  if (dur > 0.06) master.gain.setValueAtTime(1, now + dur - 0.05);
+  master.gain.linearRampToValueAtTime(0.0001, now + dur);
+  master.connect(sfxGain);
+
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(90, now);
+  osc.frequency.exponentialRampToValueAtTime(isSuperBeam ? 420 : 320, now + dur);
+  const oGain = audioCtx.createGain();
+  oGain.gain.setValueAtTime(vol * 0.4, now);
+  osc.connect(oGain);
+  oGain.connect(master);
+
+  const body = audioCtx.createOscillator();
+  body.type = 'triangle';
+  body.frequency.setValueAtTime(180, now);
+  body.frequency.exponentialRampToValueAtTime(isSuperBeam ? 840 : 640, now + dur);
+  const bGain = audioCtx.createGain();
+  bGain.gain.setValueAtTime(vol * 0.35, now);
+  body.connect(bGain);
+  bGain.connect(master);
+
+  const pulse = audioCtx.createOscillator();
+  pulse.type = 'sine';
+  pulse.frequency.setValueAtTime(2.4, now);
+  pulse.frequency.exponentialRampToValueAtTime(isSuperBeam ? 18 : 14, now + dur * 0.9);
+  const pulseDepth = audioCtx.createGain();
+  pulseDepth.gain.setValueAtTime(vol * 0.35, now);
+  pulseDepth.gain.linearRampToValueAtTime(vol * 0.85, now + dur);
+  pulse.connect(pulseDepth);
+  pulseDepth.connect(oGain.gain);
+
+  const stopAt = now + dur + 0.04;
+  osc.start(now);
+  body.start(now);
+  pulse.start(now);
+  osc.stop(stopAt);
+  body.stop(stopAt);
+  pulse.stop(stopAt);
+  megaManChargeCtl = { master, nodes: [osc, body, pulse] };
+}
+
 function playChargeStatic({ duration = 2, size = 1, isSuperBeam = false } = {}) {
   if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
   stopMegaManCharge(0.02);
@@ -1694,7 +1746,7 @@ function meteorStreakProximity() {
     const prox = shipHazardProximity(g.x, liveShootingStarY(g), 520 + g.r * 8);
     if (prox > best) {
       best = prox;
-      approach = g.x > ship.x ? 1 : -0.5;
+      approach = g.oncoming ? (g.x < ship.x ? 1 : -0.5) : (g.x > ship.x ? 1 : -0.5);
     }
   }
   return { prox: best, approach };
@@ -2603,7 +2655,7 @@ function sfxHazardImpact(type) {
     playHBarClank();
     return;
   }
-  if (type === 'asteroid') {
+  if (type === 'asteroid' || type === 'splitrock') {
     playAsteroidCrunch();
     return;
   }
@@ -3051,21 +3103,5 @@ function sfxCoreOverloadBreakdown() {
     });
   });
   playElectricCrackles({ count: 8, spacing: 0.09, volume: 0.16, when: t0 + 0.18 });
-}
-
-function sfxCoreDying() {
-  if (!audioUnlocked || !audioCtx) return;
-  const t0 = audioCtx.currentTime;
-  playElectricCrackles({ count: 12, spacing: 0.014, volume: 0.3 });
-  playSynth({ type: 'sawtooth', freq: 60, freqEnd: 38, duration: 0.55, attack: 0.008, decay: 0.12, sustain: 0.45, release: 0.12, volume: 0.16, filterType: 'lowpass', filterFreq: 220, delaySend: 0 });
-  playSynth({ type: 'square', freq: 2650, freqEnd: 380, duration: 0.07, attack: 0.001, decay: 0.02, sustain: 0.15, release: 0.03, volume: 0.08, filterType: 'highpass', filterFreq: 1400, delaySend: 0.06 });
-  playSynth({ type: 'square', freq: 1780, freqEnd: 820, duration: 0.05, attack: 0.001, decay: 0.015, sustain: 0.12, release: 0.025, volume: 0.07, filterType: 'highpass', filterFreq: 900, delaySend: 0.05, when: t0 + 0.09 });
-  playSynth({ type: 'square', freq: 3100, freqEnd: 160, duration: 0.08, attack: 0.001, decay: 0.02, sustain: 0.12, release: 0.03, volume: 0.09, filterType: 'highpass', filterFreq: 1100, delaySend: 0.06, when: t0 + 0.17 });
-  playSynth({ type: 'sawtooth', freq: 980, freqEnd: 140, duration: 0.14, attack: 0.002, decay: 0.04, sustain: 0.2, release: 0.05, volume: 0.1, filterType: 'lowpass', filterFreq: 2400, delaySend: 0.08, when: t0 + 0.28 });
-  playNoiseBurst({ duration: 0.04, filterFreq: 4500, filterType: 'highpass', volume: 0.22 });
-  playNoiseBurst({ duration: 0.035, filterFreq: 5200, filterType: 'highpass', volume: 0.18, when: t0 + 0.12 });
-  playNoiseBurst({ duration: 0.05, filterFreq: 3800, filterType: 'highpass', volume: 0.2, when: t0 + 0.22 });
-  playNoiseBurst({ duration: 0.06, filterFreq: 3000, filterType: 'highpass', volume: 0.16, when: t0 + 0.34 });
-  playNoiseBurst({ duration: 0.16, filterFreq: 280, filterEnd: 90, filterType: 'lowpass', volume: 0.32, when: t0 + 0.46 });
 }
 

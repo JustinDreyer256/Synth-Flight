@@ -843,6 +843,7 @@ function update() {
       }
     } else {
       for (let g of gates) {
+        if (g.type === 'shootingstar' && g.oncoming) continue;
         if (g.type === 'turretshot') continue; // moved separately below via vx/vy
         if (g.type === 'boomerang') continue; // position is computed live from elapsed time, not scrolled
         if (g.type === 'bossattack') continue; // moved separately below via vx/vy
@@ -856,6 +857,7 @@ function update() {
       }
       for (const g of gates) {
         if (g.type === 'turretshot') { g.x += g.vx; g.y += g.vy; }
+        if (g.type === 'shootingstar' && g.oncoming) { g.x += g.vx; }
         if (g.type === 'bossattack') { g.x += g.vx; g.y += g.vy; }
         if (g.type === 'bossember') { g.x += g.vx; g.y += g.vy; }
         if (g.type === 'bossashcloud') { g.x += g.vx; }
@@ -868,6 +870,22 @@ function update() {
             g.y += g.vy;
           }
         }
+        if (g.type === 'asteroid' && g.vy) {
+          g.y += g.vy;
+          g.y = Math.max(PLAY_TOP + g.r + 4, Math.min(PLAY_BOTTOM - g.r - 4, g.y));
+        }
+        if (g.type === 'splitrock' && !g.cracking && (g.x - ship.x) <= g.splitAtPx) {
+          g.cracking = true;
+          g.crackFrame = frame;
+        }
+      }
+      const splitParents = [];
+      for (const g of gates) {
+        if (g.type === 'splitrock' && g.cracking && (frame - g.crackFrame) >= g.telegraphFrames) splitParents.push(g);
+      }
+      if (splitParents.length) {
+        for (const g of splitParents) splitRockIntoShards(g);
+        gates = gates.filter(g => !splitParents.includes(g));
       }
       // faster hazards (Gravity Well tornados at 1.4x scroll) can catch the
       // portal from the right after it appears -- keep culling so nothing
@@ -1077,6 +1095,24 @@ function update() {
           }
         });
       }
+      if (th.oncomingCometEvents && !portalObject) {
+        const zoneProgress = distance - zoneStartDistance;
+        th.oncomingCometEvents.forEach((event, i) => {
+          if (!oncomingCometEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
+            spawnOncomingCometEvent(i);
+            oncomingCometEventsSpawned[i] = true;
+          }
+        });
+      }
+      if (th.splitRockEvents && !portalObject) {
+        const zoneProgress = distance - zoneStartDistance;
+        th.splitRockEvents.forEach((event, i) => {
+          if (!splitRockEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
+            spawnSplitRockEvent(i);
+            splitRockEventsSpawned[i] = true;
+          }
+        });
+      }
       if (th.echoTrailEvents && !portalObject) {
         const zoneProgress = distance - zoneStartDistance;
         th.echoTrailEvents.forEach((event, i) => {
@@ -1201,7 +1237,7 @@ function update() {
       }
 
       gates = gates.filter(g => {
-        if (g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'wreckage') return g.x + g.r > -80;
+        if (g.type === 'splitrock' || g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'wreckage') return g.x + g.r > -80;
         if (g.type === 'zone2storm') return g.x + g.r > -80;
         if (g.type === 'securitydrone') return g.x + g.r > -80;
         if (g.type === 'turretshot') return g.x + g.r > -80;
@@ -1231,7 +1267,10 @@ function update() {
         if (g.type === 'toxicpool') return g.x + g.baseR + g.pulseAmp > -80;
         if (g.type === 'aciddrip') return liveAcidDripY(g) < PLAY_BOTTOM + g.r && g.x + g.r > -80;
         if (g.type === 'geyser') return g.x + g.width / 2 > -80;
-        if (g.type === 'shootingstar') return !shootingStarDone(g) && g.x + g.r > -80;
+        if (g.type === 'shootingstar') {
+          if (g.oncoming) return !shootingStarDone(g) && g.x - g.r * 9 < W + 80;
+          return !shootingStarDone(g) && g.x + g.r > -80;
+        }
         if (g.type === 'movingdoor' || g.type === 'specialdoor') return g.x + g.width / 2 > -80;
         if (g.type === 'accesskey') return !g.collected && g.x + g.r > -80;
         if (g.type === 'sparkhub') return g.x > -120;
@@ -1306,7 +1345,7 @@ function update() {
       }
 
       for (let g of gates) {
-        if (g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'shootingstar' || g.type === 'wreckage' || g.type === 'zone2storm' || g.type === 'securitydrone' || g.type === 'turretshot' || g.type === 'bossdrone') {
+        if (g.type === 'splitrock' || g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'shootingstar' || g.type === 'wreckage' || g.type === 'zone2storm' || g.type === 'securitydrone' || g.type === 'turretshot' || g.type === 'bossdrone') {
           const gy = g.type === 'fireball' ? liveFireballY(g) : (g.type === 'pendulum' ? livePendulumBobY(g) : (g.type === 'aciddrip' ? liveAcidDripY(g) : (g.type === 'shootingstar' ? liveShootingStarY(g) : (g.type === 'zone2storm' ? liveStormY(g) : g.y))));
           const dx = ship.x - g.x;
           const dy = ship.y - gy;
@@ -2317,7 +2356,7 @@ const HAZARD_FAMILY = {
   searchlight: 'laser', zone2storm: 'whoosh', orbiter: 'plasma', arcplanet: 'plasma',
   signalcorruption: 'electric', emp: 'electric', pulsingorb: 'plasma', boomerang: 'whoosh',
   echotrail: 'echo', lensingzone: 'gravity', supernova: 'nova', supernovadebris: 'nova',
-  wreckage: 'rock', lasergrid: 'laser', asteroid: 'rock', fireball: 'fire',
+  wreckage: 'rock', lasergrid: 'laser', asteroid: 'rock', splitrock: 'rock', fireball: 'fire',
   toxicpool: 'drip', geyser: 'fire', movingdoor: 'metal', sparkhub: 'electric',
   sparkprojectile: 'electric', accesskey: 'key', specialdoor: 'metal', shootingstar: 'whoosh',
   aciddrip: 'drip', terrain: 'rock',
@@ -2632,57 +2671,5 @@ function playChargeSweep({ duration = 2, size = 1, isSuperBeam = false } = {}) {
   saw.stop(stopAt);
   sine.stop(stopAt);
   megaManChargeCtl = { master, nodes: [saw, sine] };
-}
-
-function playChargeHeartbeat({ duration = 2, size = 1, isSuperBeam = false } = {}) {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
-  stopMegaManCharge(0.02);
-  const now = audioCtx.currentTime;
-  const dur = Math.max(0.12, duration);
-  const s = Math.min(6, Math.max(1, size));
-  const vol = (0.07 + s * 0.026) * (isSuperBeam ? 1.25 : 1);
-
-  const master = audioCtx.createGain();
-  master.gain.setValueAtTime(1, now);
-  if (dur > 0.06) master.gain.setValueAtTime(1, now + dur - 0.05);
-  master.gain.linearRampToValueAtTime(0.0001, now + dur);
-  master.connect(sfxGain);
-
-  const osc = audioCtx.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(90, now);
-  osc.frequency.exponentialRampToValueAtTime(isSuperBeam ? 420 : 320, now + dur);
-  const oGain = audioCtx.createGain();
-  oGain.gain.setValueAtTime(vol * 0.4, now);
-  osc.connect(oGain);
-  oGain.connect(master);
-
-  const body = audioCtx.createOscillator();
-  body.type = 'triangle';
-  body.frequency.setValueAtTime(180, now);
-  body.frequency.exponentialRampToValueAtTime(isSuperBeam ? 840 : 640, now + dur);
-  const bGain = audioCtx.createGain();
-  bGain.gain.setValueAtTime(vol * 0.35, now);
-  body.connect(bGain);
-  bGain.connect(master);
-
-  const pulse = audioCtx.createOscillator();
-  pulse.type = 'sine';
-  pulse.frequency.setValueAtTime(2.4, now);
-  pulse.frequency.exponentialRampToValueAtTime(isSuperBeam ? 18 : 14, now + dur * 0.9);
-  const pulseDepth = audioCtx.createGain();
-  pulseDepth.gain.setValueAtTime(vol * 0.35, now);
-  pulseDepth.gain.linearRampToValueAtTime(vol * 0.85, now + dur);
-  pulse.connect(pulseDepth);
-  pulseDepth.connect(oGain.gain);
-
-  const stopAt = now + dur + 0.04;
-  osc.start(now);
-  body.start(now);
-  pulse.start(now);
-  osc.stop(stopAt);
-  body.stop(stopAt);
-  pulse.stop(stopAt);
-  megaManChargeCtl = { master, nodes: [osc, body, pulse] };
 }
 

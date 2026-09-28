@@ -313,10 +313,10 @@ const THEMES = [
     // each entry is one cluster: xJitter offsets each rock from the cluster's spawn x,
     // yFrac/rFrac are fractions (0-1) mapped to actual position/radius
     pattern: [
-      { spacing: 260, asteroids: [{ xJitter: -20, yFrac: 0.25, rFrac: 0.6 }, { xJitter: 10, yFrac: 0.55, rFrac: 0.8 }] },
-      { spacing: 280, asteroids: [{ xJitter: -30, yFrac: 0.35, rFrac: 0.9 }, { xJitter: 0, yFrac: 0.70, rFrac: 0.6 }, { xJitter: 35, yFrac: 0.15, rFrac: 0.5 }] },
-      { spacing: 250, asteroids: [{ xJitter: -10, yFrac: 0.20, rFrac: 0.5 }, { xJitter: 20, yFrac: 0.45, rFrac: 0.7 }, { xJitter: 50, yFrac: 0.75, rFrac: 0.9 }] },
-      { spacing: 300, asteroids: [{ xJitter: -25, yFrac: 0.60, rFrac: 0.8 }, { xJitter: 5, yFrac: 0.30, rFrac: 0.6 }, { xJitter: 35, yFrac: 0.85, rFrac: 0.5 }] }
+      { spacing: 340, asteroids: [{ xJitter: -90, yFrac: 0.16, rFrac: 0.5 }, { xJitter: 70, yFrac: 0.72, rFrac: 0.65 }] },
+      { spacing: 360, asteroids: [{ xJitter: 85, yFrac: 0.12, rFrac: 0.7 }, { xJitter: -40, yFrac: 0.50, rFrac: 0.5 }, { xJitter: -110, yFrac: 0.88, rFrac: 0.45 }] },
+      { spacing: 330, asteroids: [{ xJitter: -75, yFrac: 0.14, rFrac: 0.45 }, { xJitter: 95, yFrac: 0.50, rFrac: 0.55 }, { xJitter: 10, yFrac: 0.86, rFrac: 0.7 }] },
+      { spacing: 380, asteroids: [{ xJitter: 60, yFrac: 0.22, rFrac: 0.6 }, { xJitter: -100, yFrac: 0.78, rFrac: 0.5 }, { xJitter: 20, yFrac: 0.48, rFrac: 0.4 }] }
     ],
     // secondary: shooting stars that fly in a straight diagonal line (no
     // arc/curve) from a start height to a different end height, at varied
@@ -328,11 +328,22 @@ const THEMES = [
     // streak with no discrete star shape, the bright head leading and the
     // tail trailing behind in the direction it came from
     extraShootingStarPattern: [
-      { startYFrac: 0.9, endYFrac: 0.35, lifeFrames: 480, radiusPx: 9, interval: 230 },
-      { startYFrac: 0.1, endYFrac: 0.65, lifeFrames: 450, radiusPx: 8, interval: 210 },
-      { startYFrac: 0.5, endYFrac: 0.15, lifeFrames: 520, radiusPx: 10, interval: 260 },
-      { startYFrac: 0.25, endYFrac: 0.75, lifeFrames: 460, radiusPx: 7, interval: 200 },
-      { startYFrac: 0.7, endYFrac: 0.9, lifeFrames: 540, radiusPx: 8, interval: 250 }
+      { startYFrac: 0.9, endYFrac: 0.35, lifeFrames: 480, radiusPx: 9, interval: 280 },
+      { startYFrac: 0.1, endYFrac: 0.65, lifeFrames: 450, radiusPx: 8, interval: 260 },
+      { startYFrac: 0.5, endYFrac: 0.15, lifeFrames: 520, radiusPx: 10, interval: 310 },
+      { startYFrac: 0.25, endYFrac: 0.75, lifeFrames: 460, radiusPx: 7, interval: 250 },
+      { startYFrac: 0.7, endYFrac: 0.9, lifeFrames: 540, radiusPx: 8, interval: 300 }
+    ],
+    // comets that enter from the left and fly right, against the scroll,
+    // so they cross the ship much faster than the usual streaks
+    oncomingCometEvents: [
+      { triggerDistance: 280, startYFrac: 0.72, endYFrac: 0.40, radiusPx: 9, vx: 1.9 },
+      { triggerDistance: 680, startYFrac: 0.24, endYFrac: 0.58, radiusPx: 8, vx: 2.0 }
+    ],
+    splitRockEvents: [
+      { triggerDistance: 180, yFrac: 0.28, r: 28, splitAtPx: 480, telegraphFrames: 96 },
+      { triggerDistance: 400, yFrac: 0.40, r: 30, splitAtPx: 480, telegraphFrames: 96 },
+      { triggerDistance: 760, yFrac: 0.60, r: 28, splitAtPx: 480, telegraphFrames: 96 }
     ]
   },
   {
@@ -1962,6 +1973,8 @@ let empEventsSpawned = [false, false];
 let echoTrailEventsSpawned = [false, false];
 let pulsingOrbEventsSpawned = [false, false];
 let boomerangEventsSpawned = [false, false];
+let oncomingCometEventsSpawned = [false, false];
+let splitRockEventsSpawned = [false, false, false];
 let extraStormCounter = 0;
 let extraStormPatternIndex = 0;
 let extraOrbiterCounter = 0;
@@ -2129,38 +2142,6 @@ function spawnLightningBolt(x) {
     y2: PLAY_TOP + entry.y2Frac * playHeight,
     jitter: jitter,
     spawnFrame: frame,
-    passed: false
-  });
-  return entry.spacing;
-}
-
-function spawnBarrier(x) {
-  const th = currentTheme();
-  const playHeight = PLAY_BOTTOM - PLAY_TOP;
-
-  const entry = th.pattern[patternIndex % th.pattern.length];
-  const seed = patternIndex; // fixed per-barrier seed for the jagged bolt silhouette
-  patternIndex++;
-
-  // deterministic jitter (no Math.random()) so each barrier's jagged shape is
-  // fixed and identical across every playthrough
-  const jitter = [];
-  for (let i = 0; i < 6; i++) {
-    jitter.push(Math.sin(i * 12.9898 + seed * 78.233) * 0.5);
-  }
-
-  const cycleLength = entry.onFrames + entry.offFrames;
-  gates.push({
-    type: 'barrier',
-    x: x,
-    width: 20,
-    gapCenter: PLAY_TOP + entry.gapCenterFrac * playHeight,
-    gapHeight: entry.gapFrac * playHeight,
-    onFrames: entry.onFrames,
-    offFrames: entry.offFrames,
-    cycleLength: cycleLength,
-    phaseOffset: Math.round(entry.phaseFrac * cycleLength),
-    jitter: jitter,
     passed: false
   });
   return entry.spacing;

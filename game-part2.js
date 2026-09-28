@@ -1,3 +1,35 @@
+function spawnBarrier(x) {
+  const th = currentTheme();
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+
+  const entry = th.pattern[patternIndex % th.pattern.length];
+  const seed = patternIndex; // fixed per-barrier seed for the jagged bolt silhouette
+  patternIndex++;
+
+  // deterministic jitter (no Math.random()) so each barrier's jagged shape is
+  // fixed and identical across every playthrough
+  const jitter = [];
+  for (let i = 0; i < 6; i++) {
+    jitter.push(Math.sin(i * 12.9898 + seed * 78.233) * 0.5);
+  }
+
+  const cycleLength = entry.onFrames + entry.offFrames;
+  gates.push({
+    type: 'barrier',
+    x: x,
+    width: 20,
+    gapCenter: PLAY_TOP + entry.gapCenterFrac * playHeight,
+    gapHeight: entry.gapFrac * playHeight,
+    onFrames: entry.onFrames,
+    offFrames: entry.offFrames,
+    cycleLength: cycleLength,
+    phaseOffset: Math.round(entry.phaseFrac * cycleLength),
+    jitter: jitter,
+    passed: false
+  });
+  return entry.spacing;
+}
+
 function barrierIsActive(g) {
   const t = (frame - zoneStartFrame + g.phaseOffset) % g.cycleLength;
   return t < g.onFrames;
@@ -469,9 +501,12 @@ function spawnWouldHitPortal(spawnX, forwardExtent) {
 }
 
 function gateClearsPortal(g, portalSafeX) {
-  if (g.type === 'shootingstar') return g.x + g.r * 9 * 1.2 < portalSafeX;
+  if (g.type === 'shootingstar') {
+    if (g.oncoming) return g.x + g.r < portalSafeX;
+    return g.x + g.r * 9 * 1.2 < portalSafeX;
+  }
   if (g.type === 'fireball') return g.x + g.r * 8.5 < portalSafeX;
-  if (g.type === 'asteroid' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'wreckage') return g.x + g.r < portalSafeX;
+  if (g.type === 'splitrock' || g.type === 'asteroid' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'wreckage') return g.x + g.r < portalSafeX;
   if (g.type === 'zone2storm') return g.x + g.r < portalSafeX;
   if (g.type === 'securitydrone') return g.x + g.r < portalSafeX;
   if (g.type === 'turretshot') return g.x + g.r < portalSafeX;
@@ -1952,6 +1987,77 @@ function shootingStarDone(g) {
   return (frame - g.spawnFrame) >= g.life;
 }
 
+function spawnOncomingCometEvent(eventIndex) {
+  const th = currentTheme();
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const margin = 30;
+  const entry = th.oncomingCometEvents[eventIndex];
+  const startY = PLAY_TOP + margin + entry.startYFrac * Math.max(1, playHeight - margin * 2);
+  const endY = PLAY_TOP + margin + entry.endYFrac * Math.max(1, playHeight - margin * 2);
+  const spawnX = -80 - entry.radiusPx * 9;
+  const life = Math.max(220, (W + 140 - spawnX) / entry.vx);
+  gates.push({
+    type: 'shootingstar',
+    oncoming: true,
+    x: spawnX,
+    vx: entry.vx,
+    spawnFrame: frame,
+    startY: startY,
+    endY: endY,
+    life: life,
+    r: entry.radiusPx,
+    passed: false
+  });
+}
+
+function spawnSplitRockEvent(eventIndex) {
+  const th = currentTheme();
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const entry = th.splitRockEvents[eventIndex];
+  let spawnX = ship.x + EVENT_SPAWN_OFFSET;
+  const portalX = predictedPortalX();
+  if (portalX != null) spawnX = Math.min(spawnX, portalX - 48 - entry.r);
+  const y = Math.max(PLAY_TOP + entry.r + 16, Math.min(PLAY_BOTTOM - entry.r - 16, PLAY_TOP + entry.yFrac * playHeight));
+  gates.push({
+    type: 'splitrock',
+    x: spawnX,
+    y: y,
+    r: entry.r,
+    splitAtPx: entry.splitAtPx,
+    telegraphFrames: entry.telegraphFrames,
+    cracking: false,
+    crackFrame: -1,
+    rotSeed: eventIndex * 3.1,
+    spin: 0.018,
+    passed: false
+  });
+}
+
+function splitRockIntoShards(g) {
+  const r = Math.max(12, g.r * 0.52);
+  gates.push({
+    type: 'asteroid',
+    x: g.x - 8,
+    y: g.y - 6,
+    r: r,
+    rotSeed: g.rotSeed,
+    spin: 0.03,
+    vy: -1.6,
+    passed: false
+  });
+  gates.push({
+    type: 'asteroid',
+    x: g.x + 10,
+    y: g.y + 6,
+    r: r,
+    rotSeed: g.rotSeed + 2.2,
+    spin: -0.032,
+    vy: 1.6,
+    passed: false
+  });
+  if (!ghostMode) playAsteroidCrunch();
+}
+
 function spawnAcidDrip(x) {
   const th = currentTheme();
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
@@ -2416,6 +2522,8 @@ function reseedZoneObstacles(startX) {
   echoTrailEventsSpawned = currentTheme().echoTrailEvents ? currentTheme().echoTrailEvents.map(() => false) : [];
   pulsingOrbEventsSpawned = currentTheme().pulsingOrbEvents ? currentTheme().pulsingOrbEvents.map(() => false) : [];
   boomerangEventsSpawned = currentTheme().boomerangEvents ? currentTheme().boomerangEvents.map(() => false) : [];
+  oncomingCometEventsSpawned = currentTheme().oncomingCometEvents ? currentTheme().oncomingCometEvents.map(() => false) : [];
+  splitRockEventsSpawned = currentTheme().splitRockEvents ? currentTheme().splitRockEvents.map(() => false) : [];
   extraStormCounter = 0;
   extraStormPatternIndex = 0;
   extraOrbiterCounter = 0;

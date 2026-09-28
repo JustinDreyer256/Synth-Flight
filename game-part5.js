@@ -1,3 +1,19 @@
+function sfxCoreDying() {
+  if (!audioUnlocked || !audioCtx) return;
+  const t0 = audioCtx.currentTime;
+  playElectricCrackles({ count: 12, spacing: 0.014, volume: 0.3 });
+  playSynth({ type: 'sawtooth', freq: 60, freqEnd: 38, duration: 0.55, attack: 0.008, decay: 0.12, sustain: 0.45, release: 0.12, volume: 0.16, filterType: 'lowpass', filterFreq: 220, delaySend: 0 });
+  playSynth({ type: 'square', freq: 2650, freqEnd: 380, duration: 0.07, attack: 0.001, decay: 0.02, sustain: 0.15, release: 0.03, volume: 0.08, filterType: 'highpass', filterFreq: 1400, delaySend: 0.06 });
+  playSynth({ type: 'square', freq: 1780, freqEnd: 820, duration: 0.05, attack: 0.001, decay: 0.015, sustain: 0.12, release: 0.025, volume: 0.07, filterType: 'highpass', filterFreq: 900, delaySend: 0.05, when: t0 + 0.09 });
+  playSynth({ type: 'square', freq: 3100, freqEnd: 160, duration: 0.08, attack: 0.001, decay: 0.02, sustain: 0.12, release: 0.03, volume: 0.09, filterType: 'highpass', filterFreq: 1100, delaySend: 0.06, when: t0 + 0.17 });
+  playSynth({ type: 'sawtooth', freq: 980, freqEnd: 140, duration: 0.14, attack: 0.002, decay: 0.04, sustain: 0.2, release: 0.05, volume: 0.1, filterType: 'lowpass', filterFreq: 2400, delaySend: 0.08, when: t0 + 0.28 });
+  playNoiseBurst({ duration: 0.04, filterFreq: 4500, filterType: 'highpass', volume: 0.22 });
+  playNoiseBurst({ duration: 0.035, filterFreq: 5200, filterType: 'highpass', volume: 0.18, when: t0 + 0.12 });
+  playNoiseBurst({ duration: 0.05, filterFreq: 3800, filterType: 'highpass', volume: 0.2, when: t0 + 0.22 });
+  playNoiseBurst({ duration: 0.06, filterFreq: 3000, filterType: 'highpass', volume: 0.16, when: t0 + 0.34 });
+  playNoiseBurst({ duration: 0.16, filterFreq: 280, filterEnd: 90, filterType: 'lowpass', volume: 0.32, when: t0 + 0.46 });
+}
+
 function sfxCoreDyingCollapse() {
   playElectricCrackles({ count: 6, spacing: 0.02, volume: 0.22 });
   playSynth({ type: 'sawtooth', freq: 90, freqEnd: 28, duration: 0.28, attack: 0.004, decay: 0.08, sustain: 0.3, release: 0.1, volume: 0.14, filterType: 'lowpass', filterFreq: 350, delaySend: 0 });

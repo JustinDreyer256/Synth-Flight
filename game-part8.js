@@ -981,7 +981,7 @@ function captureFullZoneRun(themeIdx, targetDistance) {
     droneSwarmEventsSpawned, billboardEventsSpawned, searchlightEventsSpawned,
     turretEventsSpawned, signalCorruptionEventsSpawned, empEventsSpawned,
     echoTrailEventsSpawned, pulsingOrbEventsSpawned, boomerangEventsSpawned,
-    lensingZoneEventsSpawned, supernovaEventsSpawned,
+    oncomingCometEventsSpawned, splitRockEventsSpawned, lensingZoneEventsSpawned, supernovaEventsSpawned,
   };
   // the update() loop this capture drives processes mini boss fight logic
   // exactly like real gameplay -- without saving/restoring it, previewing
@@ -1169,6 +1169,8 @@ function captureFullZoneRun(themeIdx, targetDistance) {
   echoTrailEventsSpawned = savedEventFlags.echoTrailEventsSpawned;
   pulsingOrbEventsSpawned = savedEventFlags.pulsingOrbEventsSpawned;
   boomerangEventsSpawned = savedEventFlags.boomerangEventsSpawned;
+  oncomingCometEventsSpawned = savedEventFlags.oncomingCometEventsSpawned;
+  splitRockEventsSpawned = savedEventFlags.splitRockEventsSpawned;
   lensingZoneEventsSpawned = savedEventFlags.lensingZoneEventsSpawned;
   supernovaEventsSpawned = savedEventFlags.supernovaEventsSpawned;
   miniBoss = savedMiniBossState.miniBoss;
@@ -1309,6 +1311,11 @@ function drawZonePreview(data) {
       previewCtx.fillStyle = 'rgba(200,150,100,0.6)';
       previewCtx.beginPath();
       previewCtx.arc(sx, yToScreen(g.y), Math.max(2, g.r * scale), 0, Math.PI * 2);
+      previewCtx.fill();
+    } else if (g.type === 'splitrock') {
+      previewCtx.fillStyle = 'rgba(220,160,90,0.7)';
+      previewCtx.beginPath();
+      previewCtx.arc(sx, yToScreen(g.y), Math.max(3, g.r * scale), 0, Math.PI * 2);
       previewCtx.fill();
     } else if (g.type === 'fireball') {
       previewCtx.fillStyle = 'rgba(255,120,50,0.5)';
