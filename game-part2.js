@@ -1,3 +1,32 @@
+function spawnLightningBolt(x) {
+  const th = currentTheme();
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+
+  const entry = th.pattern[patternIndex % th.pattern.length];
+  const seed = patternIndex; // fixed per-bolt seed, so the jagged shape is deterministic
+  patternIndex++;
+
+  // deterministic pseudo-jitter for a jagged look (no Math.random() -- same seed
+  // always produces the same zigzag, keeping every playthrough identical)
+  const jitter = [];
+  for (let i = 0; i < 5; i++) {
+    jitter.push(Math.sin(i * 12.9898 + seed * 78.233) * 0.5);
+  }
+
+  gates.push({
+    type: 'lightning',
+    x: x,
+    span: entry.spanPx,
+    thickness: entry.thicknessPx,
+    y1: PLAY_TOP + entry.y1Frac * playHeight,
+    y2: PLAY_TOP + entry.y2Frac * playHeight,
+    jitter: jitter,
+    spawnFrame: frame,
+    passed: false
+  });
+  return entry.spacing;
+}
+
 function spawnBarrier(x) {
   const th = currentTheme();
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
@@ -2794,6 +2823,7 @@ function resetGame() {
   continuesRemaining = diffConfig.continues;
   invincibilityEndTime = -1;
   freeHitCooldownEndTime = -1;
+  freeHitsUsedThisLife = 0;
   pendingRespawnMercyEligible = false;
   diedInCurrentZone = false;
   lives = MAX_LIVES;
@@ -2845,6 +2875,7 @@ function respawnInZone(opts) {
   portalObject = null;
   invincibilityEndTime = -1;
   freeHitCooldownEndTime = -1;
+  freeHitsUsedThisLife = 0;
   initBackgroundParticles(currentTheme());
   reseedZoneObstacles(ship.x + 420);
 }

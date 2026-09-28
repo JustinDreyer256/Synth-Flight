@@ -16,7 +16,7 @@ const BROWSER_NOTE_HTML = isPlainChromeBrowser()
   ? '<div id="browser-note">Play in Edge or Brave. Chrome runs this game at the wrong speed.</div>'
   : '';
 const canvas = document.getElementById('gameCanvas');
-let ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
+let ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 const rotateOverlay = document.getElementById('rotate-overlay');
 
@@ -86,10 +86,8 @@ function currentDisplayScale() {
 
 function sharpenCanvasContext(context) {
   if (!context) return;
-  context.imageSmoothingEnabled = false;
-  if ('webkitImageSmoothingEnabled' in context) context.webkitImageSmoothingEnabled = false;
-  if ('mozImageSmoothingEnabled' in context) context.mozImageSmoothingEnabled = false;
-  if ('msImageSmoothingEnabled' in context) context.msImageSmoothingEnabled = false;
+  context.imageSmoothingEnabled = true;
+  if ('imageSmoothingQuality' in context) context.imageSmoothingQuality = 'high';
 }
 
 function resizeCanvas() {
@@ -1442,19 +1440,23 @@ let clearTimeMs = 0;
 // per-difficulty run parameters. invincibilityFrames: brief post-collision
 // immunity (Easy and Overdrive) -- ignores hazard hits the same way ghost
 // mode does, but never protects against the top/bottom boundary walls.
+// freeHitsPerLife: how many hazard touches can be forgiven on one life
+// (Infinity = Easy/Overdrive repeating after the cooldown; 1 = Normal's
+// first-hit mercy; 0 = Hard, every hazard hit is death).
 const DIFFICULTY_CONFIG = {
-  easy: { lives: 9, continues: 3, invincibilityFrames: true },
-  normal: { lives: 9, continues: 3, invincibilityFrames: false },
-  hard: { lives: 9, continues: 0, invincibilityFrames: false },
-  extra: { lives: 1, continues: 0, invincibilityFrames: true },
+  easy: { lives: 9, continues: 3, invincibilityFrames: true, freeHitsPerLife: Infinity },
+  normal: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 1 },
+  hard: { lives: 9, continues: 0, invincibilityFrames: false, freeHitsPerLife: 0 },
+  extra: { lives: 1, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
 };
 const INVINCIBILITY_DURATION_MS = 1500; // 1.5 real seconds -- how long a granted protection window actually lasts, measured against the system clock so it's accurate regardless of frame rate
-const FREE_HIT_COOLDOWN_MS = 4000; // 4 real seconds -- how often a hazard touch can be forgiven outright (Easy / Overdrive). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
+const FREE_HIT_COOLDOWN_MS = 4000; // 4 real seconds -- how often a hazard touch can be forgiven outright (Easy / Overdrive, or Normal's single first hit). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
 function nowMs() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
 let MAX_LIVES = 3; // recalculated from DIFFICULTY_CONFIG each time resetGame() runs
 let continuesRemaining = 0;
 let invincibilityEndTime = -1; // real timestamp (ms); -1 means no active window
 let freeHitCooldownEndTime = -1; // real timestamp (ms) at which a hazard touch can next be forgiven outright, rather than costing a life
+let freeHitsUsedThisLife = 0; // forgiven hazard hits on the current life -- reset on respawn / new run
 let pendingRespawnMercyEligible = false; // true only when the death that caused the current respawn was a hazard death -- wall deaths are never eligible for the post-respawn mercy window
 let maxDistanceReached = 0;
 let zoneStartDistance = 0;
@@ -2023,9 +2025,12 @@ function tryEndGame(hazardType) {
   const t = nowMs();
   if (t < invincibilityEndTime) return; // currently within an active protection window -- ignore this collision entirely
   sfxHazardImpact(hazardType);
-  if (DIFFICULTY_CONFIG[selectedDifficulty]?.invincibilityFrames && t >= freeHitCooldownEndTime) {
+  const maxFreeHits = DIFFICULTY_CONFIG[selectedDifficulty]?.freeHitsPerLife || 0;
+  if (maxFreeHits > 0 && freeHitsUsedThisLife < maxFreeHits && t >= freeHitCooldownEndTime) {
     // forgiven hit grants a fresh protection window, then the free-pass
-    // cooldown so it cannot be chained indefinitely
+    // cooldown so it cannot be chained indefinitely. Normal only gets this
+    // once per life; Easy / Overdrive can repeat after the cooldown.
+    freeHitsUsedThisLife += 1;
     invincibilityEndTime = t + INVINCIBILITY_DURATION_MS;
     freeHitCooldownEndTime = t + FREE_HIT_COOLDOWN_MS;
     return;
@@ -2113,35 +2118,6 @@ function spawnGate(x) {
     phase: entry.phase,
     pulsePhase: entry.pulsePhase || 0,
     pulseFreq: entry.pulseFreq || 0,
-    passed: false
-  });
-  return entry.spacing;
-}
-
-function spawnLightningBolt(x) {
-  const th = currentTheme();
-  const playHeight = PLAY_BOTTOM - PLAY_TOP;
-
-  const entry = th.pattern[patternIndex % th.pattern.length];
-  const seed = patternIndex; // fixed per-bolt seed, so the jagged shape is deterministic
-  patternIndex++;
-
-  // deterministic pseudo-jitter for a jagged look (no Math.random() -- same seed
-  // always produces the same zigzag, keeping every playthrough identical)
-  const jitter = [];
-  for (let i = 0; i < 5; i++) {
-    jitter.push(Math.sin(i * 12.9898 + seed * 78.233) * 0.5);
-  }
-
-  gates.push({
-    type: 'lightning',
-    x: x,
-    span: entry.spanPx,
-    thickness: entry.thicknessPx,
-    y1: PLAY_TOP + entry.y1Frac * playHeight,
-    y2: PLAY_TOP + entry.y2Frac * playHeight,
-    jitter: jitter,
-    spawnFrame: frame,
     passed: false
   });
   return entry.spacing;

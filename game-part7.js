@@ -3956,7 +3956,8 @@ function updateOverlay() {
             <div class="settings-diff-name difficulty-normal">NORMAL</div>
             <div class="settings-diff-stats">
               9 lives &middot; 3 continues<br>
-              No invincibility frames
+              First hit: ${iframeSeconds}s invincible, then ${deathWindowSeconds}s vulnerable<br>
+              Any hit after that is death
             </div>
           </div>
           <div class="settings-diff-card">
