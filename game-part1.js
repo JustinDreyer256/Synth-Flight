@@ -1,20 +1,27 @@
 window.SYNTH_FLIGHT_JS_STARTED = true;
-function isPlainChromeBrowser() {
-  try {
-    if (navigator.brave) return false;
-  } catch (e) { /* ignore */ }
-  const ua = navigator.userAgent || '';
-  if (/Edg\/|OPR\/|Opera\/|SamsungBrowser|Firefox\/|YaBrowser|Vivaldi/i.test(ua)) return false;
-  const brands = (navigator.userAgentData && navigator.userAgentData.brands) || [];
-  const names = brands.map((b) => String(b.brand || '').toLowerCase());
-  if (names.some((n) => n.includes('brave') || n.includes('edge') || n.includes('opera'))) return false;
-  if (names.some((n) => n === 'google chrome')) return true;
-  return /Chrome\//.test(ua) && !/Edg\//.test(ua);
-}
-
-const BROWSER_NOTE_HTML = isPlainChromeBrowser()
-  ? '<div id="browser-note">Play in Edge or Brave. Chrome runs this game at the wrong speed.</div>'
-  : '';
+const BROWSER_HELP_HTML = `
+          <div class="achievement-section-header" style="margin-top:14px;">BROWSERS</div>
+          <div class="settings-diff-card">
+            <div class="settings-diff-name">EDGE</div>
+            <div class="settings-diff-stats">
+              Best default. If another browser feels shaky, slow, or input-laggy, play here.
+            </div>
+          </div>
+          <div class="settings-diff-card">
+            <div class="settings-diff-name">CHROME</div>
+            <div class="settings-diff-stats">
+              Usually fine now. If the ship moves at the wrong speed or the picture shakes, switch to Edge.
+            </div>
+          </div>
+          <div class="settings-diff-card">
+            <div class="settings-diff-name">BRAVE</div>
+            <div class="settings-diff-stats">
+              Can hitch while Shields are on. Click the lion in the address bar and turn Shields down for this site (or allow fingerprinting).<br>
+              Keep graphics acceleration on in Brave Settings &rarr; System.<br>
+              Play from an extracted folder or http://127.0.0.1 &mdash; not from inside a .zip.
+            </div>
+          </div>
+`;
 const canvas = document.getElementById('gameCanvas');
 let ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
 const overlay = document.getElementById('overlay');

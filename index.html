@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-store">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Synth Flight snes338</title>
+<title>Synth Flight snes344</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -385,6 +385,73 @@
     line-height: 1.45;
     color: rgba(205, 184, 232, 0.88);
     text-align: left;
+  }
+  .settings-ship-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .settings-action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .settings-picker {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    border-radius: 4px;
+  }
+  .settings-picker-label {
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: #ffffff;
+  }
+  .settings-picker .stepper-control {
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .settings-picker .stepper-value {
+    min-width: 0;
+    flex: 1;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .settings-picker .settings-trail-hint {
+    margin: 0;
+    padding: 0;
+    text-align: center;
+    line-height: 1.35;
+  }
+  .settings-toggle {
+    cursor: pointer;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    padding: 12px 14px;
+    transition: border-color 0.15s ease-in-out, background 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  }
+  .settings-toggle:hover {
+    background: rgba(255, 0, 127, 0.12);
+    border-color: var(--neon-pink);
+    box-shadow: 0 0 12px rgba(255, 0, 127, 0.35);
+  }
+  .settings-toggle-value {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--neon-yellow);
+    text-shadow: 0 0 6px rgba(255, 230, 0, 0.55);
+  }
+  .settings-toggle.is-off .settings-toggle-value {
+    color: #7a6a8a;
+    text-shadow: none;
   }
   .settings-save-id {
     font-family: 'Courier New', monospace;
@@ -1322,17 +1389,6 @@
       0 0 20px rgba(255, 46, 196, 1),
       0 0 36px rgba(255, 46, 196, 0.55);
   }
-  #browser-note {
-    margin: 0 18px 10px;
-    text-align: center;
-    font-family: 'Courier New', monospace;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    line-height: 1.4;
-    color: #ff2079;
-    text-shadow: 0 0 8px rgba(255, 32, 121, 0.6);
-    pointer-events: none;
-  }
   @keyframes startPromptPulse {
     0%, 100% {
       box-shadow:
@@ -2063,15 +2119,15 @@
 })();
 </script>
 <!-- GAME_PARTS -->
-<script src="game-part1.js?v=snes338"></script>
-<script src="game-part2.js?v=snes338"></script>
-<script src="game-part3.js?v=snes338"></script>
-<script src="game-part4.js?v=snes338"></script>
-<script src="game-part5.js?v=snes338"></script>
-<script src="game-part6.js?v=snes338"></script>
-<script src="game-part7.js?v=snes338"></script>
-<script src="game-part8.js?v=snes338"></script>
-<script src="game-part9.js?v=snes338"></script>
+<script src="game-part1.js?v=snes344"></script>
+<script src="game-part2.js?v=snes344"></script>
+<script src="game-part3.js?v=snes344"></script>
+<script src="game-part4.js?v=snes344"></script>
+<script src="game-part5.js?v=snes344"></script>
+<script src="game-part6.js?v=snes344"></script>
+<script src="game-part7.js?v=snes344"></script>
+<script src="game-part8.js?v=snes344"></script>
+<script src="game-part9.js?v=snes344"></script>
 <!-- /GAME_PARTS -->
 </body>
 </html>

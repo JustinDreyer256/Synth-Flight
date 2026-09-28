@@ -3896,52 +3896,38 @@ function updateOverlay() {
     overlay.innerHTML = `
       <div class="menu-panel">
         <div id="title" style="font-size:32px;">SETTINGS</div>
-        ${BROWSER_NOTE_HTML}
-        <div id="subtitle" class="overlay-recap">Audio</div>
         <div class="settings-diff-list scrollable-overlay-list">
-          <div class="menu-btn-row" data-action="toggle-sfx">
-            <span class="menu-btn-label">SOUND EFFECTS</span>
-            <span class="row-action-indicator">${audioSettings.sfxEnabled ? 'ON' : 'OFF'}</span>
-          </div>
-          <div class="menu-btn-row" data-action="toggle-bgm">
-            <span class="menu-btn-label">BACKGROUND MUSIC</span>
-            <span class="row-action-indicator">${audioSettings.bgmEnabled ? 'ON' : 'OFF'}</span>
-          </div>
-          <div class="menu-btn-row">
-            <span class="menu-btn-label">SHIP TRAIL</span>
-            <div class="stepper-control">
-              <button type="button" class="stepper-arrow" data-action="trail-prev">&#9664;</button>
-              <span class="stepper-value">${currentShipTrail().name}</span>
-              <button type="button" class="stepper-arrow" data-action="trail-next">&#9654;</button>
+          <div class="achievement-section-header">AUDIO</div>
+          <div class="settings-ship-grid">
+            <div class="settings-picker settings-toggle${audioSettings.sfxEnabled ? '' : ' is-off'}" data-action="toggle-sfx">
+              <div class="settings-picker-label">SOUND EFFECTS</div>
+              <div class="settings-toggle-value">${audioSettings.sfxEnabled ? 'ON' : 'OFF'}</div>
+            </div>
+            <div class="settings-picker settings-toggle${audioSettings.bgmEnabled ? '' : ' is-off'}" data-action="toggle-bgm">
+              <div class="settings-picker-label">BACKGROUND MUSIC</div>
+              <div class="settings-toggle-value">${audioSettings.bgmEnabled ? 'ON' : 'OFF'}</div>
             </div>
           </div>
-          <div class="settings-trail-hint">${currentShipTrail().hint} &middot; ${unlockedShipTrails().length} / ${SHIP_TRAILS.length} unlocked</div>
-          <div class="menu-btn-row">
-            <span class="menu-btn-label">SHIP</span>
-            <div class="stepper-control">
-              <button type="button" class="stepper-arrow" data-action="skin-prev">&#9664;</button>
-              <span class="stepper-value">${currentShipSkin().name}</span>
-              <button type="button" class="stepper-arrow" data-action="skin-next">&#9654;</button>
+          <div class="achievement-section-header" style="margin-top:14px;">SHIP</div>
+          <div class="settings-ship-grid">
+            <div class="settings-picker">
+              <div class="settings-picker-label">TRAIL</div>
+              <div class="stepper-control">
+                <button type="button" class="stepper-arrow" data-action="trail-prev">&#9664;</button>
+                <span class="stepper-value">${currentShipTrail().name}</span>
+                <button type="button" class="stepper-arrow" data-action="trail-next">&#9654;</button>
+              </div>
+              <div class="settings-trail-hint">${currentShipTrail().hint} &middot; ${unlockedShipTrails().length} / ${SHIP_TRAILS.length} unlocked</div>
             </div>
-          </div>
-          <div class="settings-trail-hint">${currentShipSkin().hint} &middot; ${unlockedShipSkins().length} / ${SHIP_SKINS.length} unlocked</div>
-          <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
-          <div class="menu-btn-row" data-action="copy-save-id">
-            <span class="menu-btn-label">SAVE ID</span>
-            <span class="row-action-indicator settings-save-id">${ensurePlayerSaveId()}</span>
-          </div>
-          <div class="settings-trail-hint">Keep this ID or bookmark the page (the address ends with #sf=${ensurePlayerSaveId()}). Clearing cache does not erase a server save. Export a file for a copy that lives outside the browser.</div>
-          <div class="menu-btn-row" data-action="export-save">
-            <span class="menu-btn-label">EXPORT SAVE</span>
-            <span class="row-action-indicator">FILE &#9660;</span>
-          </div>
-          <div class="menu-btn-row" data-action="import-save">
-            <span class="menu-btn-label">IMPORT SAVE</span>
-            <span class="row-action-indicator">FILE &#9654;</span>
-          </div>
-          <div class="menu-btn-row" data-action="restore-save-id">
-            <span class="menu-btn-label">RESTORE ID</span>
-            <span class="row-action-indicator">LOAD &#9654;</span>
+            <div class="settings-picker">
+              <div class="settings-picker-label">HULL</div>
+              <div class="stepper-control">
+                <button type="button" class="stepper-arrow" data-action="skin-prev">&#9664;</button>
+                <span class="stepper-value">${currentShipSkin().name}</span>
+                <button type="button" class="stepper-arrow" data-action="skin-next">&#9654;</button>
+              </div>
+              <div class="settings-trail-hint">${currentShipSkin().hint} &middot; ${unlockedShipSkins().length} / ${SHIP_SKINS.length} unlocked</div>
+            </div>
           </div>
           <div class="achievement-section-header" style="margin-top:14px;">DIFFICULTY DETAILS</div>
           <div class="settings-diff-card">
@@ -3975,6 +3961,27 @@ function updateOverlay() {
                 : '1 life &middot; no continues<br>' +
                   iframeSeconds + 's invincible (blinking) after a hit<br>' +
                   deathWindowSeconds + 's vulnerable afterward before it can trigger again'}
+            </div>
+          </div>
+          ${BROWSER_HELP_HTML}
+          <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
+          <div class="settings-picker settings-toggle" data-action="copy-save-id">
+            <div class="settings-picker-label">SAVE ID</div>
+            <div class="settings-toggle-value settings-save-id">${ensurePlayerSaveId()}</div>
+            <div class="settings-trail-hint">Click to copy. Bookmark the page (#sf=${ensurePlayerSaveId()}) or export a file. Clearing cache does not erase a server save.</div>
+          </div>
+          <div class="settings-action-grid">
+            <div class="settings-picker settings-toggle" data-action="export-save">
+              <div class="settings-picker-label">EXPORT</div>
+              <div class="settings-toggle-value">FILE</div>
+            </div>
+            <div class="settings-picker settings-toggle" data-action="import-save">
+              <div class="settings-picker-label">IMPORT</div>
+              <div class="settings-toggle-value">FILE</div>
+            </div>
+            <div class="settings-picker settings-toggle" data-action="restore-save-id">
+              <div class="settings-picker-label">RESTORE ID</div>
+              <div class="settings-toggle-value">LOAD</div>
             </div>
           </div>
         </div>
