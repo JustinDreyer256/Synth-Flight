@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-store">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Synth Flight snes355</title>
+<title>Synth Flight snes357</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -523,6 +523,75 @@
   .settings-toggle.is-off .settings-toggle-value {
     color: #7a6a8a;
     text-shadow: none;
+  }
+  .settings-volume-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+  }
+  .settings-volume-slider {
+    flex: 1;
+    min-width: 0;
+    height: 6px;
+    margin: 4px 0 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(15, 240, 252, 0.18);
+    border: 1px solid rgba(15, 240, 252, 0.35);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .settings-volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 10px rgba(15, 240, 252, 0.85);
+    border: 0;
+  }
+  .settings-volume-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 10px rgba(15, 240, 252, 0.85);
+    border: 0;
+  }
+  .settings-volume-pct {
+    min-width: 3.4em;
+    text-align: right;
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 6px rgba(15, 240, 252, 0.45);
+  }
+  .settings-picker.is-off .settings-volume-pct {
+    color: #7a6a8a;
+    text-shadow: none;
+  }
+  .settings-audio-default {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    border-radius: 4px;
+    color: var(--neon-cyan);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: border-color 0.15s ease-in-out, background 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  }
+  .settings-audio-default:hover {
+    background: rgba(255, 0, 127, 0.12);
+    border-color: var(--neon-pink);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(255, 0, 127, 0.35);
   }
   .settings-save-id {
     font-family: 'Courier New', monospace;
@@ -2204,15 +2273,15 @@
 })();
 </script>
 <!-- GAME_PARTS -->
-<script src="game-part1.js?v=snes355"></script>
-<script src="game-part2.js?v=snes355"></script>
-<script src="game-part3.js?v=snes355"></script>
-<script src="game-part4.js?v=snes355"></script>
-<script src="game-part5.js?v=snes355"></script>
-<script src="game-part6.js?v=snes355"></script>
-<script src="game-part7.js?v=snes355"></script>
-<script src="game-part8.js?v=snes355"></script>
-<script src="game-part9.js?v=snes355"></script>
+<script src="game-part1.js?v=snes357"></script>
+<script src="game-part2.js?v=snes357"></script>
+<script src="game-part3.js?v=snes357"></script>
+<script src="game-part4.js?v=snes357"></script>
+<script src="game-part5.js?v=snes357"></script>
+<script src="game-part6.js?v=snes357"></script>
+<script src="game-part7.js?v=snes357"></script>
+<script src="game-part8.js?v=snes357"></script>
+<script src="game-part9.js?v=snes357"></script>
 <!-- /GAME_PARTS -->
 </body>
 </html>

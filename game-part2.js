@@ -3035,6 +3035,7 @@ function handleOverlayActivate(e) {
     if (action === 'back-to-options') state = settingsReturnState;
     else if (action === 'toggle-sfx') toggleSfxEnabled();
     else if (action === 'toggle-bgm') toggleBgmEnabled();
+    else if (action === 'reset-audio-defaults') resetAudioVolumesToDefault();
     else if (action === 'trail-prev') cycleShipTrail(-1);
     else if (action === 'trail-next') cycleShipTrail(1);
     else if (action === 'skin-prev') cycleShipSkin(-1);

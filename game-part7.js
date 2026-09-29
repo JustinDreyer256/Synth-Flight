@@ -3887,15 +3887,28 @@ function updateOverlay() {
         <div class="settings-diff-list scrollable-overlay-list">
           <div class="achievement-section-header">AUDIO</div>
           <div class="settings-ship-grid">
-            <div class="settings-picker settings-toggle${audioSettings.sfxEnabled ? '' : ' is-off'}" data-action="toggle-sfx">
-              <div class="settings-picker-label">SOUND EFFECTS</div>
-              <div class="settings-toggle-value">${audioSettings.sfxEnabled ? 'ON' : 'OFF'}</div>
+            <div class="settings-picker${audioSettings.sfxEnabled ? '' : ' is-off'}">
+              <div class="settings-toggle${audioSettings.sfxEnabled ? '' : ' is-off'}" data-action="toggle-sfx">
+                <div class="settings-picker-label">SOUND EFFECTS</div>
+                <div class="settings-toggle-value">${audioSettings.sfxEnabled ? 'ON' : 'OFF'}</div>
+              </div>
+              <div class="settings-volume-row">
+                <input type="range" class="settings-volume-slider" min="0" max="100" step="1" value="${audioVolumePercent(audioSettings.sfxVolume)}" data-volume="sfx" aria-label="Sound effects volume">
+                <span class="settings-volume-pct" data-volume-pct="sfx">${audioVolumePercent(audioSettings.sfxVolume)}%</span>
+              </div>
             </div>
-            <div class="settings-picker settings-toggle${audioSettings.bgmEnabled ? '' : ' is-off'}" data-action="toggle-bgm">
-              <div class="settings-picker-label">BACKGROUND MUSIC</div>
-              <div class="settings-toggle-value">${audioSettings.bgmEnabled ? 'ON' : 'OFF'}</div>
+            <div class="settings-picker${audioSettings.bgmEnabled ? '' : ' is-off'}">
+              <div class="settings-toggle${audioSettings.bgmEnabled ? '' : ' is-off'}" data-action="toggle-bgm">
+                <div class="settings-picker-label">BACKGROUND MUSIC</div>
+                <div class="settings-toggle-value">${audioSettings.bgmEnabled ? 'ON' : 'OFF'}</div>
+              </div>
+              <div class="settings-volume-row">
+                <input type="range" class="settings-volume-slider" min="0" max="100" step="1" value="${audioVolumePercent(audioSettings.bgmVolume)}" data-volume="bgm" aria-label="Background music volume">
+                <span class="settings-volume-pct" data-volume-pct="bgm">${audioVolumePercent(audioSettings.bgmVolume)}%</span>
+              </div>
             </div>
           </div>
+          <button type="button" class="settings-audio-default" data-action="reset-audio-defaults">DEFAULT VOLUMES</button>
           <div class="achievement-section-header" style="margin-top:14px;">SHIP</div>
           <div class="settings-ship-grid">
             <div class="settings-picker">

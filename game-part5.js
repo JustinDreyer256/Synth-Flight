@@ -1,3 +1,33 @@
+function sfxCoreOverloadBreakdown() {
+  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
+  const t0 = audioCtx.currentTime;
+  const fryDur = 1.35;
+
+  playNoiseBurst({ duration: fryDur, filterFreq: 5200, filterEnd: 900, filterType: 'highpass', volume: 0.28, delaySend: 0.12, when: t0 });
+  playNoiseBurst({ duration: fryDur * 0.85, filterFreq: 2200, filterEnd: 400, filterType: 'bandpass', filterQ: 1.1, volume: 0.16, delaySend: 0.08, when: t0 + 0.06 });
+  playSynth({ type: 'sine', freq: 58, freqEnd: 22, duration: fryDur, attack: 0.02, decay: 0.25, sustain: 0.28, release: 0.3, volume: 0.18, filterFreq: 140, delaySend: 0, when: t0 });
+  playSynth({ type: 'triangle', freq: 2400, freqEnd: 180, duration: 0.55, attack: 0.01, decay: 0.14, sustain: 0.2, release: 0.16, volume: 0.07, filterType: 'lowpass', filterFreq: 3200, filterEnd: 500, delaySend: 0.08, when: t0 });
+
+  const pops = [0.12, 0.28, 0.41, 0.58, 0.77, 0.98];
+  pops.forEach((off, i) => {
+    playNoiseBurst({
+      duration: 0.035 + (i % 2) * 0.02,
+      filterFreq: 2800 + (i % 4) * 600,
+      filterType: i % 2 ? 'highpass' : 'bandpass',
+      filterQ: 2.8,
+      volume: 0.14 - i * 0.012,
+      delaySend: 0.06,
+      when: t0 + off,
+    });
+    playSynth({
+      type: 'square', freq: 2100 - i * 160, freqEnd: 220, duration: 0.04,
+      attack: 0.001, decay: 0.01, sustain: 0.1, release: 0.02,
+      volume: 0.05, filterType: 'highpass', filterFreq: 800, delaySend: 0.04, when: t0 + off,
+    });
+  });
+  playElectricCrackles({ count: 8, spacing: 0.09, volume: 0.16, when: t0 + 0.18 });
+}
+
 function sfxCoreDying() {
   if (!audioUnlocked || !audioCtx) return;
   const t0 = audioCtx.currentTime;

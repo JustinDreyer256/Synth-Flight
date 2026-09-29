@@ -1,3 +1,52 @@
+function playChargeSweep({ duration = 2, size = 1, isSuperBeam = false } = {}) {
+  if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
+  stopMegaManCharge(0.02);
+  const now = audioCtx.currentTime;
+  const dur = Math.max(0.12, duration);
+  const s = Math.min(6, Math.max(1, size));
+  const vol = (0.08 + s * 0.028) * (isSuperBeam ? 1.2 : 1);
+  const top = isSuperBeam ? 980 : 760;
+
+  const master = audioCtx.createGain();
+  master.gain.setValueAtTime(1, now);
+  if (dur > 0.06) master.gain.setValueAtTime(1, now + dur - 0.05);
+  master.gain.linearRampToValueAtTime(0.0001, now + dur);
+  master.connect(sfxGain);
+
+  const saw = audioCtx.createOscillator();
+  saw.type = 'sawtooth';
+  saw.frequency.setValueAtTime(140, now);
+  saw.frequency.exponentialRampToValueAtTime(top, now + dur);
+  const sFilt = audioCtx.createBiquadFilter();
+  sFilt.type = 'lowpass';
+  sFilt.Q.value = 0.8;
+  sFilt.frequency.setValueAtTime(500, now);
+  sFilt.frequency.exponentialRampToValueAtTime(3200, now + dur);
+  const sGain = audioCtx.createGain();
+  sGain.gain.setValueAtTime(vol * 0.35, now);
+  sGain.gain.linearRampToValueAtTime(vol, now + dur);
+  saw.connect(sFilt);
+  sFilt.connect(sGain);
+  sGain.connect(master);
+
+  const sine = audioCtx.createOscillator();
+  sine.type = 'sine';
+  sine.frequency.setValueAtTime(280, now);
+  sine.frequency.exponentialRampToValueAtTime(top * 2, now + dur);
+  const nGain = audioCtx.createGain();
+  nGain.gain.setValueAtTime(vol * 0.25, now);
+  nGain.gain.linearRampToValueAtTime(vol * 0.7, now + dur);
+  sine.connect(nGain);
+  nGain.connect(master);
+
+  const stopAt = now + dur + 0.04;
+  saw.start(now);
+  sine.start(now);
+  saw.stop(stopAt);
+  sine.stop(stopAt);
+  megaManChargeCtl = { master, nodes: [saw, sine] };
+}
+
 function playChargeHeartbeat({ duration = 2, size = 1, isSuperBeam = false } = {}) {
   if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
   stopMegaManCharge(0.02);
@@ -3082,35 +3131,5 @@ function sfxCoreOverloadFlash() {
   playSynth({ type: 'sawtooth', freq: 420, freqEnd: 70, duration: 0.22, attack: 0.001, decay: 0.05, sustain: 0.22, release: 0.08, volume: 0.16, filterType: 'lowpass', filterFreq: 1800, filterEnd: 280, delaySend: 0.06, when: t0 });
   playElectricCrackles({ count: 16, spacing: 0.012, volume: 0.3, when: t0 });
   playElectricCrackles({ count: 8, spacing: 0.03, volume: 0.18, when: t0 + 0.14 });
-}
-
-function sfxCoreOverloadBreakdown() {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
-  const t0 = audioCtx.currentTime;
-  const fryDur = 1.35;
-
-  playNoiseBurst({ duration: fryDur, filterFreq: 5200, filterEnd: 900, filterType: 'highpass', volume: 0.28, delaySend: 0.12, when: t0 });
-  playNoiseBurst({ duration: fryDur * 0.85, filterFreq: 2200, filterEnd: 400, filterType: 'bandpass', filterQ: 1.1, volume: 0.16, delaySend: 0.08, when: t0 + 0.06 });
-  playSynth({ type: 'sine', freq: 58, freqEnd: 22, duration: fryDur, attack: 0.02, decay: 0.25, sustain: 0.28, release: 0.3, volume: 0.18, filterFreq: 140, delaySend: 0, when: t0 });
-  playSynth({ type: 'triangle', freq: 2400, freqEnd: 180, duration: 0.55, attack: 0.01, decay: 0.14, sustain: 0.2, release: 0.16, volume: 0.07, filterType: 'lowpass', filterFreq: 3200, filterEnd: 500, delaySend: 0.08, when: t0 });
-
-  const pops = [0.12, 0.28, 0.41, 0.58, 0.77, 0.98];
-  pops.forEach((off, i) => {
-    playNoiseBurst({
-      duration: 0.035 + (i % 2) * 0.02,
-      filterFreq: 2800 + (i % 4) * 600,
-      filterType: i % 2 ? 'highpass' : 'bandpass',
-      filterQ: 2.8,
-      volume: 0.14 - i * 0.012,
-      delaySend: 0.06,
-      when: t0 + off,
-    });
-    playSynth({
-      type: 'square', freq: 2100 - i * 160, freqEnd: 220, duration: 0.04,
-      attack: 0.001, decay: 0.01, sustain: 0.1, release: 0.02,
-      volume: 0.05, filterType: 'highpass', filterFreq: 800, delaySend: 0.04, when: t0 + off,
-    });
-  });
-  playElectricCrackles({ count: 8, spacing: 0.09, volume: 0.16, when: t0 + 0.18 });
 }
 

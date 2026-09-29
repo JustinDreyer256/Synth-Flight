@@ -5188,6 +5188,7 @@ function handleOverlayActivate(e) {
     if (action === 'back-to-options') state = settingsReturnState;
     else if (action === 'toggle-sfx') toggleSfxEnabled();
     else if (action === 'toggle-bgm') toggleBgmEnabled();
+    else if (action === 'reset-audio-defaults') resetAudioVolumesToDefault();
     else if (action === 'trail-prev') cycleShipTrail(-1);
     else if (action === 'trail-next') cycleShipTrail(1);
     else if (action === 'skin-prev') cycleShipSkin(-1);
@@ -7762,6 +7763,16 @@ let delayInput = null;
 let audioUnlocked = false;
 
 const AUDIO_SETTINGS_STORAGE_KEY = 'synthFlightAudioSettings';
+const DEFAULT_SFX_VOLUME = 0.64;
+const DEFAULT_BGM_VOLUME = 0.26;
+function clampAudioVolume(value, fallback) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+}
+function audioVolumePercent(value) {
+  return Math.round(clampAudioVolume(value, 0) * 100);
+}
 function loadAudioSettings() {
   try {
     const raw = localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
@@ -7770,6 +7781,8 @@ function loadAudioSettings() {
       return {
         sfxEnabled: typeof parsed.sfxEnabled === 'boolean' ? parsed.sfxEnabled : true,
         bgmEnabled: typeof parsed.bgmEnabled === 'boolean' ? parsed.bgmEnabled : true,
+        sfxVolume: clampAudioVolume(parsed.sfxVolume, DEFAULT_SFX_VOLUME),
+        bgmVolume: clampAudioVolume(parsed.bgmVolume, DEFAULT_BGM_VOLUME),
         chargeTelegraph: typeof parsed.chargeTelegraph === 'string' && parsed.chargeTelegraph !== 'xCharge'
           ? parsed.chargeTelegraph
           : 'static',
@@ -7779,13 +7792,15 @@ function loadAudioSettings() {
       };
     }
   } catch (e) { /* corrupted/missing data -- fall through to defaults */ }
-  return { sfxEnabled: true, bgmEnabled: true, chargeTelegraph: 'static', glowDanger: 'siren', lifeLost: 'lifeChip', respawn: 'systemsOn' };
+  return { sfxEnabled: true, bgmEnabled: true, sfxVolume: DEFAULT_SFX_VOLUME, bgmVolume: DEFAULT_BGM_VOLUME, chargeTelegraph: 'static', glowDanger: 'siren', lifeLost: 'lifeChip', respawn: 'systemsOn' };
 }
 function saveAudioSettings() {
   try {
     localStorage.setItem(AUDIO_SETTINGS_STORAGE_KEY, JSON.stringify({
       sfxEnabled: audioSettings.sfxEnabled,
       bgmEnabled: audioSettings.bgmEnabled,
+      sfxVolume: audioSettings.sfxVolume,
+      bgmVolume: audioSettings.bgmVolume,
       chargeTelegraph: audioSettings.chargeTelegraph,
       glowDanger: audioSettings.glowDanger,
       lifeLost: audioSettings.lifeLost,
@@ -7798,8 +7813,8 @@ const __loadedAudioSettings = loadAudioSettings();
 
 const audioSettings = {
   masterVolume: 1.0,
-  sfxVolume: 0.64,
-  bgmVolume: 0.26,
+  sfxVolume: __loadedAudioSettings.sfxVolume,
+  bgmVolume: __loadedAudioSettings.bgmVolume,
   muted: false,
   sfxEnabled: __loadedAudioSettings.sfxEnabled,
   bgmEnabled: __loadedAudioSettings.bgmEnabled,
@@ -7887,6 +7902,8 @@ function collectDurableSave() {
     audio: {
       sfxEnabled: audioSettings.sfxEnabled,
       bgmEnabled: audioSettings.bgmEnabled,
+      sfxVolume: audioSettings.sfxVolume,
+      bgmVolume: audioSettings.bgmVolume,
       chargeTelegraph: audioSettings.chargeTelegraph,
       glowDanger: audioSettings.glowDanger,
       lifeLost: audioSettings.lifeLost,
@@ -7946,6 +7963,8 @@ function mergeDurableSaves(blobs) {
     audio: {
       sfxEnabled: typeof newestAudio.sfxEnabled === 'boolean' ? newestAudio.sfxEnabled : audioSettings.sfxEnabled,
       bgmEnabled: typeof newestAudio.bgmEnabled === 'boolean' ? newestAudio.bgmEnabled : audioSettings.bgmEnabled,
+      sfxVolume: clampAudioVolume(newestAudio.sfxVolume, audioSettings.sfxVolume),
+      bgmVolume: clampAudioVolume(newestAudio.bgmVolume, audioSettings.bgmVolume),
       chargeTelegraph: typeof newestAudio.chargeTelegraph === 'string' ? newestAudio.chargeTelegraph : audioSettings.chargeTelegraph,
       glowDanger: typeof newestAudio.glowDanger === 'string' ? newestAudio.glowDanger : audioSettings.glowDanger,
       lifeLost: typeof newestAudio.lifeLost === 'string' ? newestAudio.lifeLost : audioSettings.lifeLost,
@@ -7972,6 +7991,8 @@ function applyDurableSave(blob) {
   if (blob.audio) {
     if (typeof blob.audio.sfxEnabled === 'boolean') audioSettings.sfxEnabled = blob.audio.sfxEnabled;
     if (typeof blob.audio.bgmEnabled === 'boolean') audioSettings.bgmEnabled = blob.audio.bgmEnabled;
+    if (blob.audio.sfxVolume != null) audioSettings.sfxVolume = clampAudioVolume(blob.audio.sfxVolume, audioSettings.sfxVolume);
+    if (blob.audio.bgmVolume != null) audioSettings.bgmVolume = clampAudioVolume(blob.audio.bgmVolume, audioSettings.bgmVolume);
     if (typeof blob.audio.chargeTelegraph === 'string' && blob.audio.chargeTelegraph !== 'xCharge') audioSettings.chargeTelegraph = blob.audio.chargeTelegraph;
     if (typeof blob.audio.glowDanger === 'string') audioSettings.glowDanger = blob.audio.glowDanger;
     if (typeof blob.audio.lifeLost === 'string') audioSettings.lifeLost = blob.audio.lifeLost;
@@ -8118,6 +8139,39 @@ function copySaveIdToClipboard() {
   } else {
     window.alert('SAVE ID: ' + id);
   }
+}
+
+function setAudioBusVolume(bus, unit, opts) {
+  const next = clampAudioVolume(unit, null);
+  if (next == null) return;
+  if (bus === 'sfx') audioSettings.sfxVolume = next;
+  else if (bus === 'bgm') audioSettings.bgmVolume = next;
+  else return;
+  applyAudioSettings();
+  if (opts && opts.save) saveAudioSettings();
+  if (state === 'settings') {
+    const pct = overlay.querySelector('[data-volume-pct="' + bus + '"]');
+    if (pct) pct.textContent = audioVolumePercent(next) + '%';
+  }
+}
+
+function handleAudioVolumeInput(e) {
+  const slider = e.target && e.target.closest ? e.target.closest('.settings-volume-slider') : null;
+  if (!slider || state !== 'settings') return;
+  setAudioBusVolume(slider.dataset.volume, Number(slider.value) / 100, { save: e.type === 'change' });
+  if (e.type === 'change' && slider.dataset.volume === 'sfx' && audioSettings.sfxEnabled) {
+    try { sfxUiClick(); } catch (err) { /* preview must never block settings */ }
+  }
+}
+overlay.addEventListener('input', handleAudioVolumeInput);
+overlay.addEventListener('change', handleAudioVolumeInput);
+
+function resetAudioVolumesToDefault() {
+  audioSettings.sfxVolume = DEFAULT_SFX_VOLUME;
+  audioSettings.bgmVolume = DEFAULT_BGM_VOLUME;
+  applyAudioSettings();
+  saveAudioSettings();
+  lastRenderedOverlayState = null;
 }
 
 function toggleSfxEnabled() {
@@ -21539,15 +21593,28 @@ function updateOverlay() {
         <div class="settings-diff-list scrollable-overlay-list">
           <div class="achievement-section-header">AUDIO</div>
           <div class="settings-ship-grid">
-            <div class="settings-picker settings-toggle${audioSettings.sfxEnabled ? '' : ' is-off'}" data-action="toggle-sfx">
-              <div class="settings-picker-label">SOUND EFFECTS</div>
-              <div class="settings-toggle-value">${audioSettings.sfxEnabled ? 'ON' : 'OFF'}</div>
+            <div class="settings-picker${audioSettings.sfxEnabled ? '' : ' is-off'}">
+              <div class="settings-toggle${audioSettings.sfxEnabled ? '' : ' is-off'}" data-action="toggle-sfx">
+                <div class="settings-picker-label">SOUND EFFECTS</div>
+                <div class="settings-toggle-value">${audioSettings.sfxEnabled ? 'ON' : 'OFF'}</div>
+              </div>
+              <div class="settings-volume-row">
+                <input type="range" class="settings-volume-slider" min="0" max="100" step="1" value="${audioVolumePercent(audioSettings.sfxVolume)}" data-volume="sfx" aria-label="Sound effects volume">
+                <span class="settings-volume-pct" data-volume-pct="sfx">${audioVolumePercent(audioSettings.sfxVolume)}%</span>
+              </div>
             </div>
-            <div class="settings-picker settings-toggle${audioSettings.bgmEnabled ? '' : ' is-off'}" data-action="toggle-bgm">
-              <div class="settings-picker-label">BACKGROUND MUSIC</div>
-              <div class="settings-toggle-value">${audioSettings.bgmEnabled ? 'ON' : 'OFF'}</div>
+            <div class="settings-picker${audioSettings.bgmEnabled ? '' : ' is-off'}">
+              <div class="settings-toggle${audioSettings.bgmEnabled ? '' : ' is-off'}" data-action="toggle-bgm">
+                <div class="settings-picker-label">BACKGROUND MUSIC</div>
+                <div class="settings-toggle-value">${audioSettings.bgmEnabled ? 'ON' : 'OFF'}</div>
+              </div>
+              <div class="settings-volume-row">
+                <input type="range" class="settings-volume-slider" min="0" max="100" step="1" value="${audioVolumePercent(audioSettings.bgmVolume)}" data-volume="bgm" aria-label="Background music volume">
+                <span class="settings-volume-pct" data-volume-pct="bgm">${audioVolumePercent(audioSettings.bgmVolume)}%</span>
+              </div>
             </div>
           </div>
+          <button type="button" class="settings-audio-default" data-action="reset-audio-defaults">DEFAULT VOLUMES</button>
           <div class="achievement-section-header" style="margin-top:14px;">SHIP</div>
           <div class="settings-ship-grid">
             <div class="settings-picker">

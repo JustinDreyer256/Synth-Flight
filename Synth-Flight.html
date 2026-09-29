@@ -28,18 +28,20 @@
     align-items: center;
     height: 100vh;
     width: 100vw;
+    touch-action: none;
   }
   canvas {
     display: block;
+    position: absolute;
     background: #0d0221;
+    touch-action: none;
   }
   #overlay {
     position: absolute;
-    top: 50%;
-    left: 50%;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
-    transform: translate(-50%, -50%);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -218,7 +220,14 @@
   .options-difficulty-value.difficulty-easy, .stepper-value.difficulty-easy, .settings-diff-name.difficulty-easy { color: #0ff0fc; text-shadow: 0 0 10px rgba(15,240,252,0.8); }
   .options-difficulty-value.difficulty-normal, .stepper-value.difficulty-normal, .settings-diff-name.difficulty-normal { color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,0.8); }
   .options-difficulty-value.difficulty-hard, .stepper-value.difficulty-hard, .settings-diff-name.difficulty-hard { color: #ff2079; text-shadow: 0 0 10px rgba(255,32,121,0.8); }
-  .options-difficulty-value.difficulty-extra, .stepper-value.difficulty-extra, .settings-diff-card.difficulty-extra:not(.locked) .settings-diff-name { color: #ff0000; text-shadow: 0 0 10px rgba(255,0,0,0.9); }
+  .options-difficulty-value.difficulty-extra, .stepper-value.difficulty-extra, .settings-diff-card.difficulty-extra:not(.locked) .settings-diff-name {
+    color: #ff8a96;
+    text-shadow:
+      0 0 2px #2a0510,
+      0 1px 2px rgba(0, 0, 0, 0.9),
+      0 0 10px rgba(255, 50, 80, 0.95),
+      0 0 18px rgba(255, 0, 70, 0.55);
+  }
 
   /* Options panel v2 (uploaded design) */
   .options-panel-v2 {
@@ -238,11 +247,50 @@
     text-align: center;
     font-size: 20px;
     letter-spacing: 4px;
+    padding-left: 4px;
     color: #fff;
     text-shadow: 0 0 8px var(--neon-cyan);
     margin-bottom: 20px;
     padding-bottom: 8px;
     border-bottom: 1px solid rgba(0, 240, 255, 0.25);
+  }
+  .options-panel-v2 .panel-header {
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 10px;
+    padding-left: 10px;
+    color: #ff2ec4;
+    text-shadow:
+      0 0 8px #ff007f,
+      0 0 18px rgba(255, 0, 127, 0.9),
+      0 0 32px rgba(255, 46, 196, 0.55);
+    border-bottom-color: rgba(255, 0, 127, 0.45);
+  }
+  .options-panel-v2 .settings-picker-label {
+    color: #a0f0ff;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.28);
+  }
+  .options-panel-v2 .btn-continue-secondary,
+  .continue-panel .btn-continue-secondary {
+    height: 46px;
+    font-size: 15px;
+    letter-spacing: 2.5px;
+    color: #a0f0ff;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.28);
+    border-color: rgba(160, 240, 255, 0.32);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .options-panel-v2 .btn-continue-secondary:hover,
+  .options-panel-v2 .btn-continue-secondary:focus,
+  .continue-panel .btn-continue-secondary:hover,
+  .continue-panel .btn-continue-secondary:focus {
+    color: #ffffff;
+    text-shadow: 0 0 10px var(--neon-cyan), 0 0 18px rgba(0, 240, 255, 0.75);
+    border-color: var(--neon-cyan);
+    background: rgba(0, 240, 255, 0.14);
+    box-shadow:
+      0 0 18px rgba(0, 240, 255, 0.55),
+      inset 0 0 0 1px rgba(160, 240, 255, 0.85);
   }
   .menu-stack {
     display: flex;
@@ -250,10 +298,26 @@
     gap: 12px;
     min-width: 300px;
   }
+  .options-diff-picker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    border-radius: 4px;
+  }
+  .options-diff-picker .stepper-control {
+    justify-content: center;
+    width: 100%;
+  }
+  .options-panel-v2 .menu-stack {
+    width: 100%;
+  }
   .continue-panel {
     min-width: 380px;
     padding-top: 24px;
-    transform: translateX(12%);
   }
   .continue-credit {
     font-size: 64px;
@@ -272,8 +336,14 @@
     color: #efe6f8;
     margin-bottom: 18px;
   }
-  .continue-panel .btn-start-game {
-    height: 48px;
+  .continue-panel .btn-start-game,
+  .options-panel-v2 .btn-start-game {
+    height: 56px;
+    font-size: 20px;
+    letter-spacing: 0.22em;
+  }
+  .continue-panel .cta-arrow {
+    font-size: 16px;
   }
   .continue-panel .menu-stack {
     width: 100%;
@@ -282,7 +352,6 @@
     width: 100%;
     height: 44px;
     margin: 0;
-    padding: 0 16px;
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.42);
     border-radius: 4px;
@@ -293,6 +362,10 @@
     letter-spacing: 2px;
     text-align: center;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px 0 18px;
     text-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
@@ -381,6 +454,121 @@
     color: rgba(205, 184, 232, 0.88);
     text-align: left;
   }
+  .settings-ship-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .settings-action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .settings-picker {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    border-radius: 4px;
+  }
+  .settings-picker-label {
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: #ffffff;
+  }
+  .settings-picker .stepper-control {
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .settings-picker .stepper-value {
+    min-width: 0;
+    flex: 1;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .settings-picker .settings-trail-hint {
+    margin: 0;
+    padding: 0;
+    text-align: center;
+    line-height: 1.35;
+  }
+  .settings-toggle {
+    cursor: pointer;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    padding: 12px 14px;
+    transition: border-color 0.15s ease-in-out, background 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  }
+  .settings-toggle:hover {
+    background: rgba(255, 0, 127, 0.12);
+    border-color: var(--neon-pink);
+    box-shadow: 0 0 12px rgba(255, 0, 127, 0.35);
+  }
+  .settings-toggle-value {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--neon-yellow);
+    text-shadow: 0 0 6px rgba(255, 230, 0, 0.55);
+  }
+  .settings-toggle.is-off .settings-toggle-value {
+    color: #7a6a8a;
+    text-shadow: none;
+  }
+  .settings-volume-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+  }
+  .settings-volume-slider {
+    flex: 1;
+    min-width: 0;
+    height: 6px;
+    margin: 4px 0 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(15, 240, 252, 0.18);
+    border: 1px solid rgba(15, 240, 252, 0.35);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .settings-volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 10px rgba(15, 240, 252, 0.85);
+    border: 0;
+  }
+  .settings-volume-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 10px rgba(15, 240, 252, 0.85);
+    border: 0;
+  }
+  .settings-volume-pct {
+    min-width: 3.4em;
+    text-align: right;
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 6px rgba(15, 240, 252, 0.45);
+  }
+  .settings-picker.is-off .settings-volume-pct {
+    color: #7a6a8a;
+    text-shadow: none;
+  }
   .settings-save-id {
     font-family: 'Courier New', monospace;
     letter-spacing: 2px;
@@ -411,16 +599,30 @@
     border-radius: 4px;
     color: #ffffff;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 18px;
     font-weight: 900;
-    letter-spacing: 3px;
+    letter-spacing: 0.18em;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 16px;
+    text-shadow:
+      0 0 4px rgba(255, 255, 255, 0.95),
+      0 0 10px rgba(255, 255, 255, 0.55),
+      0 0 18px rgba(255, 255, 255, 0.28);
     box-shadow: 0 0 16px rgba(255, 0, 127, 0.4);
     transition: filter 0.2s, box-shadow 0.2s;
   }
   .btn-start-game:hover {
     filter: brightness(1.2);
     box-shadow: 0 0 24px rgba(0, 240, 255, 0.8);
+  }
+  .cta-arrow {
+    letter-spacing: 0;
+    line-height: 1;
+    font-size: 12px;
   }
   .confirm-panel {
     width: 420px;
@@ -1309,6 +1511,7 @@
     -webkit-user-select: none;
   }
   #overlay.home-layout #menu-start-prompt:hover {
+    filter: brightness(1.08);
     color: #ffffff;
     background: #1a0828;
     border-color: #ff79e0;
@@ -1694,6 +1897,16 @@
     color: #0ff0fc;
   }
   #sfx-tester.active { display: flex; }
+  html.player-build #dev-toggle,
+  html.player-build #dev-panel,
+  html.player-build #editor-toggle,
+  html.player-build #editor-overlay,
+  html.player-build #preview-toggle,
+  html.player-build #preview-overlay,
+  html.player-build #sfx-toggle,
+  html.player-build #sfx-tester {
+    display: none !important;
+  }
   #sfx-tester-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -1869,6 +2082,8 @@
 </style>
 </head>
 <body>
+<script>window.SYNTH_FLIGHT_PLAYER_BUILD=true;</script>
+
 <div id="game-container">
   <canvas id="gameCanvas"></canvas>
   <div id="overlay" class="home-layout">
@@ -2670,10 +2885,46 @@ window.SHIPPED_CUSTOM_LEVELS = {
 <!-- GAME_PARTS -->
 <script>
 window.SYNTH_FLIGHT_JS_STARTED = true;
+const BROWSER_HELP_HTML = `
+          <div class="achievement-section-header" style="margin-top:14px;">BROWSERS</div>
+          <div class="settings-diff-card">
+            <div class="settings-diff-name">EDGE</div>
+            <div class="settings-diff-stats">
+              Best default. If another browser feels shaky, slow, or input-laggy, play here.
+            </div>
+          </div>
+          <div class="settings-diff-card">
+            <div class="settings-diff-name">CHROME</div>
+            <div class="settings-diff-stats">
+              Usually fine now. If the ship moves at the wrong speed or the picture shakes, switch to Edge.
+            </div>
+          </div>
+          <div class="settings-diff-card">
+            <div class="settings-diff-name">BRAVE</div>
+            <div class="settings-diff-stats">
+              Can hitch while Shields are on. Click the lion in the address bar and turn Shields down for this site (or allow fingerprinting).<br>
+              Keep graphics acceleration on in Brave Settings &rarr; System.<br>
+              Play from an extracted folder or http://127.0.0.1 &mdash; not from inside a .zip.
+            </div>
+          </div>
+`;
 const canvas = document.getElementById('gameCanvas');
-let ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) || canvas.getContext('2d');
+let ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 const rotateOverlay = document.getElementById('rotate-overlay');
+
+const DEV_TOOLS_ENABLED = (() => {
+  try {
+    const params = new URLSearchParams(location.search);
+    if (params.get('dev') === '1') return true;
+    if (params.get('player') === '1') return false;
+  } catch (e) { /* ignore */ }
+  return !window.SYNTH_FLIGHT_PLAYER_BUILD;
+})();
+if (!DEV_TOOLS_ENABLED) {
+  document.documentElement.classList.add('player-build');
+  if (document.body) document.body.classList.add('player-build');
+}
 
 const GAME_STORAGE_PREFIX = 'synthFlight:';
 window.storage = {
@@ -2728,33 +2979,55 @@ function currentDisplayScale() {
 
 function sharpenCanvasContext(context) {
   if (!context) return;
-  context.imageSmoothingEnabled = false;
-  if ('webkitImageSmoothingEnabled' in context) context.webkitImageSmoothingEnabled = false;
-  if ('mozImageSmoothingEnabled' in context) context.mozImageSmoothingEnabled = false;
-  if ('msImageSmoothingEnabled' in context) context.msImageSmoothingEnabled = false;
+  context.imageSmoothingEnabled = true;
+  if ('imageSmoothingQuality' in context) context.imageSmoothingQuality = 'high';
 }
 
 function resizeCanvas() {
-  W = window.innerWidth;
-  H = window.innerHeight;
-  // Game units stay in CSS pixels. The bitmap matches the display (up to 2x
-  // on retina) so a full-screen browser is not stretching an 800px frame.
+  // One playfield for Cursor, Edge, and the app. Game units stay 1280x720
+  // (16:9). The canvas is scaled to fit the window so a small Cursor panel
+  // still shows the full stage you will ship, not a cropped taller box.
+  W = 1280;
+  H = 720;
+  const fit = Math.min(window.innerWidth / W, window.innerHeight / H);
+  const dispW = Math.max(1, Math.round(W * fit));
+  const dispH = Math.max(1, Math.round(H * fit));
   renderScale = currentDisplayScale();
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-  overlay.style.width = W + 'px';
-  overlay.style.height = H + 'px';
+  canvas.style.width = dispW + 'px';
+  canvas.style.height = dispH + 'px';
+  overlay.style.width = dispW + 'px';
+  overlay.style.height = dispH + 'px';
   canvas.width = Math.max(1, Math.round(W * renderScale));
   canvas.height = Math.max(1, Math.round(H * renderScale));
+  const left = Math.round((window.innerWidth - dispW) / 2);
+  const top = Math.round((window.innerHeight - dispH) / 2);
+  canvas.style.left = left + 'px';
+  canvas.style.top = top + 'px';
+  overlay.style.left = left + 'px';
+  overlay.style.top = top + 'px';
+  overlay.style.transform = 'none';
   applyCanvasRenderScale();
   sharpenCanvasContext(ctx);
   BAR_HEIGHT = Math.min(50, Math.max(34, H * 0.05));
   PLAY_TOP = BAR_HEIGHT;
   PLAY_BOTTOM = H - BAR_HEIGHT;
+  positionPauseButton();
   if (!hasInitializedGame) {
     hasInitializedGame = true;
-    resetGame();
+    if (typeof resetGame === 'function') resetGame();
   }
+}
+
+function positionPauseButton() {
+  if (!pauseToggleBtn) return;
+  const fit = Math.min(window.innerWidth / W, window.innerHeight / H);
+  const dispW = Math.max(1, Math.round(W * fit));
+  const dispH = Math.max(1, Math.round(H * fit));
+  const left = Math.round((window.innerWidth - dispW) / 2);
+  const top = Math.round((window.innerHeight - dispH) / 2);
+  const barCss = BAR_HEIGHT * fit;
+  pauseToggleBtn.style.top = Math.max(8, top + barCss + 8) + 'px';
+  pauseToggleBtn.style.right = Math.max(8, window.innerWidth - left - dispW + 8) + 'px';
 }
 
 function checkOrientation() {
@@ -2806,6 +3079,11 @@ const GAP_FRACTION_MIN = 0.3;
 const SHIP_W = 40;
 const SHIP_H = 18;
 const THEME_DISTANCE = 1000;
+// Zone 1's decorative sun (the same orb that later becomes The Signal)
+// holds until this zone-local distance, then plays a vanish over
+// SYNTHWAVE_SUN_VANISH_DURATION meters so the sky is empty before warp
+const SYNTHWAVE_SUN_VANISH_START = 900;
+const SYNTHWAVE_SUN_VANISH_DURATION = 80;
 const WARP_DURATION = 100;
 const PORTAL_LEAD_DISTANCE = 80; // how far (in distance units) before the threshold the portal appears
 
@@ -2879,31 +3157,31 @@ const THEMES = [
     // Bars never span the full width, so there's always open sky above and/or below each one.
     pattern: [
       { spacing: 360, bars: [
-        { yFrac: 0.20, ampFrac: 0.048, freq: 0.012, phase: 0.0, widthPx: 110, thicknessPx: 18 },
-        { yFrac: 0.55, ampFrac: 0.06, freq: 0.009, phase: 1.5, widthPx: 130, thicknessPx: 18 },
-        { yFrac: 0.85, ampFrac: 0.036, freq: 0.015, phase: 3.0, widthPx: 100, thicknessPx: 18 }
+        { yFrac: 0.14, ampFrac: 0.070, freq: 0.014, phase: 0.0, xOffsetPx: -55, widthPx: 110, thicknessPx: 18 },
+        { yFrac: 0.50, ampFrac: 0.085, freq: 0.009, phase: 2.1, xOffsetPx: 40, widthPx: 130, thicknessPx: 18 },
+        { yFrac: 0.86, ampFrac: 0.060, freq: 0.017, phase: 4.2, xOffsetPx: -20, widthPx: 100, thicknessPx: 18 }
       ]},
       { spacing: 380, bars: [
-        { yFrac: 0.35, ampFrac: 0.072, freq: 0.0108, phase: 0.8, widthPx: 140, thicknessPx: 20 },
-        { yFrac: 0.75, ampFrac: 0.054, freq: 0.0132, phase: 2.2, widthPx: 110, thicknessPx: 18 }
+        { yFrac: 0.22, ampFrac: 0.090, freq: 0.011, phase: 0.8, xOffsetPx: 50, widthPx: 140, thicknessPx: 20 },
+        { yFrac: 0.80, ampFrac: 0.075, freq: 0.016, phase: 3.4, xOffsetPx: -45, widthPx: 110, thicknessPx: 18 }
       ]},
       { spacing: 350, bars: [
-        { yFrac: 0.15, ampFrac: 0.042, freq: 0.012, phase: 1.0, widthPx: 100, thicknessPx: 16 },
-        { yFrac: 0.50, ampFrac: 0.06, freq: 0.0096, phase: 2.6, widthPx: 120, thicknessPx: 18 },
-        { yFrac: 0.82, ampFrac: 0.048, freq: 0.0144, phase: 4.0, widthPx: 110, thicknessPx: 18 }
+        { yFrac: 0.12, ampFrac: 0.065, freq: 0.013, phase: 1.4, xOffsetPx: 25, widthPx: 100, thicknessPx: 16 },
+        { yFrac: 0.48, ampFrac: 0.080, freq: 0.008, phase: 3.0, xOffsetPx: -50, widthPx: 120, thicknessPx: 18 },
+        { yFrac: 0.88, ampFrac: 0.070, freq: 0.015, phase: 5.1, xOffsetPx: 35, widthPx: 110, thicknessPx: 18 }
       ]},
       { spacing: 390, bars: [
-        { yFrac: 0.30, ampFrac: 0.066, freq: 0.0114, phase: 0.4, widthPx: 130, thicknessPx: 20 },
-        { yFrac: 0.68, ampFrac: 0.066, freq: 0.0126, phase: 3.4, widthPx: 130, thicknessPx: 20 }
+        { yFrac: 0.20, ampFrac: 0.085, freq: 0.010, phase: 1.8, xOffsetPx: -40, widthPx: 130, thicknessPx: 20 },
+        { yFrac: 0.78, ampFrac: 0.090, freq: 0.014, phase: 4.6, xOffsetPx: 55, widthPx: 130, thicknessPx: 20 }
       ]},
       { spacing: 370, bars: [
-        { yFrac: 0.22, ampFrac: 0.048, freq: 0.0102, phase: 2.0, widthPx: 100, thicknessPx: 16 },
-        { yFrac: 0.50, ampFrac: 0.054, freq: 0.0138, phase: 0.6, widthPx: 120, thicknessPx: 18 },
-        { yFrac: 0.78, ampFrac: 0.042, freq: 0.0114, phase: 3.8, widthPx: 100, thicknessPx: 16 }
+        { yFrac: 0.16, ampFrac: 0.060, freq: 0.012, phase: 2.7, xOffsetPx: 60, widthPx: 100, thicknessPx: 16 },
+        { yFrac: 0.50, ampFrac: 0.075, freq: 0.016, phase: 0.4, xOffsetPx: -30, widthPx: 120, thicknessPx: 18 },
+        { yFrac: 0.84, ampFrac: 0.055, freq: 0.011, phase: 3.9, xOffsetPx: 15, widthPx: 100, thicknessPx: 16 }
       ]},
       { spacing: 340, bars: [
-        { yFrac: 0.40, ampFrac: 0.078, freq: 0.009, phase: 1.2, widthPx: 140, thicknessPx: 20 },
-        { yFrac: 0.80, ampFrac: 0.048, freq: 0.0156, phase: 4.5, widthPx: 110, thicknessPx: 18 }
+        { yFrac: 0.26, ampFrac: 0.095, freq: 0.009, phase: 1.2, xOffsetPx: -50, widthPx: 140, thicknessPx: 20 },
+        { yFrac: 0.84, ampFrac: 0.070, freq: 0.018, phase: 4.8, xOffsetPx: 45, widthPx: 110, thicknessPx: 18 }
       ]}
     ],
     // secondary layer: a spinning gravity swirl (visual retint of the
@@ -2926,10 +3204,10 @@ const THEMES = [
     // each entry is one cluster: xJitter offsets each rock from the cluster's spawn x,
     // yFrac/rFrac are fractions (0-1) mapped to actual position/radius
     pattern: [
-      { spacing: 260, asteroids: [{ xJitter: -20, yFrac: 0.25, rFrac: 0.6 }, { xJitter: 10, yFrac: 0.55, rFrac: 0.8 }] },
-      { spacing: 280, asteroids: [{ xJitter: -30, yFrac: 0.35, rFrac: 0.9 }, { xJitter: 0, yFrac: 0.70, rFrac: 0.6 }, { xJitter: 35, yFrac: 0.15, rFrac: 0.5 }] },
-      { spacing: 250, asteroids: [{ xJitter: -10, yFrac: 0.20, rFrac: 0.5 }, { xJitter: 20, yFrac: 0.45, rFrac: 0.7 }, { xJitter: 50, yFrac: 0.75, rFrac: 0.9 }] },
-      { spacing: 300, asteroids: [{ xJitter: -25, yFrac: 0.60, rFrac: 0.8 }, { xJitter: 5, yFrac: 0.30, rFrac: 0.6 }, { xJitter: 35, yFrac: 0.85, rFrac: 0.5 }] }
+      { spacing: 340, asteroids: [{ xJitter: -90, yFrac: 0.16, rFrac: 0.5 }, { xJitter: 70, yFrac: 0.72, rFrac: 0.65 }] },
+      { spacing: 360, asteroids: [{ xJitter: 85, yFrac: 0.12, rFrac: 0.7 }, { xJitter: -40, yFrac: 0.50, rFrac: 0.5 }, { xJitter: -110, yFrac: 0.88, rFrac: 0.45 }] },
+      { spacing: 330, asteroids: [{ xJitter: -75, yFrac: 0.14, rFrac: 0.45 }, { xJitter: 95, yFrac: 0.50, rFrac: 0.55 }, { xJitter: 10, yFrac: 0.86, rFrac: 0.7 }] },
+      { spacing: 380, asteroids: [{ xJitter: 60, yFrac: 0.22, rFrac: 0.6 }, { xJitter: -100, yFrac: 0.78, rFrac: 0.5 }, { xJitter: 20, yFrac: 0.48, rFrac: 0.4 }] }
     ],
     // secondary: shooting stars that fly in a straight diagonal line (no
     // arc/curve) from a start height to a different end height, at varied
@@ -2941,11 +3219,22 @@ const THEMES = [
     // streak with no discrete star shape, the bright head leading and the
     // tail trailing behind in the direction it came from
     extraShootingStarPattern: [
-      { startYFrac: 0.9, endYFrac: 0.35, lifeFrames: 480, radiusPx: 9, interval: 230 },
-      { startYFrac: 0.1, endYFrac: 0.65, lifeFrames: 450, radiusPx: 8, interval: 210 },
-      { startYFrac: 0.5, endYFrac: 0.15, lifeFrames: 520, radiusPx: 10, interval: 260 },
-      { startYFrac: 0.25, endYFrac: 0.75, lifeFrames: 460, radiusPx: 7, interval: 200 },
-      { startYFrac: 0.7, endYFrac: 0.9, lifeFrames: 540, radiusPx: 8, interval: 250 }
+      { startYFrac: 0.9, endYFrac: 0.35, lifeFrames: 480, radiusPx: 9, interval: 280 },
+      { startYFrac: 0.1, endYFrac: 0.65, lifeFrames: 450, radiusPx: 8, interval: 260 },
+      { startYFrac: 0.5, endYFrac: 0.15, lifeFrames: 520, radiusPx: 10, interval: 310 },
+      { startYFrac: 0.25, endYFrac: 0.75, lifeFrames: 460, radiusPx: 7, interval: 250 },
+      { startYFrac: 0.7, endYFrac: 0.9, lifeFrames: 540, radiusPx: 8, interval: 300 }
+    ],
+    // comets that enter from the left and fly right, against the scroll,
+    // so they cross the ship much faster than the usual streaks
+    oncomingCometEvents: [
+      { triggerDistance: 280, startYFrac: 0.72, endYFrac: 0.40, radiusPx: 9, vx: 1.9 },
+      { triggerDistance: 680, startYFrac: 0.24, endYFrac: 0.58, radiusPx: 8, vx: 2.0 }
+    ],
+    splitRockEvents: [
+      { triggerDistance: 180, yFrac: 0.28, r: 28, splitAtPx: 480, telegraphFrames: 96 },
+      { triggerDistance: 400, yFrac: 0.40, r: 30, splitAtPx: 480, telegraphFrames: 96 },
+      { triggerDistance: 760, yFrac: 0.60, r: 28, splitAtPx: 480, telegraphFrames: 96 }
     ]
   },
   {
@@ -2967,13 +3256,13 @@ const THEMES = [
       { centerFrac: 0.46 }, { centerFrac: 0.59 }, { centerFrac: 0.74 },
       { centerFrac: 0.74 }, { centerFrac: 0.64 }, { centerFrac: 0.75, gapMult: 0.55 },
       { centerFrac: 0.61 },
-      // third fork -- the biggest/most dramatic of the four
-      { centerFrac: 0.5, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.65, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.55, gapMult: 1.15, fork: { islandFrac: 0.26 } },
+      // first fork -- extra ceiling/floor room; island size unchanged
+      { centerFrac: 0.5, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.65, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.55, gapMult: 1.15, fork: { islandFrac: 0.26, outerPadPx: 30 } },
       { centerFrac: 0.82 }, { centerFrac: 0.73 },
       { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 },
       { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 },
-      { centerFrac: 0.63 }, { centerFrac: 0.46, gapMult: 1.45, fork: { islandFrac: 0.15 } }, { centerFrac: 0.59, gapMult: 1.45, fork: { islandFrac: 0.15 } },
-      { centerFrac: 0.73, gapMult: 1.45, fork: { islandFrac: 0.13 } },
+      { centerFrac: 0.63 }, { centerFrac: 0.46, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 }, startDistance: 550 }, { centerFrac: 0.59, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 } },
+      { centerFrac: 0.73, gapMult: 1.45, fork: { islandFrac: 0.26, outerPadPx: 50 } },
       // tight slalom right after the fork -- quick alternating swings instead of the
       // gentle wave that was here before
       { centerFrac: 0.28 }, { centerFrac: 0.68 }, { centerFrac: 0.26 }, { centerFrac: 0.7 },
@@ -2988,12 +3277,10 @@ const THEMES = [
       { centerFrac: 0.78 }, { centerFrac: 0.78 },
       { centerFrac: 0.61 }, { centerFrac: 0.47 }, { centerFrac: 0.34 },
       { centerFrac: 0.19 },
-      // second fork -- tighter and differently-shaped than the first one
-      { centerFrac: 0.29, gapMult: 1.15, fork: { islandFrac: 0.24 } }, { centerFrac: 0.36, gapMult: 1.15, fork: { islandFrac: 0.24 } }, { centerFrac: 0.3, gapMult: 1.15, fork: { islandFrac: 0.22 } },
+      { centerFrac: 0.29 }, { centerFrac: 0.36 }, { centerFrac: 0.3 },
       { centerFrac: 0.22 }, { centerFrac: 0.28 }, { centerFrac: 0.2, gapMult: 0.55 },
       { centerFrac: 0.3 }, { centerFrac: 0.54 },
-      // fourth fork -- tighter and trickier than the others
-      { centerFrac: 0.7, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.58, gapMult: 1.15, fork: { islandFrac: 0.28 } }, { centerFrac: 0.66, gapMult: 1.15, fork: { islandFrac: 0.26 } },
+      { centerFrac: 0.7 }, { centerFrac: 0.58 }, { centerFrac: 0.66 },
       { centerFrac: 0.4 },
       { centerFrac: 0.32 }, { centerFrac: 0.18 }, { centerFrac: 0.31 },
       { centerFrac: 0.41 }, { centerFrac: 0.26 }, { centerFrac: 0.22 },
@@ -3129,7 +3416,7 @@ const THEMES = [
   },
   {
     name: 'TOXIC WASTELAND',
-    skyTop: '#0a1408', skyMid: '#1a2e12', skyBottom: '#050a04',
+    skyTop: '#141c0c', skyMid: '#2a3820', skyBottom: '#070a04',
     accentA: '#8aff4d', accentB: '#d4c84a',
     barTop: '#14200e', barBottom: '#040803',
     bgStyle: 'toxic',
@@ -3169,6 +3456,12 @@ const THEMES = [
       { pivotSide: 'ceiling', lowHeightPx: 16, highHeightPx: 290, widthPx: 32, warningFrames: 30, riseFrames: 9, holdFrames: 38, fallFrames: 13, restFrames: 32, phaseOffset: 60, interval: 180 },
       { pivotSide: 'floor', lowHeightPx: 20, highHeightPx: 330, widthPx: 36, warningFrames: 32, riseFrames: 11, holdFrames: 40, fallFrames: 14, restFrames: 34, phaseOffset: 120, interval: 175 },
       { pivotSide: 'ceiling', lowHeightPx: 18, highHeightPx: 300, widthPx: 34, warningFrames: 34, riseFrames: 10, holdFrames: 40, fallFrames: 14, restFrames: 33, phaseOffset: 20, interval: 170 }
+    ],
+    extraGeyserNudges: [
+      { pivotSide: 'floor', minDistance: 500, maxDistance: 560, xOffsetPx: 70 }
+    ],
+    acidDripNudges: [
+      { minAtShipDistance: 585, maxAtShipDistance: 605, targetFallFrac: 0.18 }
     ]
   },
   {
@@ -3433,7 +3726,7 @@ const THEMES = [
     // reposition between the outbound and return heights
     boomerangEvents: [
       { triggerDistance: 350, xStart: -100, xMax: 600, yOutbound: 150, yReturn: 450, arcAmplitude: 50, period: 250, r: 14 },
-      { triggerDistance: 870, xStart: -100, xMax: 600, yOutbound: 450, yReturn: 150, arcAmplitude: 50, period: 250, r: 14 }
+      { triggerDistance: 920, xStart: -100, xMax: 600, yOutbound: 450, yReturn: 150, arcAmplitude: 50, period: 250, r: 14 }
     ],
     // exactly 2 fixed rooftop searchlight events -- a beam pivoting from
     // a fixed point at the ceiling, sweeping its angle back and forth
@@ -3519,7 +3812,7 @@ let playerSaveId = '';
 let durableWriteLock = false;
 let durableSaveTimer = 0;
 let durableHydrated = false;
-const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV13';
+const ZONE_SHOTS_KEY = 'synthFlightZoneShotsV19';
 const PREVIEW_STILL_W = 640;
 const PREVIEW_STILL_ASPECT = 860 / 412;
 let zoneScreenshots = {};
@@ -3608,38 +3901,13 @@ function maybeCaptureZoneScreenshot() {
   if (warpActive || bossExplosionActive || shipFlyOffActive) return;
   if (zoneScreenshotLive[themeIndex]) return;
   const th = currentTheme();
-  // Live play only overwrites The Signal. Other zones already have a still,
-  // but storeZoneScreenshot used to reject the JPEG without marking the
-  // zone captured -- so every later frame still encoded a full-canvas
-  // JPEG. That's the mid-zone hitch on Inferno and everywhere else.
-  if (zoneScreenshots[themeIndex] && !(th && th.isBossZone)) {
-    zoneScreenshotLive[themeIndex] = true;
-    return;
-  }
-  if (th.isBossZone) {
-    if (!boss || boss.r < boss.maxR * 0.85) return;
-    if (frame - bossSpawnFrame < BOSS_ENTRANCE_DURATION) return;
-    if (bossDefeated || bossFullyDefeated || bossFinalChargeActive) return;
-  } else if (th.isMiniBossZone) {
-    if (!miniBoss || miniBoss.r < miniBoss.maxR * 0.85) return;
-    if (frame - miniBossSpawnFrame < MINI_BOSS_ENTRANCE_DURATION) return;
-    if (miniBossDefeated) return;
-    if (th.miniBossVariant === 'core') {
-      const busy = miniBossAttackState === 'coreOrbitBarrageActive'
-        || miniBossAttackState === 'coreCrossfireActive'
-        || miniBossAttackState === 'coreEmpActive'
-        || miniBossAttackState === 'coreLaserActive'
-        || miniBossAttackState === 'coreBulkheadActive'
-        || miniBossAttackState === 'coreSparkDeploy'
-        || (coreOrbitProjectiles && coreOrbitProjectiles.length > 4)
-        || (coreSparks && coreSparks.length > 2);
-      if (!busy) return;
-    }
-  } else {
-    const progress = distance - zoneStartDistance;
-    if (progress < 35) return;
-    if (gates.length === 0 && progress < 90) return;
-  }
+  // Full-window JPEG capture on a large Chrome window is both the Inferno
+  // hitch and the wrong Zone Select stills. Authored stills come from
+  // generateAndStoreZoneStill; live play only snapshots The Signal.
+  if (!th || !th.isBossZone) return;
+  if (!boss || boss.r < boss.maxR * 0.85) return;
+  if (frame - bossSpawnFrame < BOSS_ENTRANCE_DURATION) return;
+  if (bossDefeated || bossFullyDefeated || bossFinalChargeActive) return;
   const url = cropPlayfieldToJpeg(canvas, 0.78);
   if (url) storeZoneScreenshot(themeIndex, url, true);
 }
@@ -3777,6 +4045,8 @@ function generateAndStoreZoneStill(themeIdx) {
   const savedShip = { x: ship.x, y: ship.y, vy: ship.vy, rotation: ship.rotation };
   const savedFrame = frame;
   const savedZsf = zoneStartFrame;
+  const savedDistance = distance;
+  const savedZoneStartDistance = zoneStartDistance;
   const savedWarp = warpActive;
   const savedBg = bgParticles;
   const savedPortal = portalObject;
@@ -3852,6 +4122,18 @@ function generateAndStoreZoneStill(themeIdx) {
     }
     poseZonePreviewCombatants(theme);
     placePreviewShipClearOfHazards();
+    distance = 400;
+    zoneStartDistance = 0;
+    if (theme.isBossZone && boss) {
+      const shots = [
+        { x: ship.x + 150, y: ship.y - 55 },
+        { x: ship.x + 195, y: ship.y + 8 },
+        { x: ship.x + 168, y: ship.y + 62 }
+      ];
+      for (let i = 0; i < shots.length; i++) {
+        gates.push({ type: 'bossattack', x: shots[i].x, y: shots[i].y, r: 10, vx: 0, vy: 0, passed: false });
+      }
+    }
     initBackgroundParticles(theme);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
@@ -3863,7 +4145,10 @@ function generateAndStoreZoneStill(themeIdx) {
     drawReactorCoreAttacks(theme);
     if (theme.obstacleShape === 'terrain') drawTerrain(theme);
     else drawGates(theme);
-    if (theme.isBossZone) drawBossArenaBarrierWall(theme, boss);
+    if (theme.isBossZone) {
+      drawBossArenaBarrierWall(theme, boss);
+      drawBossArenaVignette(theme, boss);
+    }
     if (theme.isMiniBossZone && miniBoss && theme.miniBossVariant !== 'core') {
       drawBossArenaObsidianWall(theme, miniBoss);
     }
@@ -3886,6 +4171,8 @@ function generateAndStoreZoneStill(themeIdx) {
     ship.x = savedShip.x; ship.y = savedShip.y; ship.vy = savedShip.vy; ship.rotation = savedShip.rotation;
     frame = savedFrame;
     zoneStartFrame = savedZsf;
+    distance = savedDistance;
+    zoneStartDistance = savedZoneStartDistance;
     warpActive = savedWarp;
     bgParticles = savedBg;
     portalObject = savedPortal;
@@ -4032,6 +4319,8 @@ let frame = 0;
 let distance = 0;
 let best = __loadedProfile.best;
 let holding = false;
+let pointerHolding = false;
+let keyHolding = false;
 let lives = 3;
 let totalDeaths = 0;
 let deathsByZone = {}; // keyed by theme name
@@ -4044,19 +4333,44 @@ let clearTimeMs = 0;
 // per-difficulty run parameters. invincibilityFrames: brief post-collision
 // immunity (Easy and Overdrive) -- ignores hazard hits the same way ghost
 // mode does, but never protects against the top/bottom boundary walls.
+// freeHitsPerLife: how many hazard touches can be forgiven on one life
+// (Infinity = Easy/Overdrive repeating after the cooldown; 1 = Normal's
+// first-hit mercy; 0 = Hard, every hazard hit is death).
 const DIFFICULTY_CONFIG = {
-  easy: { lives: 9, continues: 3, invincibilityFrames: true },
-  normal: { lives: 9, continues: 3, invincibilityFrames: false },
-  hard: { lives: 9, continues: 0, invincibilityFrames: false },
-  extra: { lives: 1, continues: 0, invincibilityFrames: true },
+  easy: { lives: 9, continues: 3, invincibilityFrames: true, freeHitsPerLife: Infinity },
+  normal: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 1 },
+  hard: { lives: 9, continues: 1, invincibilityFrames: false, freeHitsPerLife: 0 },
+  extra: { lives: 1, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
 };
-const INVINCIBILITY_DURATION_MS = 1500; // 1.5 real seconds -- how long a granted protection window actually lasts, measured against the system clock so it's accurate regardless of frame rate
-const FREE_HIT_COOLDOWN_MS = 4000; // 4 real seconds -- how often a hazard touch can be forgiven outright (Easy / Overdrive). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
+const INVINCIBILITY_DURATION_MS = 1500; // 1.5 seconds of play time -- how long a granted protection window lasts. Measured on the game clock so pause does not burn it down.
+const FREE_HIT_COOLDOWN_MS = 4000; // 4 seconds of play time -- how often a hazard touch can be forgiven outright (Easy / Overdrive, or Normal's single first hit). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
 function nowMs() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
+let hitCyclePauseStartedAt = 0; // wall clock when the current pause froze the hit cycle; 0 if the cycle is running
+let hitCyclePausedAccumMs = 0; // total time spent paused this run, subtracted from wall clock for i-frames / death window
+function gameNowMs() {
+  const t = nowMs();
+  let paused = hitCyclePausedAccumMs;
+  if (hitCyclePauseStartedAt > 0) paused += t - hitCyclePauseStartedAt;
+  return t - paused;
+}
+function beginHitCyclePauseClock() {
+  if (hitCyclePauseStartedAt > 0) return;
+  hitCyclePauseStartedAt = nowMs();
+}
+function endHitCyclePauseClock() {
+  if (hitCyclePauseStartedAt <= 0) return;
+  hitCyclePausedAccumMs += nowMs() - hitCyclePauseStartedAt;
+  hitCyclePauseStartedAt = 0;
+}
+function resetHitCyclePauseClock() {
+  hitCyclePauseStartedAt = 0;
+  hitCyclePausedAccumMs = 0;
+}
 let MAX_LIVES = 3; // recalculated from DIFFICULTY_CONFIG each time resetGame() runs
 let continuesRemaining = 0;
-let invincibilityEndTime = -1; // real timestamp (ms); -1 means no active window
-let freeHitCooldownEndTime = -1; // real timestamp (ms) at which a hazard touch can next be forgiven outright, rather than costing a life
+let invincibilityEndTime = -1; // game-clock timestamp (ms); -1 means no active window
+let freeHitCooldownEndTime = -1; // game-clock timestamp (ms) at which a hazard touch can next be forgiven outright, rather than costing a life
+let freeHitsUsedThisLife = 0; // forgiven hazard hits on the current life -- reset on respawn / new run
 let pendingRespawnMercyEligible = false; // true only when the death that caused the current respawn was a hazard death -- wall deaths are never eligible for the post-respawn mercy window
 let maxDistanceReached = 0;
 let zoneStartDistance = 0;
@@ -4575,6 +4889,8 @@ let empEventsSpawned = [false, false];
 let echoTrailEventsSpawned = [false, false];
 let pulsingOrbEventsSpawned = [false, false];
 let boomerangEventsSpawned = [false, false];
+let oncomingCometEventsSpawned = [false, false];
+let splitRockEventsSpawned = [false, false, false];
 let extraStormCounter = 0;
 let extraStormPatternIndex = 0;
 let extraOrbiterCounter = 0;
@@ -4595,6 +4911,7 @@ let terrainWaypointTarget = null;
 let terrainWaypointSegLeft = 0;
 let terrainWaypointGapTarget = null;
 let terrainWaypointIslandTarget = 0;
+let terrainMeanderIndex = 0;
 
 let themeIndex = 0;
 let themeLevelReached = 0;
@@ -4619,12 +4936,15 @@ function clampGhostShipToPlayfield() {
 function tryEndGame(hazardType) {
   if (ghostMode) return;
   if (bossFinalChargeActive || bossExplosionActive || bossFullyDefeated) return; // victory is already secured -- nothing can kill the player during the boss's death sequence or the fly-off that follows
-  const t = nowMs();
+  const t = gameNowMs();
   if (t < invincibilityEndTime) return; // currently within an active protection window -- ignore this collision entirely
   sfxHazardImpact(hazardType);
-  if (DIFFICULTY_CONFIG[selectedDifficulty]?.invincibilityFrames && t >= freeHitCooldownEndTime) {
+  const maxFreeHits = DIFFICULTY_CONFIG[selectedDifficulty]?.freeHitsPerLife || 0;
+  if (maxFreeHits > 0 && freeHitsUsedThisLife < maxFreeHits && t >= freeHitCooldownEndTime) {
     // forgiven hit grants a fresh protection window, then the free-pass
-    // cooldown so it cannot be chained indefinitely
+    // cooldown so it cannot be chained indefinitely. Normal only gets this
+    // once per life; Easy / Overdrive can repeat after the cooldown.
+    freeHitsUsedThisLife += 1;
     invincibilityEndTime = t + INVINCIBILITY_DURATION_MS;
     freeHitCooldownEndTime = t + FREE_HIT_COOLDOWN_MS;
     return;
@@ -4717,6 +5037,9 @@ function spawnGate(x) {
   return entry.spacing;
 }
 
+
+</script>
+<script>
 function spawnLightningBolt(x) {
   const th = currentTheme();
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
@@ -4800,7 +5123,7 @@ function spawnHBarCluster(x) {
   for (const b of entry.bars) {
     gates.push({
       type: 'hbar',
-      x: x,
+      x: x + (b.xOffsetPx || 0),
       baseCenter: PLAY_TOP + b.yFrac * playHeight,
       amplitude: b.ampFrac * playHeight,
       freq: b.freq,
@@ -4826,9 +5149,6 @@ const BOLT_SHAPES = {
 // accurate polygon-vs-rectangle collision, used so hitboxes match the
 // visible jagged bolt silhouette instead of its full bounding box (which
 // is much wider than thin shapes like E5/E6 actually render)
-
-</script>
-<script>
 function pointInPolygon(px, py, poly) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -5252,9 +5572,12 @@ function spawnWouldHitPortal(spawnX, forwardExtent) {
 }
 
 function gateClearsPortal(g, portalSafeX) {
-  if (g.type === 'shootingstar') return g.x + g.r * 9 * 1.2 < portalSafeX;
+  if (g.type === 'shootingstar') {
+    if (g.oncoming) return g.x + g.r < portalSafeX;
+    return g.x + g.r * 9 * 1.2 < portalSafeX;
+  }
   if (g.type === 'fireball') return g.x + g.r * 8.5 < portalSafeX;
-  if (g.type === 'asteroid' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'wreckage') return g.x + g.r < portalSafeX;
+  if (g.type === 'splitrock' || g.type === 'asteroid' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'wreckage') return g.x + g.r < portalSafeX;
   if (g.type === 'zone2storm') return g.x + g.r < portalSafeX;
   if (g.type === 'securitydrone') return g.x + g.r < portalSafeX;
   if (g.type === 'turretshot') return g.x + g.r < portalSafeX;
@@ -6472,9 +6795,19 @@ function spawnExtraGeyser() {
   const entry = th.extraGeyserPattern[extraGeyserPatternIndex % th.extraGeyserPattern.length];
   extraGeyserPatternIndex++;
 
+  let spawnX = W + 50;
+  const zoneDist = distance - zoneStartDistance;
+  const nudges = th.extraGeyserNudges || [];
+  for (let i = 0; i < nudges.length; i++) {
+    const n = nudges[i];
+    if (n.pivotSide && n.pivotSide !== entry.pivotSide) continue;
+    if (zoneDist < (n.minDistance || 0) || zoneDist > (n.maxDistance == null ? 1e9 : n.maxDistance)) continue;
+    spawnX += n.xOffsetPx || 0;
+  }
+
   gates.push({
     type: 'geyser',
-    x: W + 50,
+    x: spawnX,
     spawnFrame: frame,
     pivotSide: entry.pivotSide,
     lowHeight: entry.lowHeightPx,
@@ -6656,6 +6989,7 @@ function spawnKeyAndDoor(eventIndex) {
   // can end up sitting on this exact spot before the key ever exists to
   // check against
   gates = gates.filter(g => {
+    if (g.type === 'movingdoor' && (Math.abs(g.x - keyX) < 90 || Math.abs(g.x - doorX) < 90)) return false;
     if (g.type !== 'wreckage') return true;
     const distToKey = Math.hypot(g.x - keyX, g.y - keyY);
     if (distToKey < g.r + keyR + 20) return false;
@@ -6724,6 +7058,77 @@ function shootingStarDone(g) {
   return (frame - g.spawnFrame) >= g.life;
 }
 
+function spawnOncomingCometEvent(eventIndex) {
+  const th = currentTheme();
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const margin = 30;
+  const entry = th.oncomingCometEvents[eventIndex];
+  const startY = PLAY_TOP + margin + entry.startYFrac * Math.max(1, playHeight - margin * 2);
+  const endY = PLAY_TOP + margin + entry.endYFrac * Math.max(1, playHeight - margin * 2);
+  const spawnX = -80 - entry.radiusPx * 9;
+  const life = Math.max(220, (W + 140 - spawnX) / entry.vx);
+  gates.push({
+    type: 'shootingstar',
+    oncoming: true,
+    x: spawnX,
+    vx: entry.vx,
+    spawnFrame: frame,
+    startY: startY,
+    endY: endY,
+    life: life,
+    r: entry.radiusPx,
+    passed: false
+  });
+}
+
+function spawnSplitRockEvent(eventIndex) {
+  const th = currentTheme();
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const entry = th.splitRockEvents[eventIndex];
+  let spawnX = ship.x + EVENT_SPAWN_OFFSET;
+  const portalX = predictedPortalX();
+  if (portalX != null) spawnX = Math.min(spawnX, portalX - 48 - entry.r);
+  const y = Math.max(PLAY_TOP + entry.r + 16, Math.min(PLAY_BOTTOM - entry.r - 16, PLAY_TOP + entry.yFrac * playHeight));
+  gates.push({
+    type: 'splitrock',
+    x: spawnX,
+    y: y,
+    r: entry.r,
+    splitAtPx: entry.splitAtPx,
+    telegraphFrames: entry.telegraphFrames,
+    cracking: false,
+    crackFrame: -1,
+    rotSeed: eventIndex * 3.1,
+    spin: 0.018,
+    passed: false
+  });
+}
+
+function splitRockIntoShards(g) {
+  const r = Math.max(12, g.r * 0.52);
+  gates.push({
+    type: 'asteroid',
+    x: g.x - 8,
+    y: g.y - 6,
+    r: r,
+    rotSeed: g.rotSeed,
+    spin: 0.03,
+    vy: -1.6,
+    passed: false
+  });
+  gates.push({
+    type: 'asteroid',
+    x: g.x + 10,
+    y: g.y + 6,
+    r: r,
+    rotSeed: g.rotSeed + 2.2,
+    spin: -0.032,
+    vy: 1.6,
+    passed: false
+  });
+  if (!ghostMode) playAsteroidCrunch();
+}
+
 function spawnAcidDrip(x) {
   const th = currentTheme();
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
@@ -6731,14 +7136,23 @@ function spawnAcidDrip(x) {
   const entry = th.pattern[patternIndex % th.pattern.length];
   patternIndex++;
 
-  // fall speed is derived from how far this drip actually needs to travel
-  // to reach the ship, not a fixed value -- this guarantees it's still
-  // genuinely mid-fall (not already culled) by the time it arrives,
-  // regardless of exactly where along the spacing chain it happened to spawn
+  let fallFrac = entry.targetFallFrac;
+  const zoneDist = distance - zoneStartDistance;
+  const atShipDist = zoneDist + Math.max(0, x - ship.x) * 0.1;
+  const dripNudges = th.acidDripNudges || [];
+  for (let i = 0; i < dripNudges.length; i++) {
+    const n = dripNudges[i];
+    const d0 = n.minAtShipDistance != null ? n.minAtShipDistance : (n.minDistance || 0);
+    const d1 = n.maxAtShipDistance != null ? n.maxAtShipDistance : (n.maxDistance == null ? 1e9 : n.maxDistance);
+    const dist = (n.minAtShipDistance != null || n.maxAtShipDistance != null) ? atShipDist : zoneDist;
+    if (dist < d0 || dist > d1) continue;
+    if (n.targetFallFrac != null) fallFrac = n.targetFallFrac;
+  }
+
   const effScroll = SCROLL_SPEED * (th.scrollMult || 1);
   const distanceToShip = Math.max(100, x - ship.x);
   const framesToReachShip = distanceToShip / effScroll;
-  const fallSpeed = (playHeight * entry.targetFallFrac) / framesToReachShip;
+  const fallSpeed = (playHeight * fallFrac) / framesToReachShip;
 
   gates.push({
     type: 'aciddrip',
@@ -6831,6 +7245,7 @@ function initTerrain() {
   terrainWaypointSegLeft = 0;
   terrainWaypointGapTarget = null;
   terrainWaypointIslandTarget = 0;
+  terrainMeanderIndex = 0;
   for (let x = -spacing; x <= W + spacing; x += spacing) {
     terrainSegments.push({ x, topY: startTop, bottomY: startBottom, islandTop: startCenter, islandBottom: startCenter });
     terrainSegmentsSinceEntry++;
@@ -6887,8 +7302,25 @@ function addTerrainSegment() {
     const maxDeltaPerSegment = Math.min(maxClimbSpeed, maxDiveSpeed) * framesPerSegment * safetyFactor;
 
     if (terrainWaypointSegLeft <= 0) {
-      const entry = th.pattern[patternIndex % th.pattern.length];
-      patternIndex++;
+      const upcoming = th.pattern[patternIndex % th.pattern.length];
+      const genDistance = (terrainLevelX + W) / 10;
+      let entry = upcoming;
+      let consumePattern = true;
+      if (upcoming.startDistance != null && genDistance < upcoming.startDistance) {
+        const meander = upcoming.meander || [
+          { centerFrac: 0.82 }, { centerFrac: 0.73 },
+          { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 },
+          { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 },
+          { centerFrac: 0.63 }
+        ];
+        entry = meander[terrainMeanderIndex % meander.length];
+        terrainMeanderIndex++;
+        consumePattern = false;
+      }
+      if (consumePattern) {
+        patternIndex++;
+        terrainMeanderIndex = 0;
+      }
 
       const gapMult = entry.gapMult !== undefined ? entry.gapMult : 1;
       const entryGap = baseGap * gapMult;
@@ -6896,19 +7328,18 @@ function addTerrainSegment() {
       const maxCenter = PLAY_BOTTOM - entryGap / 2 - margin;
       const rawTarget = PLAY_TOP + entry.centerFrac * playHeight;
       terrainWaypointTarget = Math.max(minCenter, Math.min(maxCenter, rawTarget));
-      terrainWaypointGapTarget = entryGap;
+      const outerPadPx = (entry.fork && entry.fork.outerPadPx) ? entry.fork.outerPadPx : 0;
+      terrainWaypointGapTarget = entryGap + outerPadPx * 2;
 
       if (entry.fork) {
-        // island thickness as a fraction of THIS waypoint's gap, capped so both
-        // resulting paths always keep a comfortable, independently-flyable width
         const islandFrac = Math.min(0.45, entry.fork.islandFrac || 0.3);
         terrainWaypointIslandTarget = Math.max(0, entryGap * islandFrac - SHIP_H * 2);
       } else {
         terrainWaypointIslandTarget = 0;
       }
 
-      const lastCenter = (last.topY + last.bottomY) / 2;
-      const fullDelta = Math.abs(terrainWaypointTarget - lastCenter);
+      const holdLastCenter = (last.topY + last.bottomY) / 2;
+      const fullDelta = Math.abs(terrainWaypointTarget - holdLastCenter);
       terrainWaypointSegLeft = Math.max(1, Math.ceil(fullDelta / Math.max(1, maxDeltaPerSegment)));
     }
 
@@ -7006,10 +7437,18 @@ function diamondGeometry(gate) {
 }
 
 function liveGateCenter(gate) {
-  const gap = liveGateGap(gate);
   const margin = 20;
-  const minCenter = PLAY_TOP + gap / 2 + margin;
-  const maxCenter = PLAY_BOTTOM - gap / 2 - margin;
+  let minCenter;
+  let maxCenter;
+  if (gate.type === 'hbar') {
+    const half = (gate.thickness || 18) / 2;
+    minCenter = PLAY_TOP + half + margin;
+    maxCenter = PLAY_BOTTOM - half - margin;
+  } else {
+    const gap = liveGateGap(gate);
+    minCenter = PLAY_TOP + gap / 2 + margin;
+    maxCenter = PLAY_BOTTOM - gap / 2 - margin;
+  }
   let c = gate.baseCenter + gate.amplitude * Math.sin((frame - zoneStartFrame) * gate.freq + gate.phase);
   return Math.max(minCenter, Math.min(maxCenter, c));
 }
@@ -7040,15 +7479,28 @@ function initBackgroundParticles(theme) {
         speed: 0.3 + Math.random() * 1.4
       });
     }
-  } else if (theme.bgStyle === 'embers') {
-    for (let i = 0; i < 60; i++) {
+    } else if (theme.bgStyle === 'embers') {
+    for (let i = 0; i < 16; i++) {
       bgParticles.push({
+        kind: 'rush',
         x: Math.random() * W,
         y: PLAY_TOP + Math.random() * playHeight,
-        r: 1 + Math.random() * 2.2,
-        alpha: 0.3 + Math.random() * 0.6,
-        speed: 0.4 + Math.random() * 1.2,
-        drift: (Math.random() - 0.5) * 0.6
+        speed: 7 + Math.random() * 10,
+        len: 28 + Math.random() * 70,
+        alpha: 0.08 + Math.random() * 0.16,
+        thick: 1 + Math.random() * 1.4
+      });
+    }
+    for (let i = 0; i < 18; i++) {
+      bgParticles.push({
+        kind: 'spark',
+        x: Math.random() * W,
+        y: PLAY_TOP + Math.random() * playHeight,
+        speed: 3.2 + Math.random() * 5.5,
+        lift: 0.15 + Math.random() * 0.55,
+        len: 10 + Math.random() * 22,
+        r: 0.7 + Math.random() * 1.6,
+        alpha: 0.28 + Math.random() * 0.45
       });
     }
   } else if (theme.bgStyle === 'ruins') {
@@ -7063,14 +7515,16 @@ function initBackgroundParticles(theme) {
       });
     }
   } else if (theme.bgStyle === 'toxic') {
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 36; i++) {
       bgParticles.push({
         x: Math.random() * W,
         y: PLAY_TOP + Math.random() * playHeight,
-        r: 1 + Math.random() * 2.5,
-        alpha: 0.2 + Math.random() * 0.35,
-        speed: 0.2 + Math.random() * 0.5,
-        drift: (Math.random() - 0.5) * 0.4
+        r: 1.2 + Math.random() * 2.4,
+        alpha: 0.12 + Math.random() * 0.18,
+        speed: 0.12 + Math.random() * 0.28,
+        drift: (Math.random() - 0.5) * 0.25,
+        wobble: Math.random() * Math.PI * 2,
+        stretch: 1.2 + Math.random() * 0.8
       });
     }
   } else if (theme.bgStyle === 'station') {
@@ -7139,6 +7593,8 @@ function reseedZoneObstacles(startX) {
   echoTrailEventsSpawned = currentTheme().echoTrailEvents ? currentTheme().echoTrailEvents.map(() => false) : [];
   pulsingOrbEventsSpawned = currentTheme().pulsingOrbEvents ? currentTheme().pulsingOrbEvents.map(() => false) : [];
   boomerangEventsSpawned = currentTheme().boomerangEvents ? currentTheme().boomerangEvents.map(() => false) : [];
+  oncomingCometEventsSpawned = currentTheme().oncomingCometEvents ? currentTheme().oncomingCometEvents.map(() => false) : [];
+  splitRockEventsSpawned = currentTheme().splitRockEvents ? currentTheme().splitRockEvents.map(() => false) : [];
   extraStormCounter = 0;
   extraStormPatternIndex = 0;
   extraOrbiterCounter = 0;
@@ -7377,6 +7833,8 @@ function resetGame() {
   distance = 0;
   frame = 0;
   holding = false;
+  pointerHolding = false;
+  keyHolding = false;
   stopLiftSound();
   stopGlowDangerSound();
   stopFireballBreathSound();
@@ -7407,6 +7865,8 @@ function resetGame() {
   continuesRemaining = diffConfig.continues;
   invincibilityEndTime = -1;
   freeHitCooldownEndTime = -1;
+  resetHitCyclePauseClock();
+  freeHitsUsedThisLife = 0;
   pendingRespawnMercyEligible = false;
   diedInCurrentZone = false;
   lives = MAX_LIVES;
@@ -7458,6 +7918,7 @@ function respawnInZone(opts) {
   portalObject = null;
   invincibilityEndTime = -1;
   freeHitCooldownEndTime = -1;
+  freeHitsUsedThisLife = 0;
   initBackgroundParticles(currentTheme());
   reseedZoneObstacles(ship.x + 420);
 }
@@ -7484,7 +7945,7 @@ function startPress() {
     sfxRespawn();
     state = 'playing';
     if (pendingRespawnMercyEligible && DIFFICULTY_CONFIG[selectedDifficulty]?.invincibilityFrames) {
-      invincibilityEndTime = nowMs() + INVINCIBILITY_DURATION_MS;
+      invincibilityEndTime = gameNowMs() + INVINCIBILITY_DURATION_MS;
     }
     pendingRespawnMercyEligible = false;
   } else if (state === 'gameover' || state === 'victory') {
@@ -7496,7 +7957,7 @@ function startPress() {
 }
 
 function endPress() {
-  holding = false;
+  holding = pointerHolding || keyHolding;
 }
 
 // cycles the selected difficulty in either direction, skipping over the
@@ -7517,7 +7978,9 @@ function cycleDifficulty(direction) {
 function pauseGame() {
   if (state !== 'playing') return;
   state = 'paused';
-  holding = false; // don't carry a stale "still holding" into the pause screen
+  beginHitCyclePauseClock();
+  pointerHolding = false;
+  holding = keyHolding;
   stopLiftSound();
   stopGlowDangerSound();
   sfxPause();
@@ -7525,6 +7988,7 @@ function pauseGame() {
 
 function resumeGame() {
   if (state !== 'paused') return;
+  endHitCyclePauseClock();
   state = 'playing';
 }
 
@@ -7658,13 +8122,18 @@ function handleOverlayActivate(e) {
 let overlayNavLockUntil = 0;
 overlay.addEventListener('pointerup', handleOverlayActivate);
 overlay.addEventListener('click', handleOverlayActivate);
+overlay.addEventListener('input', handleAudioVolumeInput);
+overlay.addEventListener('change', handleAudioVolumeInput);
 
 // Input
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault();
     unlockAudio();
-    if (!e.repeat) startPress();
+    if (!e.repeat) {
+      keyHolding = true;
+      startPress();
+    }
   } else if (e.code === 'Escape' && !e.repeat) {
     if (state === 'playing') pauseGame();
     else if (state === 'paused') resumeGame();
@@ -7673,31 +8142,38 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   if (e.code === 'Space' || e.code === 'ArrowUp') {
     e.preventDefault();
+    keyHolding = false;
     endPress();
   }
 });
-// canvas mouse/touch presses go through this wrapper rather than calling
-// startPress() directly -- the home->options transition is deliberately
-// excluded here (it only happens via the explicit "CLICK TO START" button
-// or keyboard) since letting it fire on mousedown/touchstart re-renders
-// the DOM to the Options screen mid-click, and the same press's release
-// can then land on a real Options button underneath the cursor
+// Pointer capture keeps Chrome from dropping the hold when the cursor
+// crosses the pause button, HUD, or window chrome (mouseleave used to
+// call endPress and the ship would just fall).
 function canvasStartPress() {
   unlockAudio();
   if (state === 'home') return;
   startPress();
 }
-canvas.addEventListener('mousedown', canvasStartPress);
-canvas.addEventListener('mouseup', endPress);
-canvas.addEventListener('mouseleave', endPress);
-canvas.addEventListener('touchstart', (e) => {
+function onCanvasPointerDown(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (state === 'home') return;
   e.preventDefault();
+  pointerHolding = true;
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* older engines */ }
   canvasStartPress();
-}, { passive: false });
-canvas.addEventListener('touchend', (e) => {
-  e.preventDefault();
+}
+function onCanvasPointerRelease(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  pointerHolding = false;
   endPress();
-}, { passive: false });
+}
+canvas.addEventListener('pointerdown', onCanvasPointerDown, { passive: false });
+canvas.addEventListener('pointerup', onCanvasPointerRelease);
+canvas.addEventListener('pointercancel', onCanvasPointerRelease);
+window.addEventListener('blur', () => {
+  pointerHolding = false;
+  if (!keyHolding) endPress();
+});
 
 const pauseToggleBtn = document.getElementById('pause-toggle');
 pauseToggleBtn.addEventListener('pointerup', () => {
@@ -7727,13 +8203,15 @@ function updateBackgroundParticles(theme) {
       }
     }
   } else if (theme.bgStyle === 'embers') {
+    const rushBoost = 0.85 + 0.45 * (theme.scrollMult || 1);
     for (let p of bgParticles) {
-      p.y -= p.speed;
-      p.x += p.drift;
-      if (p.y < PLAY_TOP) {
-        p.y = PLAY_BOTTOM;
-        p.x = Math.random() * W;
+      p.x -= p.speed * rushBoost;
+      if (p.kind === 'spark') p.y -= p.lift || 0;
+      if (p.x < -p.len) {
+        p.x = W + 20 + Math.random() * 40;
+        p.y = PLAY_TOP + Math.random() * playHeight;
       }
+      if (p.kind === 'spark' && p.y < PLAY_TOP) p.y = PLAY_BOTTOM;
     }
   } else if (theme.bgStyle === 'ruins') {
     for (let p of bgParticles) {
@@ -7746,8 +8224,9 @@ function updateBackgroundParticles(theme) {
     }
   } else if (theme.bgStyle === 'toxic') {
     for (let p of bgParticles) {
+      p.wobble = (p.wobble || 0) + 0.02;
       p.y -= p.speed;
-      p.x += p.drift;
+      p.x += p.drift + Math.sin(p.wobble) * 0.12;
       if (p.y < PLAY_TOP) {
         p.y = PLAY_BOTTOM;
         p.x = Math.random() * W;
@@ -7922,6 +8401,15 @@ function updateCoreSparks(phaseStartFrame, targetCount, shipTop, shipBottom, shi
   }
 }
 
+function beginCoreBulkhead(moving) {
+  miniBossAttackState = 'coreBulkheadTelegraph';
+  coreBulkheadIsMoving = !!moving;
+  coreBulkheadX = ship.x + 150;
+  if (!moving) coreBulkheadGapCenter = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.5;
+  miniBossAttackStateStartFrame = frame;
+  sfxCoreBulkheadTelegraph();
+}
+
 function updateReactorCoreBoss() {
   if (coreBossDefeated) {
     if (!shipFlyOffActive && frame - coreBossDefeatFrame >= CORE_BOSS_DEFEAT_PAUSE) {
@@ -7942,9 +8430,14 @@ function updateReactorCoreBoss() {
   const shipTop = ship.y - SHIP_H / 2, shipBottom = ship.y + SHIP_H / 2;
   const shipR = SHIP_W * 0.4;
 
-  if (coreBossPhase === 6 && (miniBossAttackState === 'coreCrossfireTelegraph' ||
+  let sparkTarget = coreSparkSpawned;
+  if (miniBossAttackState === 'coreSparkDeploy') sparkTarget = CORE_SPARK_COUNT;
+  else if (coreBossPhase === 6 && (miniBossAttackState === 'coreCrossfireTelegraph' ||
       miniBossAttackState === 'coreCrossfireActive' || miniBossAttackState === 'coreCrossfireGap')) {
-    updateCoreSparks(coreSparkPhaseStartFrame, CORE_P6_SPARK_COUNT, shipTop, shipBottom, shipR);
+    sparkTarget = CORE_P6_SPARK_COUNT;
+  }
+  if (sparkTarget > 0 || coreSparks.length > 0) {
+    updateCoreSparks(coreSparkPhaseStartFrame, sparkTarget, shipTop, shipBottom, shipR);
   }
 
   if (miniBossAttackState === 'coreFloating') {
@@ -7965,6 +8458,11 @@ function updateReactorCoreBoss() {
         });
       }
       coreDeathDebris = [];
+      return;
+    }
+
+    if (coreBossPhase === 7) {
+      if (coreSparks.length === 0) beginCoreBulkhead(true);
       return;
     }
 
@@ -8074,7 +8572,6 @@ function updateReactorCoreBoss() {
       miniBossAttackStateStartFrame = frame;
     }
   } else if (miniBossAttackState === 'coreSparkDeploy') {
-    updateCoreSparks(coreSparkPhaseStartFrame, CORE_SPARK_COUNT, shipTop, shipBottom, shipR);
     // beam volleys, firing simultaneously alongside the weaving sparks
     if (coreP3BeamState === 'none' && coreP3BeamVolleysFired < CORE_P3_BEAM_TRIGGER_TIMES.length &&
         stateElapsed >= CORE_P3_BEAM_TRIGGER_TIMES[coreP3BeamVolleysFired]) {
@@ -8103,8 +8600,7 @@ function updateReactorCoreBoss() {
     if (coreSparkSpawned >= CORE_SPARK_COUNT && coreSparks.length === 0 &&
         coreP3BeamVolleysFired >= CORE_P3_BEAM_TRIGGER_TIMES.length && coreP3BeamState === 'none') {
       coreBossPhase = 4;
-      miniBossAttackState = 'coreFloating';
-      miniBossAttackStateStartFrame = frame;
+      beginCoreBulkhead(true);
     }
   } else if (miniBossAttackState === 'coreEmpTelegraph') {
     if (stateElapsed >= CORE_EMP_TELEGRAPH) {
@@ -8170,8 +8666,12 @@ function updateReactorCoreBoss() {
       coreCrossfireRound++;
       if (coreCrossfireRound >= CORE_CROSSFIRE_ROUNDS) {
         coreBossPhase = 7;
-        miniBossAttackState = 'coreFloating';
-        miniBossAttackStateStartFrame = frame;
+        if (coreSparks.length === 0) {
+          beginCoreBulkhead(true);
+        } else {
+          miniBossAttackState = 'coreFloating';
+          miniBossAttackStateStartFrame = frame;
+        }
       } else {
         miniBossAttackState = 'coreCrossfireGap';
         miniBossAttackStateStartFrame = frame;
@@ -9178,8 +9678,10 @@ function update() {
     // stay in sync without needing separate collision logic)
     if (!warpActive && (miniBossEscapeRunActive || (!th.isBossZone && !th.isMiniBossZone))) {
       const remaining = zoneEndRemainingDistance();
-      if (!portalObject && remaining > 0 && remaining <= PORTAL_LEAD_DISTANCE) {
-        portalObject = { x: ship.x + remaining * 10, forLevel: themeLevelReached };
+      const remainingPx = remaining * 10;
+      const appearPx = Math.max(PORTAL_LEAD_DISTANCE * 10, (W - ship.x) + 80);
+      if (!portalObject && remaining > 0 && remainingPx <= appearPx) {
+        portalObject = { x: ship.x + remainingPx, forLevel: themeLevelReached };
         // nothing should exist beyond the portal -- clear out anything that
         // was already pre-spawned further out than where the portal now sits.
         // the portal ring itself is rendered with a halfWidth (oscillating
@@ -9243,6 +9745,7 @@ function update() {
       }
     } else {
       for (let g of gates) {
+        if (g.type === 'shootingstar' && g.oncoming) continue;
         if (g.type === 'turretshot') continue; // moved separately below via vx/vy
         if (g.type === 'boomerang') continue; // position is computed live from elapsed time, not scrolled
         if (g.type === 'bossattack') continue; // moved separately below via vx/vy
@@ -9256,6 +9759,7 @@ function update() {
       }
       for (const g of gates) {
         if (g.type === 'turretshot') { g.x += g.vx; g.y += g.vy; }
+        if (g.type === 'shootingstar' && g.oncoming) { g.x += g.vx; }
         if (g.type === 'bossattack') { g.x += g.vx; g.y += g.vy; }
         if (g.type === 'bossember') { g.x += g.vx; g.y += g.vy; }
         if (g.type === 'bossashcloud') { g.x += g.vx; }
@@ -9268,6 +9772,22 @@ function update() {
             g.y += g.vy;
           }
         }
+        if (g.type === 'asteroid' && g.vy) {
+          g.y += g.vy;
+          g.y = Math.max(PLAY_TOP + g.r + 4, Math.min(PLAY_BOTTOM - g.r - 4, g.y));
+        }
+        if (g.type === 'splitrock' && !g.cracking && (g.x - ship.x) <= g.splitAtPx) {
+          g.cracking = true;
+          g.crackFrame = frame;
+        }
+      }
+      const splitParents = [];
+      for (const g of gates) {
+        if (g.type === 'splitrock' && g.cracking && (frame - g.crackFrame) >= g.telegraphFrames) splitParents.push(g);
+      }
+      if (splitParents.length) {
+        for (const g of splitParents) splitRockIntoShards(g);
+        gates = gates.filter(g => !splitParents.includes(g));
       }
       // faster hazards (Gravity Well tornados at 1.4x scroll) can catch the
       // portal from the right after it appears -- keep culling so nothing
@@ -9335,23 +9855,17 @@ function update() {
       }
       if (th.movingDoorPattern && !portalObject) {
         const zoneProgress = distance - zoneStartDistance;
-        // only the last special door event gets protected -- that was the
-        // one specific spot that looked bad; the earlier events are left
-        // alone since the original unrestricted timing felt right there
-        const lastEvent = th.specialDoorEvents && th.specialDoorEvents.length
-          ? th.specialDoorEvents[th.specialDoorEvents.length - 1] : null;
-        const nearLastEvent = lastEvent &&
-          zoneProgress >= lastEvent.triggerDistance - lastEvent.keyLeadDistance - 40 &&
-          zoneProgress <= lastEvent.triggerDistance + 40;
-        // First key shares a lane with the 2-gap moving door. On typical
-        // window widths that door spawns ~50px behind the key, so the slab
-        // arrives first and the card sits in the metal. Hold the door until
-        // the key is clearly closer to the ship.
-        const movingDoorSpawnX = W + 60;
-        const keyBlocksMovingDoor = gates.some((g) => (
-          g.type === 'accesskey' && !g.collected && g.x > movingDoorSpawnX - 280
+        const nearSpecialDoor = !!(th.specialDoorEvents || []).some((event) => (
+          zoneProgress >= event.triggerDistance - event.keyLeadDistance - 50 &&
+          zoneProgress <= event.triggerDistance + 70
         ));
-        if (!nearLastEvent && !keyBlocksMovingDoor) {
+        const movingDoorSpawnX = W + 60;
+        const keyOrGateBlocksMovingDoor = gates.some((g) => {
+          if (g.type === 'accesskey' && !g.collected && Math.abs(g.x - movingDoorSpawnX) < 340) return true;
+          if (g.type === 'specialdoor' && Math.abs(g.x - movingDoorSpawnX) < 300) return true;
+          return false;
+        });
+        if (!nearSpecialDoor && !keyOrGateBlocksMovingDoor) {
           extraMovingDoorCounter++;
           const nextInterval = th.movingDoorPattern[extraMovingDoorPatternIndex % th.movingDoorPattern.length].interval;
           if (extraMovingDoorCounter >= nextInterval) {
@@ -9411,7 +9925,7 @@ function update() {
           }
         });
       }
-      if (th.droneSwarmEvents && !portalObject) {
+      if (th.droneSwarmEvents) {
         const zoneProgress = distance - zoneStartDistance;
         th.droneSwarmEvents.forEach((event, i) => {
           if (!droneSwarmEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
@@ -9474,12 +9988,30 @@ function update() {
           }
         });
       }
-      if (th.boomerangEvents && !portalObject) {
+      if (th.boomerangEvents) {
         const zoneProgress = distance - zoneStartDistance;
         th.boomerangEvents.forEach((event, i) => {
           if (!boomerangEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
             spawnBoomerangEvent(i);
             boomerangEventsSpawned[i] = true;
+          }
+        });
+      }
+      if (th.oncomingCometEvents && !portalObject) {
+        const zoneProgress = distance - zoneStartDistance;
+        th.oncomingCometEvents.forEach((event, i) => {
+          if (!oncomingCometEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
+            spawnOncomingCometEvent(i);
+            oncomingCometEventsSpawned[i] = true;
+          }
+        });
+      }
+      if (th.splitRockEvents && !portalObject) {
+        const zoneProgress = distance - zoneStartDistance;
+        th.splitRockEvents.forEach((event, i) => {
+          if (!splitRockEventsSpawned[i] && zoneProgress >= event.triggerDistance) {
+            spawnSplitRockEvent(i);
+            splitRockEventsSpawned[i] = true;
           }
         });
       }
@@ -9607,7 +10139,7 @@ function update() {
       }
 
       gates = gates.filter(g => {
-        if (g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'wreckage') return g.x + g.r > -80;
+        if (g.type === 'splitrock' || g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'wreckage') return g.x + g.r > -80;
         if (g.type === 'zone2storm') return g.x + g.r > -80;
         if (g.type === 'securitydrone') return g.x + g.r > -80;
         if (g.type === 'turretshot') return g.x + g.r > -80;
@@ -9637,7 +10169,10 @@ function update() {
         if (g.type === 'toxicpool') return g.x + g.baseR + g.pulseAmp > -80;
         if (g.type === 'aciddrip') return liveAcidDripY(g) < PLAY_BOTTOM + g.r && g.x + g.r > -80;
         if (g.type === 'geyser') return g.x + g.width / 2 > -80;
-        if (g.type === 'shootingstar') return !shootingStarDone(g) && g.x + g.r > -80;
+        if (g.type === 'shootingstar') {
+          if (g.oncoming) return !shootingStarDone(g) && g.x - g.r * 9 < W + 80;
+          return !shootingStarDone(g) && g.x + g.r > -80;
+        }
         if (g.type === 'movingdoor' || g.type === 'specialdoor') return g.x + g.width / 2 > -80;
         if (g.type === 'accesskey') return !g.collected && g.x + g.r > -80;
         if (g.type === 'sparkhub') return g.x > -120;
@@ -9712,7 +10247,7 @@ function update() {
       }
 
       for (let g of gates) {
-        if (g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'shootingstar' || g.type === 'wreckage' || g.type === 'zone2storm' || g.type === 'securitydrone' || g.type === 'turretshot' || g.type === 'bossdrone') {
+        if (g.type === 'splitrock' || g.type === 'asteroid' || g.type === 'fireball' || g.type === 'pendulum' || g.type === 'aciddrip' || g.type === 'shootingstar' || g.type === 'wreckage' || g.type === 'zone2storm' || g.type === 'securitydrone' || g.type === 'turretshot' || g.type === 'bossdrone') {
           const gy = g.type === 'fireball' ? liveFireballY(g) : (g.type === 'pendulum' ? livePendulumBobY(g) : (g.type === 'aciddrip' ? liveAcidDripY(g) : (g.type === 'shootingstar' ? liveShootingStarY(g) : (g.type === 'zone2storm' ? liveStormY(g) : g.y))));
           const dx = ship.x - g.x;
           const dy = ship.y - gy;
@@ -10121,6 +10656,16 @@ let delayInput = null;
 let audioUnlocked = false;
 
 const AUDIO_SETTINGS_STORAGE_KEY = 'synthFlightAudioSettings';
+const DEFAULT_SFX_VOLUME = 0.64;
+const DEFAULT_BGM_VOLUME = 0.26;
+function clampAudioVolume(value, fallback) {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+}
+function audioVolumePercent(value) {
+  return Math.round(clampAudioVolume(value, 0) * 100);
+}
 function loadAudioSettings() {
   try {
     const raw = localStorage.getItem(AUDIO_SETTINGS_STORAGE_KEY);
@@ -10129,6 +10674,8 @@ function loadAudioSettings() {
       return {
         sfxEnabled: typeof parsed.sfxEnabled === 'boolean' ? parsed.sfxEnabled : true,
         bgmEnabled: typeof parsed.bgmEnabled === 'boolean' ? parsed.bgmEnabled : true,
+        sfxVolume: clampAudioVolume(parsed.sfxVolume, DEFAULT_SFX_VOLUME),
+        bgmVolume: clampAudioVolume(parsed.bgmVolume, DEFAULT_BGM_VOLUME),
         chargeTelegraph: typeof parsed.chargeTelegraph === 'string' && parsed.chargeTelegraph !== 'xCharge'
           ? parsed.chargeTelegraph
           : 'static',
@@ -10138,13 +10685,15 @@ function loadAudioSettings() {
       };
     }
   } catch (e) { /* corrupted/missing data -- fall through to defaults */ }
-  return { sfxEnabled: true, bgmEnabled: true, chargeTelegraph: 'static', glowDanger: 'siren', lifeLost: 'lifeChip', respawn: 'systemsOn' };
+  return { sfxEnabled: true, bgmEnabled: true, sfxVolume: DEFAULT_SFX_VOLUME, bgmVolume: DEFAULT_BGM_VOLUME, chargeTelegraph: 'static', glowDanger: 'siren', lifeLost: 'lifeChip', respawn: 'systemsOn' };
 }
 function saveAudioSettings() {
   try {
     localStorage.setItem(AUDIO_SETTINGS_STORAGE_KEY, JSON.stringify({
       sfxEnabled: audioSettings.sfxEnabled,
       bgmEnabled: audioSettings.bgmEnabled,
+      sfxVolume: audioSettings.sfxVolume,
+      bgmVolume: audioSettings.bgmVolume,
       chargeTelegraph: audioSettings.chargeTelegraph,
       glowDanger: audioSettings.glowDanger,
       lifeLost: audioSettings.lifeLost,
@@ -10157,8 +10706,8 @@ const __loadedAudioSettings = loadAudioSettings();
 
 const audioSettings = {
   masterVolume: 1.0,
-  sfxVolume: 0.58,
-  bgmVolume: 0.3,
+  sfxVolume: __loadedAudioSettings.sfxVolume,
+  bgmVolume: __loadedAudioSettings.bgmVolume,
   muted: false,
   sfxEnabled: __loadedAudioSettings.sfxEnabled,
   bgmEnabled: __loadedAudioSettings.bgmEnabled,
@@ -10246,6 +10795,8 @@ function collectDurableSave() {
     audio: {
       sfxEnabled: audioSettings.sfxEnabled,
       bgmEnabled: audioSettings.bgmEnabled,
+      sfxVolume: audioSettings.sfxVolume,
+      bgmVolume: audioSettings.bgmVolume,
       chargeTelegraph: audioSettings.chargeTelegraph,
       glowDanger: audioSettings.glowDanger,
       lifeLost: audioSettings.lifeLost,
@@ -10305,6 +10856,8 @@ function mergeDurableSaves(blobs) {
     audio: {
       sfxEnabled: typeof newestAudio.sfxEnabled === 'boolean' ? newestAudio.sfxEnabled : audioSettings.sfxEnabled,
       bgmEnabled: typeof newestAudio.bgmEnabled === 'boolean' ? newestAudio.bgmEnabled : audioSettings.bgmEnabled,
+      sfxVolume: clampAudioVolume(newestAudio.sfxVolume, audioSettings.sfxVolume),
+      bgmVolume: clampAudioVolume(newestAudio.bgmVolume, audioSettings.bgmVolume),
       chargeTelegraph: typeof newestAudio.chargeTelegraph === 'string' ? newestAudio.chargeTelegraph : audioSettings.chargeTelegraph,
       glowDanger: typeof newestAudio.glowDanger === 'string' ? newestAudio.glowDanger : audioSettings.glowDanger,
       lifeLost: typeof newestAudio.lifeLost === 'string' ? newestAudio.lifeLost : audioSettings.lifeLost,
@@ -10331,6 +10884,8 @@ function applyDurableSave(blob) {
   if (blob.audio) {
     if (typeof blob.audio.sfxEnabled === 'boolean') audioSettings.sfxEnabled = blob.audio.sfxEnabled;
     if (typeof blob.audio.bgmEnabled === 'boolean') audioSettings.bgmEnabled = blob.audio.bgmEnabled;
+    if (blob.audio.sfxVolume != null) audioSettings.sfxVolume = clampAudioVolume(blob.audio.sfxVolume, audioSettings.sfxVolume);
+    if (blob.audio.bgmVolume != null) audioSettings.bgmVolume = clampAudioVolume(blob.audio.bgmVolume, audioSettings.bgmVolume);
     if (typeof blob.audio.chargeTelegraph === 'string' && blob.audio.chargeTelegraph !== 'xCharge') audioSettings.chargeTelegraph = blob.audio.chargeTelegraph;
     if (typeof blob.audio.glowDanger === 'string') audioSettings.glowDanger = blob.audio.glowDanger;
     if (typeof blob.audio.lifeLost === 'string') audioSettings.lifeLost = blob.audio.lifeLost;
@@ -10476,6 +11031,29 @@ function copySaveIdToClipboard() {
     navigator.clipboard.writeText(id).catch(() => { window.alert('SAVE ID: ' + id); });
   } else {
     window.alert('SAVE ID: ' + id);
+  }
+}
+
+function setAudioBusVolume(bus, unit, opts) {
+  const next = clampAudioVolume(unit, null);
+  if (next == null) return;
+  if (bus === 'sfx') audioSettings.sfxVolume = next;
+  else if (bus === 'bgm') audioSettings.bgmVolume = next;
+  else return;
+  applyAudioSettings();
+  if (opts && opts.save) saveAudioSettings();
+  if (state === 'settings') {
+    const pct = overlay.querySelector('[data-volume-pct="' + bus + '"]');
+    if (pct) pct.textContent = audioVolumePercent(next) + '%';
+  }
+}
+
+function handleAudioVolumeInput(e) {
+  const slider = e.target && e.target.closest ? e.target.closest('.settings-volume-slider') : null;
+  if (!slider || state !== 'settings') return;
+  setAudioBusVolume(slider.dataset.volume, Number(slider.value) / 100, { save: e.type === 'change' });
+  if (e.type === 'change' && slider.dataset.volume === 'sfx' && audioSettings.sfxEnabled) {
+    try { sfxUiClick(); } catch (err) { /* preview must never block settings */ }
   }
 }
 
@@ -10723,7 +11301,7 @@ const HAZARD_FAMILY = {
   searchlight: 'laser', zone2storm: 'whoosh', orbiter: 'plasma', arcplanet: 'plasma',
   signalcorruption: 'electric', emp: 'electric', pulsingorb: 'plasma', boomerang: 'whoosh',
   echotrail: 'echo', lensingzone: 'gravity', supernova: 'nova', supernovadebris: 'nova',
-  wreckage: 'rock', lasergrid: 'laser', asteroid: 'rock', fireball: 'fire',
+  wreckage: 'rock', lasergrid: 'laser', asteroid: 'rock', splitrock: 'rock', fireball: 'fire',
   toxicpool: 'drip', geyser: 'fire', movingdoor: 'metal', sparkhub: 'electric',
   sparkprojectile: 'electric', accesskey: 'key', specialdoor: 'metal', shootingstar: 'whoosh',
   aciddrip: 'drip', terrain: 'rock',
@@ -10991,6 +11569,9 @@ function playMegaManCharge({ duration = 2, size = 1, isSuperBeam = false } = {})
   megaManChargeCtl = { master, nodes: [osc, harm, pulse] };
 }
 
+
+</script>
+<script>
 function playChargeSweep({ duration = 2, size = 1, isSuperBeam = false } = {}) {
   if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
   stopMegaManCharge(0.02);
@@ -11092,9 +11673,6 @@ function playChargeHeartbeat({ duration = 2, size = 1, isSuperBeam = false } = {
   megaManChargeCtl = { master, nodes: [osc, body, pulse] };
 }
 
-
-</script>
-<script>
 function playChargeStatic({ duration = 2, size = 1, isSuperBeam = false } = {}) {
   if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
   stopMegaManCharge(0.02);
@@ -12791,7 +13369,7 @@ function meteorStreakProximity() {
     const prox = shipHazardProximity(g.x, liveShootingStarY(g), 520 + g.r * 8);
     if (prox > best) {
       best = prox;
-      approach = g.x > ship.x ? 1 : -0.5;
+      approach = g.oncoming ? (g.x < ship.x ? 1 : -0.5) : (g.x > ship.x ? 1 : -0.5);
     }
   }
   return { prox: best, approach };
@@ -13430,8 +14008,18 @@ function playEmpDischarge() {
 }
 
 function playDroneBuzz() {
-  playSynth({ type: 'sawtooth', freq: 168, freqEnd: 132, duration: 0.16, attack: 0.01, decay: 0.05, sustain: 0.5, release: 0.06, volume: 0.16, filterType: 'lowpass', filterFreq: 900, delaySend: 0.08 });
-  playNoiseBurst({ duration: 0.12, filterFreq: 700, filterType: 'bandpass', filterQ: 1.2, volume: 0.14 });
+  playSecurityDroneHit();
+}
+
+function playSecurityDroneHit() {
+  if (!audioUnlocked || !audioCtx) return;
+  const t0 = audioCtx.currentTime;
+  playNoiseBurst({ duration: 0.05, filterFreq: 3800, filterType: 'highpass', volume: 0.22, when: t0 });
+  playNoiseBurst({ duration: 0.11, filterFreq: 340, filterEnd: 110, filterType: 'lowpass', filterQ: 0.55, volume: 0.4, when: t0 });
+  playNoiseBurst({ duration: 0.045, filterFreq: 1700, filterType: 'bandpass', filterQ: 2.2, volume: 0.2, when: t0 + 0.016 });
+  playSynth({ type: 'sine', freq: 86, freqEnd: 36, duration: 0.14, attack: 0.001, decay: 0.04, sustain: 0.3, release: 0.06, volume: 0.28, filterFreq: 220, delaySend: 0, when: t0 });
+  playSynth({ type: 'triangle', freq: 280, freqEnd: 95, duration: 0.09, attack: 0.001, decay: 0.025, sustain: 0.22, release: 0.04, volume: 0.12, filterFreq: 700, delaySend: 0, when: t0 });
+  playSynth({ type: 'sine', freq: 980, freqEnd: 240, duration: 0.07, attack: 0.001, decay: 0.018, sustain: 0.18, release: 0.04, volume: 0.12, filterFreq: 2600, delaySend: 0.08, when: t0 });
 }
 
 function playAlienDroneSpawn() {
@@ -13652,7 +14240,7 @@ function sfxHazardFire(type) {
     playNoiseBurst({ duration: 0.28, filterFreq: 700, filterEnd: 180, filterType: 'lowpass', volume: 0.42, when: audioCtx.currentTime + 0.12 });
     playSynth({ type: 'sine', freq: 140, freqEnd: 40, duration: 0.22, attack: 0.004, decay: 0.06, sustain: 0.35, release: 0.08, volume: 0.24, filterFreq: 300, delaySend: 0, when: audioCtx.currentTime + 0.12 });
   } else if (family === 'drone') {
-    playDroneBuzz();
+    playSecurityDroneHit();
   } else if (family === 'metal') {
     playMetalClank();
   } else if (family === 'bossHeavy') {
@@ -13700,7 +14288,7 @@ function sfxHazardImpact(type) {
     playHBarClank();
     return;
   }
-  if (type === 'asteroid') {
+  if (type === 'asteroid' || type === 'splitrock') {
     playAsteroidCrunch();
     return;
   }
@@ -13754,8 +14342,7 @@ function sfxHazardImpact(type) {
     playPlasmaShot();
     playSynth({ type: 'sine', freq: 90, freqEnd: 40, duration: 0.12, attack: 0.002, decay: 0.04, sustain: 0.3, release: 0.06, volume: 0.16, filterFreq: 300, delaySend: 0 });
   } else if (family === 'drone') {
-    playDroneBuzz();
-    playNoiseBurst({ duration: 0.1, filterFreq: 500, filterType: 'lowpass', volume: 0.22 });
+    playSecurityDroneHit();
   } else if (family === 'bossHeavy') {
     playBossSlam();
   } else if (family === 'key') {
@@ -14120,6 +14707,9 @@ function sfxCoreOverloadFlash() {
   playElectricCrackles({ count: 8, spacing: 0.03, volume: 0.18, when: t0 + 0.14 });
 }
 
+
+</script>
+<script>
 function sfxCoreOverloadBreakdown() {
   if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
   const t0 = audioCtx.currentTime;
@@ -14166,9 +14756,6 @@ function sfxCoreDying() {
   playNoiseBurst({ duration: 0.16, filterFreq: 280, filterEnd: 90, filterType: 'lowpass', volume: 0.32, when: t0 + 0.46 });
 }
 
-
-</script>
-<script>
 function sfxCoreDyingCollapse() {
   playElectricCrackles({ count: 6, spacing: 0.02, volume: 0.22 });
   playSynth({ type: 'sawtooth', freq: 90, freqEnd: 28, duration: 0.28, attack: 0.004, decay: 0.08, sustain: 0.3, release: 0.1, volume: 0.14, filterType: 'lowpass', filterFreq: 350, delaySend: 0 });
@@ -15628,7 +16215,7 @@ let glowDangerPreviewTimer = null;
 
 function isEasyGlowDangerActive() {
   if (state !== 'playing' || ghostMode) return false;
-  const t = nowMs();
+  const t = gameNowMs();
   return t >= invincibilityEndTime && t < freeHitCooldownEndTime;
 }
 
@@ -15974,7 +16561,7 @@ function stopGlowDangerSound() {
 
 function glowDangerUrgencyValue() {
   if (glowDangerPreviewUrgency >= 0) return glowDangerPreviewUrgency;
-  const remaining = Math.max(0, freeHitCooldownEndTime - nowMs());
+  const remaining = Math.max(0, freeHitCooldownEndTime - gameNowMs());
   const windowMs = Math.max(1, FREE_HIT_COOLDOWN_MS - INVINCIBILITY_DURATION_MS);
   return 1 - Math.min(1, remaining / windowMs);
 }
@@ -16239,11 +16826,12 @@ const BGM_FILE_TRACKS = [
   { id: 'bgm-02-gravity-well', src: 'audio/bgm/bgm-02-gravity-well.mp3', themeIndex: 1, start: 0, loopStart: 0 },
   { id: 'bgm-03-deep-space', src: 'audio/bgm/bgm-03-deep-space.mp3', themeIndex: 2, start: 0, loopStart: 0, loopEnd: 22 },
   { id: 'bgm-04-inferno', src: 'audio/bgm/bgm-04-inferno.mp3', themeIndex: 3, start: 0, loopStart: 0, loopEnd: 104 },
-  { id: 'bgm-05-molten-core', src: 'audio/bgm/bgm-05-molten-core.mp3', themeIndex: 4, start: 0, loopStart: 0, loopEnd: 104 },
+  { id: 'bgm-05-molten-core-boss', src: 'audio/bgm/bgm-05-molten-core-boss.mp3?v=snes272', themeIndex: 4, phaseMin: 1, phaseMax: 1, start: 0, loopStart: 0 },
+  { id: 'bgm-05-molten-core', src: 'audio/bgm/bgm-05-molten-core.mp3', themeIndex: 4, phaseMin: 2, phaseMax: 99, start: 0, loopStart: 0, loopEnd: 104 },
   { id: 'bgm-06-storm-skies', src: 'audio/bgm/bgm-06-storm-skies.mp3', themeIndex: 5, start: 0, loopStart: 0 },
   { id: 'bgm-07-ancient-ruins', src: 'audio/bgm/bgm-07-ancient-ruins.ogg', themeIndex: 6, start: 0, loopStart: 0 },
   { id: 'bgm-08-toxic-wasteland', src: 'audio/bgm/bgm-08-toxic-wasteland.mp3', themeIndex: 7, start: 0, loopStart: 0, loopEnd: 46 },
-  { id: 'bgm-09-derelict-station', src: 'audio/bgm/bgm-09-derelict-station.mp3?v=snes270', themeIndex: 8, start: 0, loopStart: 0 },
+  { id: 'bgm-09-derelict-station', src: 'audio/bgm/bgm-09-derelict-station.mp3?v=snes271', themeIndex: 8, start: 2, loopStart: 2, loopEnd: 101 },
   { id: 'bgm-10-reactor-core-p1', src: 'audio/bgm/bgm-10-reactor-core-p1.mp3', themeIndex: 9, phaseMin: 1, phaseMax: 7, start: 0, loopStart: 0 },
   { id: 'bgm-10-reactor-core-p8', src: 'audio/bgm/bgm-10-reactor-core-p8.mp3?v=snes267', themeIndex: 9, phaseMin: 8, phaseMax: 99, start: 50, loopStart: 50 },
   { id: 'bgm-11-the-void', src: 'audio/bgm/bgm-11-the-void.mp3', themeIndex: 10, start: 1, loopStart: 1, loopEnd: 38 },
@@ -16272,6 +16860,7 @@ function currentPlayPhase() {
     return bossPhase || 1;
   }
   if (th.miniBossVariant === 'core') return coreBossPhase || 1;
+  if (th.isMiniBossZone) return (miniBossDefeated || miniBossEscapeRunActive) ? 2 : 1;
   return 1;
 }
 
@@ -16357,10 +16946,11 @@ function startHtmlBgm(track) {
   const media = getBgmMediaNode(track.src, el);
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0.0001, t0);
-  gain.gain.exponentialRampToValueAtTime(1, t0 + fade);
+  gain.gain.exponentialRampToValueAtTime(0.8, t0 + fade);
   try { media.disconnect(); } catch (e) { /* first connect */ }
   media.connect(gain);
   gain.connect(bgmGain);
+  el.volume = 1;
   el.loop = track.loopEnd == null;
   const offset = track.start != null ? track.start : 0;
   try { el.currentTime = offset; } catch (e) { /* not seekable yet */ }
@@ -16733,6 +17323,7 @@ const SFX_CATALOG = [
   { id: 'hzSupernova', section: '3. Zone Hazards', name: 'Supernova buildup + explosion', kind: 'oneshot', play: () => sfxHazardFire('supernova') },
   { id: 'hzNovaDebris', section: '3. Zone Hazards', name: 'Supernova debris', kind: 'oneshot', play: () => sfxHazardImpact('supernovadebris') },
   { id: 'hzLaserGrid', section: '3. Zone Hazards', name: 'Laser grid', kind: 'oneshot', play: () => sfxHazardImpact('lasergrid') },
+  { id: 'hzDroneBuzz', section: '3. Zone Hazards', name: 'Security drone hit (Neon City)', kind: 'oneshot', play: () => sfxHazardImpact('securitydrone') },
   { id: 'hzFireball', section: '3. Zone Hazards', name: 'Fireball breath (proximity)', kind: 'oneshot', play: () => playBowserFireball() },
   { id: 'hzGeyser', section: '3. Zone Hazards', name: 'Toxic geyser (proximity)', kind: 'loop', play: () => { startToxicGeyserSound(); updateToxicGeyserMix(0.85); } },
   { id: 'hzGeyserErupt', section: '3. Zone Hazards', name: 'Toxic geyser eruption', kind: 'oneshot', play: () => playGeyserEruption(1) },
@@ -16833,7 +17424,8 @@ const SFX_CATALOG = [
   { id: 'bgm02', section: '6. Background Music', name: '02 Gravity Well', kind: 'bgm', trackId: 'bgm-02-gravity-well', play: () => {} },
   { id: 'bgm03', section: '6. Background Music', name: '03 Deep Space', kind: 'bgm', trackId: 'bgm-03-deep-space', play: () => {} },
   { id: 'bgm04', section: '6. Background Music', name: '04 Inferno', kind: 'bgm', trackId: 'bgm-04-inferno', play: () => {} },
-  { id: 'bgm05', section: '6. Background Music', name: '05 Molten Core', kind: 'bgm', trackId: 'bgm-05-molten-core', play: () => {} },
+  { id: 'bgm05a', section: '6. Background Music', name: '05 Molten Core (boss)', kind: 'bgm', trackId: 'bgm-05-molten-core-boss', play: () => {} },
+  { id: 'bgm05b', section: '6. Background Music', name: '05 Molten Core (escape)', kind: 'bgm', trackId: 'bgm-05-molten-core', play: () => {} },
   { id: 'bgm06', section: '6. Background Music', name: '06 Storm Skies', kind: 'bgm', trackId: 'bgm-06-storm-skies', play: () => {} },
   { id: 'bgm07', section: '6. Background Music', name: '07 Ancient Ruins', kind: 'bgm', trackId: 'bgm-07-ancient-ruins', play: () => {} },
   { id: 'bgm08', section: '6. Background Music', name: '08 Toxic Wasteland', kind: 'bgm', trackId: 'bgm-08-toxic-wasteland', play: () => {} },
@@ -17674,10 +18266,7 @@ function drawReactorCoreAttacks(theme) {
   const state = miniBossAttackState;
   ctx.save();
 
-  if (coreBossPhase === 6 && (state === 'coreCrossfireTelegraph' ||
-      state === 'coreCrossfireActive' || state === 'coreCrossfireGap')) {
-    drawCoreSparks();
-  }
+  if (coreSparks.length) drawCoreSparks();
 
   if (state === 'coreLaserTelegraph') {
     const stateElapsed = frame - miniBossAttackStateStartFrame;
@@ -17759,7 +18348,6 @@ function drawReactorCoreAttacks(theme) {
       }
     }
   } else if (state === 'coreSparkDeploy') {
-    drawCoreSparks();
     // beam volleys, drawn on top of the sparks when active
     if (coreP3BeamState === 'telegraph') {
       const stateElapsed = frame - coreP3BeamStateStartFrame;
@@ -19359,6 +19947,196 @@ function drawMenuBackground() {
   drawSynthwaveScene(PLAY_TOP, PLAY_BOTTOM);
 }
 
+function drawInfernoHeatBackdrop(theme) {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+
+  const floorGlow = ctx.createLinearGradient(0, PLAY_BOTTOM - playHeight * 0.28, 0, PLAY_BOTTOM);
+  floorGlow.addColorStop(0, 'rgba(255, 40, 0, 0)');
+  floorGlow.addColorStop(0.55, 'rgba(255, 70, 10, 0.10)');
+  floorGlow.addColorStop(1, 'rgba(255, 140, 20, 0.22)');
+  ctx.fillStyle = floorGlow;
+  ctx.fillRect(0, PLAY_BOTTOM - playHeight * 0.28, W, playHeight * 0.28);
+
+  const roofGlow = ctx.createLinearGradient(0, PLAY_TOP, 0, PLAY_TOP + playHeight * 0.16);
+  roofGlow.addColorStop(0, 'rgba(255, 80, 20, 0.14)');
+  roofGlow.addColorStop(1, 'rgba(255, 40, 0, 0)');
+  ctx.fillStyle = roofGlow;
+  ctx.fillRect(0, PLAY_TOP, W, playHeight * 0.16);
+
+  ctx.strokeStyle = 'rgba(255, 90, 20, 0.18)';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < bgParticles.length; i++) {
+    const p = bgParticles[i];
+    ctx.beginPath();
+    ctx.moveTo(p.x + (p.len || 12), p.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+}
+
+function drawToxicWastelandBackdrop(theme) {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const scroll = frame * 0.22;
+
+  const sunX = W * 0.78;
+  const sunY = PLAY_TOP + playHeight * 0.28;
+  const sunR = playHeight * 0.34;
+  const sun = ctx.createRadialGradient(sunX, sunY, sunR * 0.12, sunX, sunY, sunR);
+  sun.addColorStop(0, 'rgba(210, 190, 70, 0.16)');
+  sun.addColorStop(0.35, 'rgba(120, 130, 40, 0.08)');
+  sun.addColorStop(1, 'rgba(40, 50, 10, 0)');
+  ctx.fillStyle = sun;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, PLAY_TOP, W, playHeight);
+  ctx.clip();
+
+  for (let i = 0; i < 3; i++) {
+    const fy = PLAY_TOP + playHeight * (0.22 + i * 0.2);
+    const fx = ((W * 0.45 * i - scroll * (0.4 + i * 0.12)) % (W + 320)) - 160;
+    const haze = ctx.createRadialGradient(fx, fy, 0, fx, fy, 220);
+    haze.addColorStop(0, `rgba(140, 150, 55, ${0.07 - i * 0.015})`);
+    haze.addColorStop(1, 'rgba(40, 50, 15, 0)');
+    ctx.fillStyle = haze;
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, 240, 36 + i * 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = 'rgba(10, 16, 6, 0.38)';
+  ctx.beginPath();
+  ctx.moveTo(0, PLAY_BOTTOM);
+  const hillScroll = (scroll * 0.45) % 90;
+  for (let hx = -hillScroll; hx <= W + 90; hx += 18) {
+    const hill = 28 + Math.sin(hx * 0.018 + 0.4) * 18 + Math.sin(hx * 0.05) * 8;
+    ctx.lineTo(hx, PLAY_BOTTOM - hill);
+  }
+  ctx.lineTo(W, PLAY_BOTTOM);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(18, 28, 10, 0.55)';
+  ctx.beginPath();
+  ctx.moveTo(0, PLAY_BOTTOM);
+  const bermStep = 48;
+  const bermScroll = scroll % bermStep;
+  for (let bx = -bermScroll; bx <= W + bermStep; bx += bermStep) {
+    const hump = 16 + (Math.sin(bx * 0.035 + frame * 0.01) * 0.5 + 0.5) * 14;
+    ctx.lineTo(bx, PLAY_BOTTOM - hump);
+  }
+  ctx.lineTo(W, PLAY_BOTTOM);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(22, 32, 12, 0.4)';
+  ctx.beginPath();
+  ctx.moveTo(0, PLAY_TOP);
+  for (let tx = -((scroll * 0.6) % 40); tx <= W + 40; tx += 40) {
+    const hang = 8 + Math.abs(Math.sin(tx * 0.08 + 1.2)) * 11;
+    ctx.lineTo(tx, PLAY_TOP + hang);
+  }
+  ctx.lineTo(W, PLAY_TOP);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  for (let p of bgParticles) {
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = '#6d7c38';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.r * (p.stretch || 1), p.r, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Zone 1's decorative sun is the same orb that later becomes The Signal.
+// At 900 m it glitches, shrinks, and leaves the sky so the last stretch
+// of Synthwave plays without it -- purely visual, no gameplay change.
+function getSynthwaveSunVanishT(theme) {
+  if (!theme || theme.name !== 'SYNTHWAVE' || theme.isBossZone) return 0;
+  const t = (distance - zoneStartDistance - SYNTHWAVE_SUN_VANISH_START) / SYNTHWAVE_SUN_VANISH_DURATION;
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t;
+}
+
+function drawSynthwaveBackdropSun(theme) {
+  const vanishT = getSynthwaveSunVanishT(theme);
+  if (vanishT >= 1) return;
+
+  const ease = vanishT * vanishT * (3 - 2 * vanishT);
+  const playH = PLAY_BOTTOM - PLAY_TOP;
+  const baseCX = W * 0.78;
+  const baseCY = PLAY_TOP + playH * 0.32;
+  const baseR = playH * 0.22;
+  const jitter = vanishT > 0 ? Math.sin(frame * 0.55 + vanishT * 14) * ease * 7 : 0;
+  const sunCX = baseCX + jitter;
+  const sunCY = baseCY - ease * baseR * 0.42;
+  const sunR = baseR * (1 - ease * 0.9);
+  const alpha = 1 - Math.pow(ease, 1.25);
+  if (sunR < 1 || alpha <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (vanishT > 0 && vanishT < 0.62) {
+    const bloomPulse = 0.28 * (1 - vanishT / 0.62);
+    const bloom = ctx.createRadialGradient(sunCX, sunCY, sunR * 0.18, sunCX, sunCY, sunR * (1.75 + vanishT * 0.8));
+    bloom.addColorStop(0, 'rgba(255, 210, 63, ' + bloomPulse + ')');
+    bloom.addColorStop(0.45, 'rgba(255, 32, 121, ' + (bloomPulse * 0.45) + ')');
+    bloom.addColorStop(1, 'rgba(15, 240, 252, 0)');
+    ctx.fillStyle = bloom;
+    ctx.beginPath();
+    ctx.arc(sunCX, sunCY, sunR * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const drawSunBody = (cx, cy, bodyAlpha) => {
+    ctx.save();
+    ctx.globalAlpha = alpha * bodyAlpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, sunR, 0, Math.PI * 2);
+    ctx.clip();
+    const sunGrad = ctx.createLinearGradient(0, cy - sunR, 0, cy + sunR);
+    sunGrad.addColorStop(0, '#ffd23f');
+    sunGrad.addColorStop(0.5, theme.accentA);
+    sunGrad.addColorStop(1, theme.accentB);
+    ctx.fillStyle = sunGrad;
+    ctx.fillRect(cx - sunR, cy - sunR, sunR * 2, sunR * 2);
+    ctx.fillStyle = theme.skyTop;
+    const bandCount = 5 + Math.floor(ease * 8);
+    const bandGap = sunR * (0.15 + ease * 0.08);
+    for (let i = 0; i < bandCount; i++) {
+      const y = cy + bandGap * i - sunR * 0.08 - ease * sunR * 0.2;
+      ctx.fillRect(cx - sunR, y, sunR * 2, (3 + i) * (1 + ease * 2.4));
+    }
+    ctx.restore();
+  };
+
+  if (vanishT > 0.08 && vanishT < 0.88) {
+    const split = ease * 10;
+    drawSunBody(sunCX - split, sunCY, 0.28);
+    drawSunBody(sunCX + split, sunCY + split * 0.25, 0.22);
+  }
+  drawSunBody(sunCX, sunCY, 1);
+
+  if (vanishT > 0.2 && vanishT < 0.95) {
+    ctx.globalAlpha = alpha * 0.55 * (1 - Math.abs(vanishT - 0.55) * 1.6);
+    ctx.strokeStyle = theme.accentB;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(sunCX, sunCY, sunR * (1.12 + vanishT * 0.8), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawBackground(theme) {
   const colorProgress = theme.isBossZone ? getBossColorProgress() : 0;
   const phase5Progress = theme.isBossZone ? getPhase5BackgroundProgress() : 0;
@@ -19384,25 +20162,7 @@ function drawBackground(theme) {
 
   if (theme.bgStyle === 'grid') {
     if (!theme.isBossZone) {
-    const sunCX = W * 0.78;
-    const sunCY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.32;
-    const sunR = (PLAY_BOTTOM - PLAY_TOP) * 0.22;
-    const sunGrad = ctx.createLinearGradient(0, sunCY - sunR, 0, sunCY + sunR);
-    sunGrad.addColorStop(0, '#ffd23f');
-    sunGrad.addColorStop(0.5, theme.accentA);
-    sunGrad.addColorStop(1, theme.accentB);
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(sunCX, sunCY, sunR, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.fillStyle = sunGrad;
-    ctx.fillRect(sunCX - sunR, sunCY - sunR, sunR * 2, sunR * 2);
-    ctx.fillStyle = theme.skyTop;
-    for (let i = 0; i < 5; i++) {
-      const y = sunCY + sunR * 0.15 * i - 2;
-      ctx.fillRect(sunCX - sunR, y, sunR * 2, 3 + i);
-    }
-    ctx.restore();
+      drawSynthwaveBackdropSun(theme);
     }
 
     // the perspective grid fully replaces this one in boss zones once
@@ -19416,17 +20176,19 @@ function drawBackground(theme) {
     ctx.lineWidth = 1;
     ctx.globalAlpha = bossGridFadeEnabled ? 1 - colorProgress : 1;
     const gridSpacing = 40;
-    const offset = (frame * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing;
+    const offset = Math.round((frame * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing);
     for (let x = -offset; x < W; x += gridSpacing) {
+      const px = Math.round(x) + 0.5;
       ctx.beginPath();
-      ctx.moveTo(x, PLAY_TOP);
-      ctx.lineTo(x, PLAY_BOTTOM);
+      ctx.moveTo(px, PLAY_TOP);
+      ctx.lineTo(px, PLAY_BOTTOM);
       ctx.stroke();
     }
     for (let y = PLAY_TOP; y < PLAY_BOTTOM; y += gridSpacing) {
+      const py = Math.round(y) + 0.5;
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(W, y);
+      ctx.moveTo(0, py);
+      ctx.lineTo(W, py);
       ctx.stroke();
     }
     ctx.restore();
@@ -19458,14 +20220,7 @@ function drawBackground(theme) {
     }
     ctx.globalAlpha = 1;
   } else if (theme.bgStyle === 'embers') {
-    for (let p of bgParticles) {
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle = theme.accentA;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    drawInfernoHeatBackdrop(theme);
   } else if (theme.bgStyle === 'ruins') {
     const playHeight = PLAY_BOTTOM - PLAY_TOP;
 
@@ -19536,44 +20291,7 @@ function drawBackground(theme) {
     }
     ctx.globalAlpha = 1;
   } else if (theme.bgStyle === 'toxic') {
-    const playHeight = PLAY_BOTTOM - PLAY_TOP;
-
-    // drifting toxic fog banks
-    for (let i = 0; i < 4; i++) {
-      const fx = ((W * 0.3 * i - frame * 0.25) % (W + 260)) - 130;
-      const fy = PLAY_TOP + playHeight * (0.15 + i * 0.22);
-      const fgrad = ctx.createRadialGradient(fx, fy, 0, fx, fy, 150);
-      fgrad.addColorStop(0, 'rgba(138,255,77,0.12)');
-      fgrad.addColorStop(1, 'rgba(138,255,77,0)');
-      ctx.fillStyle = fgrad;
-      ctx.beginPath();
-      ctx.ellipse(fx, fy, 150, 45, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // sickly bubbling ground texture near top and bottom edges
-    ctx.fillStyle = 'rgba(60,80,20,0.35)';
-    const oozeSpacing = 60;
-    const oozeOffset = (frame * 0.7) % oozeSpacing;
-    for (let ox = -oozeOffset; ox < W + oozeSpacing; ox += oozeSpacing) {
-      const bob = Math.sin(frame * 0.05 + ox * 0.05) * 4;
-      ctx.beginPath();
-      ctx.arc(ox, PLAY_TOP + 6 + bob, 10, 0, Math.PI);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(ox + oozeSpacing / 2, PLAY_BOTTOM - 6 - bob, 10, Math.PI, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // rising toxic bubbles/spores
-    for (let p of bgParticles) {
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle = theme.accentA;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    drawToxicWastelandBackdrop(theme);
   } else if (theme.bgStyle === 'station') {
     const playHeight = PLAY_BOTTOM - PLAY_TOP;
 
@@ -19878,6 +20596,9 @@ function drawSupernovaPlanet(g, theme) {
   ctx.restore();
 }
 
+
+</script>
+<script>
 function drawSupernovaFlash(g, theme) {
   const t = Math.min(1, (frame - g.detonationFrame) / 20);
   ctx.save();
@@ -19975,9 +20696,6 @@ function drawLensingZone(g, theme) {
 
 // telegraph: a growing preview line at the locked height, plus a
 // building charge glow and converging sparks at the boss itself
-
-</script>
-<script>
 function drawBossChargeBeamTelegraph(g, theme) {
   const elapsed = frame - g.spawnFrame;
   const progress = Math.min(1, elapsed / g.warningFrames);
@@ -21092,6 +21810,39 @@ function drawAsteroid(g, theme) {
   ctx.restore();
 }
 
+function drawSplitRock(g, theme) {
+  drawAsteroid(g, theme);
+  if (!g.cracking) return;
+  const t = Math.min(1, (frame - g.crackFrame) / Math.max(1, g.telegraphFrames));
+  const pulse = 0.55 + 0.45 * Math.sin(frame * 0.28);
+  ctx.save();
+  ctx.translate(g.x, g.y);
+  ctx.strokeStyle = theme.accentA;
+  ctx.globalAlpha = 0.18 + t * 0.35 * pulse;
+  ctx.lineWidth = 3;
+  ctx.shadowColor = theme.accentA;
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.arc(0, 0, g.r + 6 + t * 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.rotate(g.rotSeed + frame * g.spin);
+  ctx.strokeStyle = '#fff4c8';
+  ctx.globalAlpha = 0.55 + t * 0.45;
+  ctx.lineWidth = 2.2 + t * 2.6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-g.r * 0.88, -g.r * 0.12);
+  ctx.lineTo(g.r * 0.84, g.r * 0.18);
+  ctx.stroke();
+  ctx.globalAlpha = 0.35 + t * 0.5;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-g.r * 0.22, -g.r * 0.78);
+  ctx.lineTo(g.r * 0.18, g.r * 0.72);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawFireball(g, theme) {
   const y = liveFireballY(g);
   const r = g.r;
@@ -21107,8 +21858,8 @@ function drawFireball(g, theme) {
   ctx.strokeStyle = '#4fd6ff';
   ctx.lineWidth = Math.max(2, r * 0.15);
   const cycleLen = r * 4.5;
-  for (let i = 0; i < 5; i++) {
-    const phase = (frame * 1.6 + i * (cycleLen / 5)) % cycleLen;
+  for (let i = 0; i < 2; i++) {
+    const phase = (frame * 1.6 + i * (cycleLen / 2)) % cycleLen;
     const off = 42 * s + phase;
     const fade = 1 - phase / cycleLen;
     ctx.globalAlpha = 0.38 * fade;
@@ -21121,8 +21872,7 @@ function drawFireball(g, theme) {
   }
   ctx.globalAlpha = 1;
 
-  ctx.shadowColor = '#4fd6ff';
-  ctx.shadowBlur = 14;
+  ctx.shadowBlur = 0;
 
   // outer jagged flame silhouette -- fixed shape, no pulsing (only the
   // ship-relative position moves, so the slide reads clearly)
@@ -21654,7 +22404,7 @@ function drawShootingStar(g, theme) {
   const framesBack = frame - prevFrame;
   const prevT = Math.min(1, (prevFrame - g.spawnFrame) / g.life);
   const prevY = g.startY + (g.endY - g.startY) * prevT;
-  const dx = -framesBack * effScroll;
+  const dx = g.oncoming ? framesBack * (g.vx || 0) : -framesBack * effScroll;
   const dy = y - prevY;
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const dirX = dx / len, dirY = dy / len;
@@ -22025,6 +22775,10 @@ function drawGates(theme) {
       drawAsteroid(g, theme);
       continue;
     }
+    if (g.type === 'splitrock') {
+      drawSplitRock(g, theme);
+      continue;
+    }
     if (g.type === 'wreckage') {
       drawWreckage(g, theme);
       continue;
@@ -22384,17 +23138,27 @@ function traceShipDart() {
   ctx.closePath();
 }
 
+function classicShipPalette(theme) {
+  if (theme && theme.bgStyle === 'toxic' && currentShipSkin().id === 'classic') {
+    return { accentA: '#0ff0fc', accentB: '#7af6ff', hull: '#1a2a44', hullMid: '#3d5a78', nose: '#e8fbff' };
+  }
+  return { accentA: theme.accentA, accentB: theme.accentB };
+}
+
 function drawShipSkinClassic(theme) {
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 12;
+  const pal = classicShipPalette(theme);
+  const toxicReadability = theme && theme.bgStyle === 'toxic';
+  ctx.shadowColor = toxicReadability ? pal.accentA : pal.accentB;
+  ctx.shadowBlur = toxicReadability ? 14 : 12;
   const bodyGrad = ctx.createLinearGradient(-SHIP_W / 2, 0, SHIP_W / 2, 0);
-  bodyGrad.addColorStop(0, theme.accentB);
-  bodyGrad.addColorStop(1, '#ffffff');
+  bodyGrad.addColorStop(0, toxicReadability ? pal.hull : pal.accentB);
+  if (toxicReadability) bodyGrad.addColorStop(0.55, pal.hullMid);
+  bodyGrad.addColorStop(1, toxicReadability ? pal.nose : '#ffffff');
   ctx.fillStyle = bodyGrad;
   traceShipDart();
   ctx.fill();
-  ctx.strokeStyle = theme.accentA;
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = pal.accentA;
+  ctx.lineWidth = toxicReadability ? 2 : 1.5;
   ctx.stroke();
 }
 
@@ -23005,9 +23769,10 @@ function drawShipTrailWorld(theme) {
 function drawShipTrailLocal(theme) {
   const skin = currentShipSkin().id;
   if (skin === 'molten' || skin === 'void' || skin === 'toxic' || skin === 'signal') return;
+  const pal = classicShipPalette(theme);
   const id = currentShipTrail().id;
   if (id === 'classic' || id === 'echo' || id === 'ribbon') {
-    drawClassicFlame(theme, 0, theme.accentA, theme.accentB);
+    drawClassicFlame(theme, 0, pal.accentA, pal.accentB);
     return;
   }
   if (id === 'pulse') {
@@ -23015,7 +23780,7 @@ function drawShipTrailLocal(theme) {
       const pulse = 0.55 + 0.45 * Math.abs(Math.sin(frame * 0.28 + i * 0.9));
       const len = (10 + i * 7 + (holding ? 8 : 0)) * pulse;
       ctx.globalAlpha = 0.35 + pulse * 0.4;
-      ctx.strokeStyle = i % 2 === 0 ? theme.accentB : theme.accentA;
+      ctx.strokeStyle = i % 2 === 0 ? pal.accentB : pal.accentA;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(-SHIP_W / 2 - 2, -5 + i);
@@ -23027,7 +23792,7 @@ function drawShipTrailLocal(theme) {
     return;
   }
   if (id === 'sparks') {
-    drawClassicFlame(theme, -4, theme.accentB, '#ffffff');
+    drawClassicFlame(theme, -4, pal.accentB, '#ffffff');
     return;
   }
   if (id === 'glitch') {
@@ -23041,7 +23806,7 @@ function drawShipTrailLocal(theme) {
       const len = baseLen + ((frame * 2 + i * 7) % 16) - (i * 2);
       const xOff = ((frame + i * 13) % 9) - 4;
       ctx.globalAlpha = 0.55 + (i % 2) * 0.25;
-      ctx.fillStyle = i % 2 === 0 ? theme.accentB : theme.accentA;
+      ctx.fillStyle = i % 2 === 0 ? pal.accentB : pal.accentA;
       ctx.fillRect(-SHIP_W / 2 - len + xOff, y, len, 2.2);
     }
     if ((frame % 6) < 2) {
@@ -23099,22 +23864,22 @@ function drawShipTrailLocal(theme) {
   if (id === 'twin') {
     ctx.save();
     ctx.translate(0, -8);
-    drawClassicFlame(theme, -2, theme.accentB, '#ffffff');
+    drawClassicFlame(theme, -2, pal.accentB, '#ffffff');
     ctx.restore();
     ctx.save();
     ctx.translate(0, 8);
-    drawClassicFlame(theme, -2, theme.accentA, '#ffffff');
+    drawClassicFlame(theme, -2, pal.accentA, '#ffffff');
     ctx.restore();
     return;
   }
   if (id === 'helix') {
-    drawClassicFlame(theme, -8, theme.accentB, theme.accentA);
+    drawClassicFlame(theme, -8, pal.accentB, pal.accentA);
     return;
   }
   if (id === 'rings') {
-    drawClassicFlame(theme, -10, theme.accentB, '#ffffff');
+    drawClassicFlame(theme, -10, pal.accentB, '#ffffff');
     ctx.save();
-    ctx.strokeStyle = theme.accentA;
+    ctx.strokeStyle = pal.accentA;
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 3; i++) {
       const age = (frame * 2.4 + i * 11) % 28;
@@ -23135,10 +23900,10 @@ function drawShip(theme) {
   // classic NES-style blinking sprite while invincible -- hard on/off
   // toggle rather than a smooth fade, matching the authentic retro look
   // real hardware produced (no alpha blending, just skipping the draw
-  // entirely every other interval). Tied to real time so the blink rate
-  // itself stays consistent regardless of frame rate.
-  const isInvincible = ghostMode || nowMs() < invincibilityEndTime;
-  if (isInvincible && Math.floor(nowMs() / INVINCIBILITY_BLINK_INTERVAL_MS) % 2 === 0) return;
+  // entirely every other interval). Tied to the game clock so pause
+  // freezes the blink instead of burning through the protection window.
+  const isInvincible = ghostMode || gameNowMs() < invincibilityEndTime;
+  if (isInvincible && Math.floor(gameNowMs() / INVINCIBILITY_BLINK_INTERVAL_MS) % 2 === 0) return;
 
   drawShipTrailWorld(theme);
 
@@ -23154,7 +23919,7 @@ function drawShip(theme) {
   // here costs a real life. A slow, calm pulse signals "not safe anymore"
   // without the urgency of the blink, since there's no immediate threat,
   // just a used-up grace period.
-  const nowForGlow = nowMs();
+  const nowForGlow = gameNowMs();
   if (!isInvincible && nowForGlow < freeHitCooldownEndTime) {
     const pulse = 0.4 + 0.3 * Math.sin(nowForGlow * 0.004);
     const glowR = SHIP_W * 1.1;
@@ -23290,7 +24055,7 @@ function drawBars(theme) {
   ctx.shadowBlur = 0;
   ctx.font = '9px Courier New';
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.fillText('build 2026-08-28-vortex-overlap-check', 14, BAR_HEIGHT + 10);
+  if (DEV_TOOLS_ENABLED) ctx.fillText('build 2026-08-28-vortex-overlap-check', 14, BAR_HEIGHT + 10);
   ctx.textAlign = 'right';
   ctx.font = 'bold 13px Courier New';
   ctx.fillStyle = theme.accentA;
@@ -23316,9 +24081,15 @@ function drawBars(theme) {
   ctx.font = 'bold 15px Courier New';
   ctx.fillStyle = theme.accentA;
   ctx.textAlign = 'left';
-  ctx.fillText('DISTANCE: ' + Math.floor(distance - zoneStartDistance) + ' / ' + THEME_DISTANCE, 14, H - BAR_HEIGHT / 2 + 1);
-  ctx.textAlign = 'right';
-  ctx.fillText('BEST: ' + best, W - 14, H - BAR_HEIGHT / 2 + 1);
+  const zoneDist = Math.floor(distance - zoneStartDistance);
+  const distLabel = (theme.isBossZone || theme.isMiniBossZone)
+    ? ('DISTANCE: ' + zoneDist)
+    : ('DISTANCE: ' + zoneDist + ' / ' + THEME_DISTANCE);
+  ctx.fillText(distLabel, 14, H - BAR_HEIGHT / 2 + 1);
+  if (!theme.isBossZone && !theme.isMiniBossZone) {
+    ctx.textAlign = 'right';
+    ctx.fillText('BEST: ' + best, W - 14, H - BAR_HEIGHT / 2 + 1);
+  }
 }
 
 function drawWarpEffect() {
@@ -23371,8 +24142,8 @@ function drawTerrain(theme) {
   if (terrainSegments.length < 2) return;
 
   ctx.save();
-  ctx.shadowColor = theme.accentB;
-  ctx.shadowBlur = 12;
+  // shadowBlur on these giant cave fills is what tanks Inferno in Chrome
+  ctx.shadowBlur = 0;
 
   // top land mass
   const topGrad = ctx.createLinearGradient(0, PLAY_TOP, 0, PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.55);
@@ -23581,6 +24352,7 @@ function updateBgmForState() {
     const fileTrack = currentFileBgmTrack();
     if (fileTrack) {
       playFileBgm(fileTrack.id);
+      if (fileTrack.id === 'bgm-05-molten-core-boss') prefetchBgmTrack('bgm-05-molten-core');
       if (fileTrack.id === 'bgm-10-reactor-core-p1') prefetchBgmTrack('bgm-10-reactor-core-p8');
       if (fileTrack.id === 'bgm-13-the-signal-p1') prefetchBgmTrack('bgm-13-the-signal-p3');
       if (fileTrack.id === 'bgm-13-the-signal-p3') prefetchBgmTrack('bgm-13-the-signal-p5');
@@ -23608,7 +24380,9 @@ function draw() {
 
   const shakeOffset = getBossShakeOffset();
   ctx.save();
-  ctx.translate(shakeOffset.x, shakeOffset.y);
+  if (shakeOffset.x || shakeOffset.y) {
+    ctx.translate(Math.round(shakeOffset.x), Math.round(shakeOffset.y));
+  }
 
   const theme = currentTheme();
   if (state === 'home') {
@@ -23657,16 +24431,14 @@ function draw() {
 let lastRenderedOverlayState = null;
 const STATIC_OVERLAY_STATES = new Set(['zone-select', 'settings', 'achievements', 'paused', 'statistics', 'confirm-reset-stats', 'victory']);
 function updateOverlay() {
+  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state;
+  if (__renderKey === lastRenderedOverlayState) return;
   overlay.classList.toggle('home-layout', state === 'home');
   pauseToggleBtn.style.display = (state === 'playing' || state === 'paused') ? 'block' : 'none';
-  pauseToggleBtn.style.top = (BAR_HEIGHT + 8) + 'px';
+  positionPauseButton();
   pauseToggleBtn.textContent = (state === 'paused') ? '\u25B6' : 'II';
   pauseToggleBtn.title = (state === 'paused') ? 'Resume (Esc)' : 'Pause (Esc)';
   overlay.style.pointerEvents = (state === 'playing' || state === 'ready' || state === 'respawn' || state === 'gameover' || state === 'victory') ? 'none' : 'auto';
-  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state;
-  if (__renderKey === lastRenderedOverlayState) {
-    return;
-  }
   lastRenderedOverlayState = __renderKey;
   const __scrollList = (typeof overlay.querySelector === 'function') ? overlay.querySelector('.scrollable-overlay-list') : null;
   const __savedScrollTop = __scrollList ? __scrollList.scrollTop : null;
@@ -23688,30 +24460,18 @@ function updateOverlay() {
       <div class="options-panel-v2">
         <div class="panel-header">OPTIONS</div>
         <div class="menu-stack">
-          <div class="menu-btn-row">
-            <span class="menu-btn-label">DIFFICULTY</span>
+          <div class="options-diff-picker">
+            <div class="settings-picker-label">DIFFICULTY</div>
             <div class="stepper-control">
               <button type="button" class="stepper-arrow" data-action="diff-prev">&#9664;</button>
               <span class="stepper-value ${displayClass}">${displayLabel}</span>
               <button type="button" class="stepper-arrow" data-action="diff-next">&#9654;</button>
             </div>
           </div>
-          <div class="menu-btn-row" data-action="open-zone-select">
-            <span class="menu-btn-label">ZONE SELECT</span>
-            <span class="row-action-indicator">WARP &#9654;</span>
-          </div>
-          <div class="menu-btn-row" data-action="open-settings">
-            <span class="menu-btn-label">SETTINGS</span>
-            <span class="row-action-indicator">OPEN &#9654;</span>
-          </div>
-          <div class="menu-btn-row" data-action="open-achievements">
-            <span class="menu-btn-label">ACHIEVEMENTS</span>
-            <span class="row-action-indicator">VIEW &#9654;</span>
-          </div>
-          <div class="menu-btn-row" data-action="open-statistics">
-            <span class="menu-btn-label">STATISTICS</span>
-            <span class="row-action-indicator">VIEW &#9654;</span>
-          </div>
+          <button type="button" class="btn-continue-secondary" data-action="open-zone-select">ZONE SELECT</button>
+          <button type="button" class="btn-continue-secondary" data-action="open-settings">SETTINGS</button>
+          <button type="button" class="btn-continue-secondary" data-action="open-achievements">ACHIEVEMENTS</button>
+          <button type="button" class="btn-continue-secondary" data-action="open-statistics">STATISTICS</button>
         </div>
         <div class="start-action-container">
           <button type="button" class="btn-start-game" data-action="start-game">CLICK TO START</button>
@@ -23725,51 +24485,50 @@ function updateOverlay() {
     overlay.innerHTML = `
       <div class="menu-panel">
         <div id="title" style="font-size:32px;">SETTINGS</div>
-        <div id="subtitle" class="overlay-recap">Audio</div>
         <div class="settings-diff-list scrollable-overlay-list">
-          <div class="menu-btn-row" data-action="toggle-sfx">
-            <span class="menu-btn-label">SOUND EFFECTS</span>
-            <span class="row-action-indicator">${audioSettings.sfxEnabled ? 'ON' : 'OFF'}</span>
-          </div>
-          <div class="menu-btn-row" data-action="toggle-bgm">
-            <span class="menu-btn-label">BACKGROUND MUSIC</span>
-            <span class="row-action-indicator">${audioSettings.bgmEnabled ? 'ON' : 'OFF'}</span>
-          </div>
-          <div class="menu-btn-row">
-            <span class="menu-btn-label">SHIP TRAIL</span>
-            <div class="stepper-control">
-              <button type="button" class="stepper-arrow" data-action="trail-prev">&#9664;</button>
-              <span class="stepper-value">${currentShipTrail().name}</span>
-              <button type="button" class="stepper-arrow" data-action="trail-next">&#9654;</button>
+          <div class="achievement-section-header">AUDIO</div>
+          <div class="settings-ship-grid">
+            <div class="settings-picker${audioSettings.sfxEnabled ? '' : ' is-off'}">
+              <div class="settings-toggle${audioSettings.sfxEnabled ? '' : ' is-off'}" data-action="toggle-sfx">
+                <div class="settings-picker-label">SOUND EFFECTS</div>
+                <div class="settings-toggle-value">${audioSettings.sfxEnabled ? 'ON' : 'OFF'}</div>
+              </div>
+              <div class="settings-volume-row">
+                <input type="range" class="settings-volume-slider" min="0" max="100" step="1" value="${audioVolumePercent(audioSettings.sfxVolume)}" data-volume="sfx" aria-label="Sound effects volume">
+                <span class="settings-volume-pct" data-volume-pct="sfx">${audioVolumePercent(audioSettings.sfxVolume)}%</span>
+              </div>
+            </div>
+            <div class="settings-picker${audioSettings.bgmEnabled ? '' : ' is-off'}">
+              <div class="settings-toggle${audioSettings.bgmEnabled ? '' : ' is-off'}" data-action="toggle-bgm">
+                <div class="settings-picker-label">BACKGROUND MUSIC</div>
+                <div class="settings-toggle-value">${audioSettings.bgmEnabled ? 'ON' : 'OFF'}</div>
+              </div>
+              <div class="settings-volume-row">
+                <input type="range" class="settings-volume-slider" min="0" max="100" step="1" value="${audioVolumePercent(audioSettings.bgmVolume)}" data-volume="bgm" aria-label="Background music volume">
+                <span class="settings-volume-pct" data-volume-pct="bgm">${audioVolumePercent(audioSettings.bgmVolume)}%</span>
+              </div>
             </div>
           </div>
-          <div class="settings-trail-hint">${currentShipTrail().hint} &middot; ${unlockedShipTrails().length} / ${SHIP_TRAILS.length} unlocked</div>
-          <div class="menu-btn-row">
-            <span class="menu-btn-label">SHIP</span>
-            <div class="stepper-control">
-              <button type="button" class="stepper-arrow" data-action="skin-prev">&#9664;</button>
-              <span class="stepper-value">${currentShipSkin().name}</span>
-              <button type="button" class="stepper-arrow" data-action="skin-next">&#9654;</button>
+          <div class="achievement-section-header" style="margin-top:14px;">SHIP</div>
+          <div class="settings-ship-grid">
+            <div class="settings-picker">
+              <div class="settings-picker-label">TRAIL</div>
+              <div class="stepper-control">
+                <button type="button" class="stepper-arrow" data-action="trail-prev">&#9664;</button>
+                <span class="stepper-value">${currentShipTrail().name}</span>
+                <button type="button" class="stepper-arrow" data-action="trail-next">&#9654;</button>
+              </div>
+              <div class="settings-trail-hint">${currentShipTrail().hint} &middot; ${unlockedShipTrails().length} / ${SHIP_TRAILS.length} unlocked</div>
             </div>
-          </div>
-          <div class="settings-trail-hint">${currentShipSkin().hint} &middot; ${unlockedShipSkins().length} / ${SHIP_SKINS.length} unlocked</div>
-          <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
-          <div class="menu-btn-row" data-action="copy-save-id">
-            <span class="menu-btn-label">SAVE ID</span>
-            <span class="row-action-indicator settings-save-id">${ensurePlayerSaveId()}</span>
-          </div>
-          <div class="settings-trail-hint">Keep this ID or bookmark the page (the address ends with #sf=${ensurePlayerSaveId()}). Clearing cache does not erase a server save. Export a file for a copy that lives outside the browser.</div>
-          <div class="menu-btn-row" data-action="export-save">
-            <span class="menu-btn-label">EXPORT SAVE</span>
-            <span class="row-action-indicator">FILE &#9660;</span>
-          </div>
-          <div class="menu-btn-row" data-action="import-save">
-            <span class="menu-btn-label">IMPORT SAVE</span>
-            <span class="row-action-indicator">FILE &#9654;</span>
-          </div>
-          <div class="menu-btn-row" data-action="restore-save-id">
-            <span class="menu-btn-label">RESTORE ID</span>
-            <span class="row-action-indicator">LOAD &#9654;</span>
+            <div class="settings-picker">
+              <div class="settings-picker-label">HULL</div>
+              <div class="stepper-control">
+                <button type="button" class="stepper-arrow" data-action="skin-prev">&#9664;</button>
+                <span class="stepper-value">${currentShipSkin().name}</span>
+                <button type="button" class="stepper-arrow" data-action="skin-next">&#9654;</button>
+              </div>
+              <div class="settings-trail-hint">${currentShipSkin().hint} &middot; ${unlockedShipSkins().length} / ${SHIP_SKINS.length} unlocked</div>
+            </div>
           </div>
           <div class="achievement-section-header" style="margin-top:14px;">DIFFICULTY DETAILS</div>
           <div class="settings-diff-card">
@@ -23784,13 +24543,14 @@ function updateOverlay() {
             <div class="settings-diff-name difficulty-normal">NORMAL</div>
             <div class="settings-diff-stats">
               9 lives &middot; 3 continues<br>
-              No invincibility frames
+              First hit: ${iframeSeconds}s invincible, then ${deathWindowSeconds}s vulnerable<br>
+              Any hit after that is death
             </div>
           </div>
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-hard">HARD</div>
             <div class="settings-diff-stats">
-              9 lives &middot; no continues<br>
+              9 lives &middot; 1 continue<br>
               No invincibility frames
             </div>
           </div>
@@ -23802,6 +24562,27 @@ function updateOverlay() {
                 : '1 life &middot; no continues<br>' +
                   iframeSeconds + 's invincible (blinking) after a hit<br>' +
                   deathWindowSeconds + 's vulnerable afterward before it can trigger again'}
+            </div>
+          </div>
+          ${BROWSER_HELP_HTML}
+          <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
+          <div class="settings-picker settings-toggle" data-action="copy-save-id">
+            <div class="settings-picker-label">SAVE ID</div>
+            <div class="settings-toggle-value settings-save-id">${ensurePlayerSaveId()}</div>
+            <div class="settings-trail-hint">Click to copy. Bookmark the page (#sf=${ensurePlayerSaveId()}) or export a file. Clearing cache does not erase a server save.</div>
+          </div>
+          <div class="settings-action-grid">
+            <div class="settings-picker settings-toggle" data-action="export-save">
+              <div class="settings-picker-label">EXPORT</div>
+              <div class="settings-toggle-value">FILE</div>
+            </div>
+            <div class="settings-picker settings-toggle" data-action="import-save">
+              <div class="settings-picker-label">IMPORT</div>
+              <div class="settings-toggle-value">FILE</div>
+            </div>
+            <div class="settings-picker settings-toggle" data-action="restore-save-id">
+              <div class="settings-picker-label">RESTORE ID</div>
+              <div class="settings-toggle-value">LOAD</div>
             </div>
           </div>
         </div>
@@ -23995,7 +24776,7 @@ function updateOverlay() {
       <div class="menu-panel continue-panel">
         <div class="panel-header">PAUSED</div>
         <div class="menu-stack">
-          <button type="button" class="btn-start-game" data-action="resume-game">RESUME &#9654;</button>
+          <button type="button" class="btn-start-game" data-action="resume-game"><span>RESUME</span><span class="cta-arrow">&#9654;</span></button>
           <button type="button" class="btn-continue-secondary" data-action="open-pause-options">OPTIONS</button>
           <button type="button" class="btn-continue-secondary" data-action="quit-to-home">${isPracticeRun ? 'ZONE SELECT' : 'MAIN MENU'}</button>
         </div>
@@ -24013,7 +24794,7 @@ function updateOverlay() {
         <div class="continue-credit">${continuesRemaining}</div>
         <div class="continue-credit-label">${continuesRemaining === 1 ? 'CREDIT REMAINING' : 'CREDITS REMAINING'}</div>
         <div class="menu-stack">
-          <button type="button" class="btn-start-game" data-action="use-continue">CONTINUE &#9654;</button>
+          <button type="button" class="btn-start-game" data-action="use-continue"><span>CONTINUE</span><span class="cta-arrow">&#9654;</span></button>
           <button type="button" class="btn-continue-secondary" data-action="quit-to-home">${isPracticeRun ? 'ZONE SELECT' : 'MAIN MENU'}</button>
         </div>
       </div>
@@ -24089,9 +24870,11 @@ function updateOverlay() {
 const devToggle = document.getElementById('dev-toggle');
 const devPanel = document.getElementById('dev-panel');
 
-devToggle.addEventListener('click', () => {
-  devPanel.classList.toggle('active');
-});
+if (DEV_TOOLS_ENABLED && devToggle && devPanel) {
+  devToggle.addEventListener('click', () => {
+    devPanel.classList.toggle('active');
+  });
+}
 
 
 </script>
@@ -24531,13 +25314,16 @@ devPanel.appendChild(exportTextarea);
 
 const fireballSpeedSlider = document.getElementById('fireball-speed-slider');
 const fireballSpeedValue = document.getElementById('fireball-speed-value');
-fireballSpeedSlider.addEventListener('input', () => {
-  fireballSpeedMult = parseFloat(fireballSpeedSlider.value);
-  fireballSpeedValue.textContent = fireballSpeedMult.toFixed(1);
-  devStatus('Flame speed set to ' + fireballSpeedMult.toFixed(1) + 'x world scroll.');
-});
+if (DEV_TOOLS_ENABLED && fireballSpeedSlider && fireballSpeedValue) {
+  fireballSpeedSlider.addEventListener('input', () => {
+    fireballSpeedMult = parseFloat(fireballSpeedSlider.value);
+    fireballSpeedValue.textContent = fireballSpeedMult.toFixed(1);
+    devStatus('Flame speed set to ' + fireballSpeedMult.toFixed(1) + 'x world scroll.');
+  });
+}
 
 window.addEventListener('keydown', (e) => {
+  if (!DEV_TOOLS_ENABLED) return;
   const num = parseInt(e.key, 10);
   if (num >= 1 && num <= THEMES.length) {
     devJumpToTheme(num - 1);
@@ -24836,6 +25622,7 @@ function simulateZonePreview(themeIdx, targetDistance) {
   terrainLevelX = 0;
   terrainWaypointTarget = null;
   terrainWaypointSegLeft = 0;
+  terrainMeanderIndex = 0;
   ship.x = 0;
   ship.y = (PLAY_TOP + PLAY_BOTTOM) / 2;
 
@@ -25075,7 +25862,7 @@ function captureFullZoneRun(themeIdx, targetDistance) {
     droneSwarmEventsSpawned, billboardEventsSpawned, searchlightEventsSpawned,
     turretEventsSpawned, signalCorruptionEventsSpawned, empEventsSpawned,
     echoTrailEventsSpawned, pulsingOrbEventsSpawned, boomerangEventsSpawned,
-    lensingZoneEventsSpawned, supernovaEventsSpawned,
+    oncomingCometEventsSpawned, splitRockEventsSpawned, lensingZoneEventsSpawned, supernovaEventsSpawned,
   };
   // the update() loop this capture drives processes mini boss fight logic
   // exactly like real gameplay -- without saving/restoring it, previewing
@@ -25263,6 +26050,8 @@ function captureFullZoneRun(themeIdx, targetDistance) {
   echoTrailEventsSpawned = savedEventFlags.echoTrailEventsSpawned;
   pulsingOrbEventsSpawned = savedEventFlags.pulsingOrbEventsSpawned;
   boomerangEventsSpawned = savedEventFlags.boomerangEventsSpawned;
+  oncomingCometEventsSpawned = savedEventFlags.oncomingCometEventsSpawned;
+  splitRockEventsSpawned = savedEventFlags.splitRockEventsSpawned;
   lensingZoneEventsSpawned = savedEventFlags.lensingZoneEventsSpawned;
   supernovaEventsSpawned = savedEventFlags.supernovaEventsSpawned;
   miniBoss = savedMiniBossState.miniBoss;
@@ -25403,6 +26192,11 @@ function drawZonePreview(data) {
       previewCtx.fillStyle = 'rgba(200,150,100,0.6)';
       previewCtx.beginPath();
       previewCtx.arc(sx, yToScreen(g.y), Math.max(2, g.r * scale), 0, Math.PI * 2);
+      previewCtx.fill();
+    } else if (g.type === 'splitrock') {
+      previewCtx.fillStyle = 'rgba(220,160,90,0.7)';
+      previewCtx.beginPath();
+      previewCtx.arc(sx, yToScreen(g.y), Math.max(3, g.r * scale), 0, Math.PI * 2);
       previewCtx.fill();
     } else if (g.type === 'fireball') {
       previewCtx.fillStyle = 'rgba(255,120,50,0.5)';
@@ -27636,9 +28430,9 @@ function loop() {
       if (elapsed > 100) elapsed = 100;
 
       if (state === 'playing' || state === 'victory') {
-        // One tick per paint so a 120/144Hz Cursor panel stays at the
-        // speed this game was tuned for. Extra ticks only when a frame
-        // actually ran long (typical ~30fps fullscreen Chrome).
+        // One tick per paint so a 120/144Hz panel stays at the speed this
+        // game was tuned for. Extra ticks only when a frame actually ran
+        // long (dropped frames), not to "catch up" Chrome 60Hz vsync.
         let steps = 1;
         if (elapsed > 20) {
           steps = Math.min(MAX_SIM_STEPS, Math.round(elapsed / SIM_STEP_MS));
