@@ -1,3 +1,118 @@
+function clampGhostShipToPlayfield() {
+  const minY = PLAY_TOP + SHIP_H / 2 + 0.5;
+  const maxY = PLAY_BOTTOM - SHIP_H / 2 - 0.5;
+  if (ship.y < minY) { ship.y = minY; if (ship.vy < 0) ship.vy = 0; }
+  if (ship.y > maxY) { ship.y = maxY; if (ship.vy > 0) ship.vy = 0; }
+}
+
+function tryEndGame(hazardType) {
+  if (state !== 'playing') return;
+  if (ghostMode) return;
+  if (bossFinalChargeActive || bossExplosionActive || bossFullyDefeated) return; // victory is already secured -- nothing can kill the player during the boss's death sequence or the fly-off that follows
+  const t = gameNowMs();
+  if (t < invincibilityEndTime) return; // currently within an active protection window -- ignore this collision entirely
+  sfxHazardImpact(hazardType);
+  const maxFreeHits = DIFFICULTY_CONFIG[selectedDifficulty]?.freeHitsPerLife || 0;
+  if (maxFreeHits > 0 && freeHitsUsedThisLife < maxFreeHits && t >= freeHitCooldownEndTime) {
+    // forgiven hit grants a fresh protection window, then the free-pass
+    // cooldown so it cannot be chained indefinitely. Normal only gets this
+    // once per life; Easy / Overdrive can repeat after the cooldown.
+    freeHitsUsedThisLife += 1;
+    invincibilityEndTime = t + INVINCIBILITY_DURATION_MS;
+    freeHitCooldownEndTime = t + FREE_HIT_COOLDOWN_MS;
+    return;
+  }
+  const moltenSpecialHit = hazardType === 'charging' || hazardType === 'chargingClose'
+    || hazardType === 'coreFlame' || hazardType === 'barrageActive';
+  // cave / island contact is an out-of-bounds wall, not a hazard: losing
+  // a life here must not carry the hit-cycle mercy window into the next life
+  const wallLike = hazardType === 'terrain';
+  endGame(!wallLike, moltenSpecialHit ? { playCollision: false } : undefined);
+}
+let nextThemeIndex = 0;
+let bgParticles = [];
+
+function currentTheme() {
+  return THEMES[themeIndex];
+}
+
+function currentGapSize() {
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const th = currentTheme();
+  const startFrac = (th.gapFractionStart !== undefined) ? th.gapFractionStart : GAP_FRACTION_START;
+  if (th.gapConstant) {
+    return playHeight * startFrac;
+  }
+  const minFrac = (th.gapFractionMin !== undefined) ? th.gapFractionMin : GAP_FRACTION_MIN;
+  const fraction = Math.max(minFrac, startFrac - distance * 0.0006);
+  return playHeight * fraction;
+}
+
+function currentGateSpacing() {
+  const th = currentTheme();
+  if (th.obstacleShape === 'diamond') {
+    const playHeight = PLAY_BOTTOM - PLAY_TOP;
+    const startFrac = (th.gapFractionStart !== undefined) ? th.gapFractionStart : GAP_FRACTION_START;
+    const maxDiameter = playHeight * startFrac * (1 + (th.pulseAmpFrac || 0));
+    return Math.max(GATE_SPACING, maxDiameter * 1.4);
+  }
+  return th.gateSpacing || GATE_SPACING;
+}
+
+function spawnGate(x) {
+  const th = currentTheme();
+  if (th.obstacleShape === 'asteroid') {
+    return spawnAsteroidCluster(x);
+  }
+  if (th.obstacleShape === 'hbar') {
+    return spawnHBarCluster(x);
+  }
+  if (th.obstacleShape === 'barrier') {
+    return spawnBarrier(x);
+  }
+  if (th.obstacleShape === 'lbolt') {
+    return spawnFloatingBoltCluster(x);
+  }
+  if (th.obstacleShape === 'pendulum') {
+    return spawnPendulumCluster(x);
+  }
+  if (th.obstacleShape === 'aciddrip') {
+    return spawnAcidDrip(x);
+  }
+  if (th.obstacleShape === 'wreckage') {
+    return spawnWreckageCluster(x);
+  }
+  if (th.obstacleShape === 'lightning') {
+    return spawnLightningBolt(x);
+  }
+  if (th.obstacleShape === 'fireball') {
+    return 0; // fireballs spawn on their own timer, not by x-position
+  }
+  const gap = currentGapSize();
+  const margin = 20;
+  const minCenter = PLAY_TOP + gap / 2 + margin;
+  const maxCenter = PLAY_BOTTOM - gap / 2 - margin;
+
+  const entry = th.pattern[patternIndex % th.pattern.length];
+  patternIndex++;
+
+  const playHeight = PLAY_BOTTOM - PLAY_TOP;
+  const baseCenter = Math.max(minCenter, Math.min(maxCenter, PLAY_TOP + entry.centerFrac * playHeight));
+  const maxAmp = Math.max(0, Math.min(baseCenter - minCenter, maxCenter - baseCenter));
+  gates.push({
+    type: 'gate',
+    x: x,
+    baseCenter: baseCenter,
+    amplitude: entry.ampFrac * maxAmp,
+    freq: entry.freq,
+    phase: entry.phase,
+    pulsePhase: entry.pulsePhase || 0,
+    pulseFreq: entry.pulseFreq || 0,
+    passed: false
+  });
+  return entry.spacing;
+}
+
 function spawnLightningBolt(x) {
   const th = currentTheme();
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
@@ -2201,8 +2316,16 @@ function initTerrain() {
   terrainLevelX = 0;
   terrainWaypointTarget = null;
   terrainWaypointSegLeft = 0;
+  terrainWaypointSegTotal = 1;
   terrainWaypointGapTarget = null;
   terrainWaypointIslandTarget = 0;
+  terrainWaypointIslandFrom = 0;
+  terrainWaypointNosePower = 1;
+  terrainWaypointTaperShare = 0.32;
+  terrainWaypointTaperCap = 5;
+  terrainWaypointIslandShape = '';
+  terrainWaypointIslandLabel = '';
+  terrainWaypointIslandBias = 0;
   terrainMeanderIndex = 0;
   for (let x = -spacing; x <= W + spacing; x += spacing) {
     terrainSegments.push({ x, topY: startTop, bottomY: startBottom, islandTop: startCenter, islandBottom: startCenter });
@@ -2260,7 +2383,8 @@ function addTerrainSegment() {
     const maxDeltaPerSegment = Math.min(maxClimbSpeed, maxDiveSpeed) * framesPerSegment * safetyFactor;
 
     if (terrainWaypointSegLeft <= 0) {
-      const upcoming = th.pattern[patternIndex % th.pattern.length];
+      const pattern = terrainPattern(th);
+      const upcoming = pattern[patternIndex % pattern.length];
       const genDistance = (terrainLevelX + W) / 10;
       let entry = upcoming;
       let consumePattern = true;
@@ -2290,8 +2414,9 @@ function addTerrainSegment() {
       terrainWaypointGapTarget = entryGap + outerPadPx * 2;
 
       if (entry.fork) {
-        const islandFrac = Math.min(0.45, entry.fork.islandFrac || 0.3);
-        terrainWaypointIslandTarget = Math.max(0, entryGap * islandFrac - SHIP_H * 2);
+        const islandFracRaw = entry.fork.islandFrac;
+        const islandFrac = Math.min(0.45, islandFracRaw == null ? 0.3 : islandFracRaw);
+        terrainWaypointIslandTarget = islandFrac > 0 ? Math.max(0, entryGap * islandFrac - SHIP_H * 2) : 0;
       } else {
         terrainWaypointIslandTarget = 0;
       }
@@ -2299,25 +2424,68 @@ function addTerrainSegment() {
       const holdLastCenter = (last.topY + last.bottomY) / 2;
       const fullDelta = Math.abs(terrainWaypointTarget - holdLastCenter);
       terrainWaypointSegLeft = Math.max(1, Math.ceil(fullDelta / Math.max(1, maxDeltaPerSegment)));
+      if (entry.fork) terrainWaypointSegLeft = Math.max(terrainWaypointSegLeft, 10);
+      terrainWaypointSegTotal = terrainWaypointSegLeft;
+      terrainWaypointIslandFrom = Math.max(0, last.islandBottom - last.islandTop);
+      terrainWaypointNosePower = (entry.fork && entry.fork.nosePower) ? entry.fork.nosePower : 1;
+      terrainWaypointTaperShare = (entry.fork && entry.fork.noseTaper) ? entry.fork.noseTaper : 0.32;
+      terrainWaypointTaperCap = (entry.fork && entry.fork.noseTaperSegs) ? entry.fork.noseTaperSegs : 5;
+      terrainWaypointIslandShape = (entry.fork && entry.fork.shape) ? entry.fork.shape : '';
+      terrainWaypointIslandLabel = (entry.fork && entry.fork.label) ? entry.fork.label : '';
+      terrainWaypointIslandBias = (entry.fork && entry.fork.islandBias) ? entry.fork.islandBias : 0;
     }
 
     const lastCenter = (last.topY + last.bottomY) / 2;
     const lastGap = last.bottomY - last.topY;
-    const lastIsland = last.islandBottom - last.islandTop;
 
     const centerStep = (terrainWaypointTarget - lastCenter) / terrainWaypointSegLeft;
     const gapStep = (terrainWaypointGapTarget - lastGap) / terrainWaypointSegLeft;
-    const islandStep = (terrainWaypointIslandTarget - lastIsland) / terrainWaypointSegLeft;
-
+    const islandT = 1 - (terrainWaypointSegLeft - 1) / Math.max(1, terrainWaypointSegTotal);
+    const islandFrom = terrainWaypointIslandFrom;
+    const islandTo = terrainWaypointIslandTarget;
+    const clampedT = Math.max(0, Math.min(1, islandT));
+    const taperSegs = Math.min(terrainWaypointTaperCap, terrainWaypointSegTotal, Math.max(3, Math.ceil(terrainWaypointSegTotal * terrainWaypointTaperShare)));
+    const taperFrac = taperSegs / Math.max(1, terrainWaypointSegTotal);
+    let islandU;
+    if (islandTo > islandFrom + 0.5) {
+      const u = clampedT >= taperFrac ? 1 : clampedT / taperFrac;
+      islandU = Math.pow(u, terrainWaypointNosePower);
+    } else if (islandTo < islandFrom - 0.5) {
+      const tailStart = 1 - taperFrac;
+      islandU = clampedT <= tailStart ? 0 : (clampedT - tailStart) / taperFrac;
+    } else {
+      islandU = clampedT;
+    }
     const nextCenter = lastCenter + centerStep;
     const nextGap = lastGap + gapStep;
-    const nextIsland = Math.max(0, lastIsland + islandStep);
+    const nextIsland = Math.min(
+      Math.max(0, nextGap * 0.30),
+      Math.max(0, islandFrom + (islandTo - islandFrom) * islandU)
+    );
     terrainWaypointSegLeft--;
 
     targetTop = nextCenter - nextGap / 2;
     targetBottom = nextCenter + nextGap / 2;
-    targetIslandTop = nextCenter - nextIsland / 2;
-    targetIslandBottom = nextCenter + nextIsland / 2;
+    let islandTop = nextCenter - nextIsland / 2;
+    let islandBottom = nextCenter + nextIsland / 2;
+    const shape = terrainWaypointIslandShape;
+    if (shape === 'hull' && islandTo > islandFrom + 0.5 && nextIsland > 1) {
+      const cut = (1 - islandU) * nextIsland * 0.42;
+      islandTop += cut;
+    } else if (shape === 'hex' && islandTo > islandFrom + 0.5 && nextIsland > 1) {
+      const u = Math.min(1, clampedT / Math.max(0.001, taperFrac));
+      const cut = (1 - u) * nextIsland * 0.18;
+      islandTop += cut;
+      islandBottom -= cut;
+    }
+    if (terrainWaypointIslandBias && nextIsland > 1) {
+      const room = Math.max(0, nextGap - nextIsland);
+      const shift = terrainWaypointIslandBias * room * 0.45;
+      islandTop += shift;
+      islandBottom += shift;
+    }
+    targetIslandTop = islandTop;
+    targetIslandBottom = islandBottom;
     }
   }
 
@@ -2355,7 +2523,9 @@ function addTerrainSegment() {
     topY: nextTop,
     bottomY: nextBottom,
     islandTop: nextIslandTop,
-    islandBottom: nextIslandBottom
+    islandBottom: nextIslandBottom,
+    islandShape: terrainWaypointIslandShape,
+    islandLabel: terrainWaypointIslandLabel
   });
 }
 
@@ -2877,6 +3047,8 @@ function respawnInZone(opts) {
   invincibilityEndTime = -1;
   freeHitCooldownEndTime = -1;
   freeHitsUsedThisLife = 0;
+  pendingRespawnMercyEligible = false;
+  resetHitCyclePauseClock();
   initBackgroundParticles(currentTheme());
   reseedZoneObstacles(ship.x + 420);
 }
@@ -2981,6 +3153,23 @@ function startPracticeZone(zoneIndex) {
   prefetchThemeBgm(zoneIndex);
   beginWarp(zoneIndex);
   state = 'playing';
+}
+
+function startInfernoPlaytest() {
+  const zoneIndex = THEMES.findIndex((t) => t.name === 'INFERNO');
+  if (zoneIndex < 0) return;
+  resetGame();
+  isPracticeRun = true;
+  practiceZoneIndex = zoneIndex;
+  distance = 0;
+  themeLevelReached = 0;
+  state = 'playing';
+  beginWarp(zoneIndex);
+  while (warpActive) finishWarp();
+}
+
+function startForkGallery() {
+  startInfernoPlaytest();
 }
 
 // continue-prompt: consumes a continue, resets lives, and respawns in
@@ -3355,502 +3544,6 @@ function updateCoreSparks(phaseStartFrame, targetCount, shipTop, shipBottom, shi
       break;
     }
     if (s.x < -50) coreSparks.splice(i, 1);
-  }
-}
-
-function beginCoreBulkhead(moving) {
-  miniBossAttackState = 'coreBulkheadTelegraph';
-  coreBulkheadIsMoving = !!moving;
-  coreBulkheadX = ship.x + 150;
-  if (!moving) coreBulkheadGapCenter = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.5;
-  miniBossAttackStateStartFrame = frame;
-  sfxCoreBulkheadTelegraph();
-}
-
-function updateReactorCoreBoss() {
-  if (coreBossDefeated) {
-    if (!shipFlyOffActive && frame - coreBossDefeatFrame >= CORE_BOSS_DEFEAT_PAUSE) {
-      shipFlyOffActive = true;
-      ship.vx = 0;
-    }
-    if (shipFlyOffActive && ship.x > W + 60) {
-      shipFlyOffActive = false;
-      miniBoss = null;
-      ship.x = W * 0.28;
-      ship.vx = 0;
-      beginWarp(); // no escape run for this boss
-    }
-    return;
-  }
-
-  const stateElapsed = frame - miniBossAttackStateStartFrame;
-  const shipTop = ship.y - SHIP_H / 2, shipBottom = ship.y + SHIP_H / 2;
-  const shipR = SHIP_W * 0.4;
-
-  let sparkTarget = coreSparkSpawned;
-  if (miniBossAttackState === 'coreSparkDeploy') sparkTarget = CORE_SPARK_COUNT;
-  else if (coreBossPhase === 6 && (miniBossAttackState === 'coreCrossfireTelegraph' ||
-      miniBossAttackState === 'coreCrossfireActive' || miniBossAttackState === 'coreCrossfireGap')) {
-    sparkTarget = CORE_P6_SPARK_COUNT;
-  }
-  if (sparkTarget > 0 || coreSparks.length > 0) {
-    updateCoreSparks(coreSparkPhaseStartFrame, sparkTarget, shipTop, shipBottom, shipR);
-  }
-
-  if (miniBossAttackState === 'coreFloating') {
-    miniBoss.x = miniBoss.restX;
-    miniBoss.y = miniBoss.baseY; // static wall -- no floating bob
-
-    if (coreBossPhase >= 9) {
-      miniBossAttackState = 'coreDying';
-      miniBossAttackStateStartFrame = frame;
-      sfxCoreDying();
-      coreDeathPatches = [];
-      for (let i = 0; i < CORE_DEATH_PATCH_COUNT; i++) {
-        coreDeathPatches.push({
-          angle: Math.random() * Math.PI * 2,
-          distFrac: 0.15 + Math.random() * 0.55,
-          sizeFrac: 0.35 + Math.random() * 0.35,
-          startFrac: (i / CORE_DEATH_PATCH_COUNT) * 0.5 + Math.random() * 0.15
-        });
-      }
-      coreDeathDebris = [];
-      return;
-    }
-
-    if (coreBossPhase === 7) {
-      if (coreSparks.length === 0) beginCoreBulkhead(true);
-      return;
-    }
-
-    const floatDuration = !coreBossHadFirstFloat ? CORE_BOSS_INITIAL_FLOAT : (coreBossPhase === 3 ? 35 : CORE_BOSS_PRE_ATTACK_FLOAT);
-    if (stateElapsed >= floatDuration) {
-      coreBossHadFirstFloat = true;
-      if (coreBossPhase === 1) {
-        miniBossAttackState = 'coreLaserTelegraph';
-        coreLaserIndex = 0;
-        coreLaserHeights = shuffleArray(CORE_LASER_HEIGHT_FRACS);
-        coreLaserY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * coreLaserHeights[0];
-        sfxHazardFire('coreLaserTelegraph');
-      } else if (coreBossPhase === 2) {
-        miniBossAttackState = 'coreBulkheadTelegraph';
-        coreBulkheadIsMoving = false;
-        coreBulkheadX = ship.x + 150; // well clear of the boss (which sits around ship.x+366), so the wall reads as a distinct obstacle between ship and boss, not overlapping it
-        coreBulkheadGapCenter = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.5;
-      } else if (coreBossPhase === 3) {
-        miniBossAttackState = 'coreSparkDeploy';
-        coreSparkSpawned = 0;
-        coreSparks = [];
-        coreSparkPhaseStartFrame = frame;
-        coreP3BeamVolleysFired = 0;
-        coreP3BeamState = 'none';
-        coreP3BeamYs = [];
-      } else if (coreBossPhase === 4) {
-        miniBossAttackState = 'coreBulkheadTelegraph';
-        coreBulkheadIsMoving = true;
-        coreBulkheadX = ship.x + 150; // well clear of the boss (which sits around ship.x+366), so the wall reads as a distinct obstacle between ship and boss, not overlapping it
-      } else if (coreBossPhase === 5) {
-        miniBossAttackState = 'coreEmpTelegraph';
-        coreEmpPulses = [];
-        coreEmpWavesLaunched = 0;
-        miniBoss.y = miniBoss.baseY; // pin to center -- otherwise it's frozen wherever the floating bob happened to be, misaligning EMP lanes against the (always-centered) squeeze walls
-      } else if (coreBossPhase === 6) {
-        miniBossAttackState = 'coreCrossfireTelegraph';
-        coreCrossfireRound = 0;
-        const safeSlot = Math.floor(Math.random() * CORE_CROSSFIRE_SLOT_FRACS.length);
-        coreCrossfireBeamYs = computeCrossfireBeamYs(safeSlot);
-        coreSparkSpawned = 0;
-        coreSparks = [];
-        coreSparkPhaseStartFrame = frame;
-      } else if (coreBossPhase === 7) {
-        miniBossAttackState = 'coreBulkheadTelegraph';
-        coreBulkheadIsMoving = true;
-        coreBulkheadX = ship.x + 150; // well clear of the boss (which sits around ship.x+366), so the wall reads as a distinct obstacle between ship and boss, not overlapping it
-      } else if (coreBossPhase === 8) {
-        miniBossAttackState = 'coreGateOpen';
-        coreGateOpenAmount = 0;
-        coreOrbitSpawned = 0;
-        coreOrbitProjectiles = [];
-        coreOrbitEmitAngle = 0;
-        sfxCoreGateOpen();
-      }
-      miniBossAttackStateStartFrame = frame;
-      if (miniBossAttackState === 'coreBulkheadTelegraph') sfxCoreBulkheadTelegraph();
-      if (miniBossAttackState === 'coreEmpTelegraph') sfxCoreEmpTelegraph();
-    }
-  } else if (miniBossAttackState === 'coreLaserTelegraph') {
-    if (stateElapsed >= CORE_LASER_TELEGRAPH) {
-      miniBossAttackState = 'coreLaserActive';
-      miniBossAttackStateStartFrame = frame;
-      sfxHazardFire('coreLaserActive');
-    }
-  } else if (miniBossAttackState === 'coreLaserActive') {
-    if (shipTop < coreLaserY + CORE_LASER_THICKNESS / 2 && shipBottom > coreLaserY - CORE_LASER_THICKNESS / 2) {
-      tryEndGame('coreLaserActive');
-    }
-    if (stateElapsed >= CORE_LASER_ACTIVE) {
-      coreLaserIndex++;
-      if (coreLaserIndex >= CORE_LASER_COUNT) {
-        coreBossPhase = 2;
-        miniBossAttackState = 'coreFloating';
-        miniBossAttackStateStartFrame = frame;
-      } else {
-        miniBossAttackState = 'coreLaserGap';
-        miniBossAttackStateStartFrame = frame;
-      }
-    }
-  } else if (miniBossAttackState === 'coreLaserGap') {
-    if (stateElapsed >= CORE_LASER_GAP) {
-      coreLaserY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * coreLaserHeights[coreLaserIndex];
-      miniBossAttackState = 'coreLaserTelegraph';
-      miniBossAttackStateStartFrame = frame;
-      sfxHazardFire('coreLaserTelegraph');
-    }
-  } else if (miniBossAttackState === 'coreBulkheadTelegraph') {
-    if (stateElapsed >= CORE_BULKHEAD_TELEGRAPH) {
-      miniBossAttackState = 'coreBulkheadActive';
-      miniBossAttackStateStartFrame = frame;
-      sfxCoreBulkheadLock();
-      startCoreBulkheadHoldSound();
-    }
-  } else if (miniBossAttackState === 'coreBulkheadActive') {
-    let gapCenter = coreBulkheadGapCenter;
-    if (coreBulkheadIsMoving) {
-      gapCenter = (PLAY_TOP + PLAY_BOTTOM) / 2 + CORE_BULKHEAD_DRIFT_AMPLITUDE * Math.sin(stateElapsed * (2 * Math.PI / CORE_BULKHEAD_DRIFT_PERIOD));
-    }
-    const gapTop = gapCenter - CORE_BULKHEAD_GAP_HEIGHT / 2;
-    const gapBottom = gapCenter + CORE_BULKHEAD_GAP_HEIGHT / 2;
-    if (shipTop < gapTop || shipBottom > gapBottom) {
-      tryEndGame('coreBulkheadActive');
-    }
-    if (stateElapsed >= CORE_BULKHEAD_ACTIVE) {
-      coreBossPhase = coreBossPhase + 1;
-      miniBossAttackState = 'coreFloating';
-      miniBossAttackStateStartFrame = frame;
-    }
-  } else if (miniBossAttackState === 'coreSparkDeploy') {
-    // beam volleys, firing simultaneously alongside the weaving sparks
-    if (coreP3BeamState === 'none' && coreP3BeamVolleysFired < CORE_P3_BEAM_TRIGGER_TIMES.length &&
-        stateElapsed >= CORE_P3_BEAM_TRIGGER_TIMES[coreP3BeamVolleysFired]) {
-      coreP3BeamState = 'telegraph';
-      coreP3BeamStateStartFrame = frame;
-      const safeSlot = Math.floor(Math.random() * CORE_P3_BEAM_SLOT_FRACS.length);
-      coreP3BeamYs = CORE_P3_BEAM_SLOT_FRACS.map((f, i) => i).filter(i => i !== safeSlot)
-        .map(i => PLAY_TOP + CORE_P3_BEAM_SLOT_FRACS[i] * (PLAY_BOTTOM - PLAY_TOP));
-    } else if (coreP3BeamState === 'telegraph' && frame - coreP3BeamStateStartFrame >= CORE_P3_BEAM_TELEGRAPH) {
-      coreP3BeamState = 'active';
-      coreP3BeamStateStartFrame = frame;
-      sfxCoreCrossfireVolley();
-    } else if (coreP3BeamState === 'active') {
-      for (const by of coreP3BeamYs) {
-        if (shipTop < by + CORE_P3_BEAM_THICKNESS / 2 && shipBottom > by - CORE_P3_BEAM_THICKNESS / 2) {
-          tryEndGame('coreLaserActive');
-          break;
-        }
-      }
-      if (frame - coreP3BeamStateStartFrame >= CORE_P3_BEAM_ACTIVE) {
-        coreP3BeamState = 'none';
-        coreP3BeamYs = [];
-        coreP3BeamVolleysFired++;
-      }
-    }
-    if (coreSparkSpawned >= CORE_SPARK_COUNT && coreSparks.length === 0 &&
-        coreP3BeamVolleysFired >= CORE_P3_BEAM_TRIGGER_TIMES.length && coreP3BeamState === 'none') {
-      coreBossPhase = 4;
-      beginCoreBulkhead(true);
-    }
-  } else if (miniBossAttackState === 'coreEmpTelegraph') {
-    if (stateElapsed >= CORE_EMP_TELEGRAPH) {
-      miniBossAttackState = 'coreEmpActive';
-      miniBossAttackStateStartFrame = frame;
-      coreEmpPhaseStartFrame = frame;
-    }
-  } else if (miniBossAttackState === 'coreEmpActive') {
-    const squeezeCenter = (PLAY_TOP + PLAY_BOTTOM) / 2;
-    const cyclePos = ((frame - coreEmpPhaseStartFrame) % CORE_SQUEEZE_PERIOD) / CORE_SQUEEZE_PERIOD;
-    const squeezeFrac = (1 - Math.cos(cyclePos * 2 * Math.PI)) / 2;
-    const squeezeGap = CORE_SQUEEZE_MAX_GAP - (CORE_SQUEEZE_MAX_GAP - CORE_SQUEEZE_MIN_GAP) * squeezeFrac;
-    coreSqueezeTopY = squeezeCenter - squeezeGap / 2;
-    coreSqueezeBottomY = squeezeCenter + squeezeGap / 2;
-    if (shipTop <= coreSqueezeTopY || shipBottom >= coreSqueezeBottomY) {
-      tryEndGame('coreEmpActive');
-    }
-
-    const waveElapsed = frame - coreEmpPhaseStartFrame;
-    if (coreEmpWavesLaunched < CORE_EMP_WAVE_COUNT && waveElapsed >= coreEmpWavesLaunched * CORE_EMP_WAVE_INTERVAL) {
-      const safeLane = Math.floor(Math.random() * 3);
-      for (let lane = 0; lane < 3; lane++) {
-        if (lane === safeLane) continue;
-        coreEmpPulses.push({
-          x: miniBoss.x,
-          y: miniBoss.y + (lane - 1) * CORE_EMP_LANE_SPACING,
-          vx: -CORE_EMP_SPEED
-        });
-      }
-      coreEmpWavesLaunched++;
-      sfxHazardFire('coreEmpPulse');
-    }
-    for (let i = coreEmpPulses.length - 1; i >= 0; i--) {
-      const e = coreEmpPulses[i];
-      e.x += e.vx;
-      const dx = ship.x - e.x, dy = ship.y - e.y;
-      if (Math.sqrt(dx * dx + dy * dy) < shipR + CORE_EMP_R) {
-        tryEndGame('coreEmpPulse');
-        break;
-      }
-      if (e.x < -100) coreEmpPulses.splice(i, 1);
-    }
-
-    if (stateElapsed >= CORE_EMP_ACTIVE) {
-      coreBossPhase = 6;
-      miniBossAttackState = 'coreFloating';
-      miniBossAttackStateStartFrame = frame;
-    }
-  } else if (miniBossAttackState === 'coreCrossfireTelegraph') {
-    if (stateElapsed >= CORE_CROSSFIRE_TELEGRAPH) {
-      miniBossAttackState = 'coreCrossfireActive';
-      miniBossAttackStateStartFrame = frame;
-      sfxCoreCrossfireVolley();
-    }
-  } else if (miniBossAttackState === 'coreCrossfireActive') {
-    for (const by of coreCrossfireBeamYs) {
-      if (shipTop < by + CORE_CROSSFIRE_THICKNESS / 2 && shipBottom > by - CORE_CROSSFIRE_THICKNESS / 2) {
-        tryEndGame('coreCrossfireActive');
-        break;
-      }
-    }
-    if (stateElapsed >= CORE_CROSSFIRE_ACTIVE) {
-      coreCrossfireRound++;
-      if (coreCrossfireRound >= CORE_CROSSFIRE_ROUNDS) {
-        coreBossPhase = 7;
-        if (coreSparks.length === 0) {
-          beginCoreBulkhead(true);
-        } else {
-          miniBossAttackState = 'coreFloating';
-          miniBossAttackStateStartFrame = frame;
-        }
-      } else {
-        miniBossAttackState = 'coreCrossfireGap';
-        miniBossAttackStateStartFrame = frame;
-      }
-    }
-  } else if (miniBossAttackState === 'coreCrossfireGap') {
-    if (stateElapsed >= CORE_CROSSFIRE_GAP) {
-      const safeSlot = Math.floor(Math.random() * CORE_CROSSFIRE_SLOT_FRACS.length);
-      coreCrossfireBeamYs = computeCrossfireBeamYs(safeSlot);
-      miniBossAttackState = 'coreCrossfireTelegraph';
-      miniBossAttackStateStartFrame = frame;
-    }
-  } else if (miniBossAttackState === 'coreGateOpen') {
-    coreGateOpenAmount = Math.min(1, stateElapsed / CORE_GATE_OPEN_DURATION);
-    if (stateElapsed >= CORE_GATE_OPEN_DURATION) {
-      miniBossAttackState = 'coreSphereEmerge';
-      miniBossAttackStateStartFrame = frame;
-      miniBoss.x = miniBoss.restX;
-      miniBoss.y = miniBoss.baseY;
-      miniBoss.r = miniBoss.maxR;
-      sfxCoreEmerge();
-    }
-  } else if (miniBossAttackState === 'coreSphereEmerge') {
-    const emergeT = Math.min(1, stateElapsed / CORE_SPHERE_EMERGE_DURATION);
-    const startX = miniBoss.restX, targetX = Math.min(ship.x + CORE_SPHERE_X_OFFSET, miniBoss.restX);
-    miniBoss.x = startX + (targetX - startX) * emergeT;
-    miniBoss.y = miniBoss.baseY;
-    if (stateElapsed >= CORE_SPHERE_EMERGE_DURATION) {
-      miniBossAttackState = 'coreOrbitBarrageActive';
-      miniBossAttackStateStartFrame = frame;
-      coreEyeBeamState = 'track';
-      coreEyeBeamStateStartFrame = frame;
-      coreEyeBeamY = ship.y;
-      sfxCoreEyeBeamTrack();
-      coreTeslaState = 'charging';
-      coreTeslaStateStartFrame = frame;
-      coreTeslaProjectiles = [];
-      coreTeslaEmptySlot = pickCoreTeslaEmptySlot();
-    }
-  } else if (miniBossAttackState === 'coreOrbitBarrageActive') {
-    miniBoss.x = Math.min(ship.x + CORE_SPHERE_X_OFFSET, miniBoss.restX);
-    miniBoss.y = miniBoss.baseY;
-    coreOrbitEmitAngle += CORE_ORBIT_EMIT_ROTATION_SPEED;
-
-    if (coreOrbitSpawned < CORE_ORBIT_COUNT && stateElapsed >= coreOrbitSpawned * CORE_ORBIT_SPAWN_INTERVAL) {
-      coreOrbitProjectiles.push({ angle: coreOrbitEmitAngle, dist: CORE_ORBIT_START_DIST, x: 0, y: 0 });
-      coreOrbitSpawned++;
-      sfxHazardFire('coreOrbit');
-    }
-    for (let i = coreOrbitProjectiles.length - 1; i >= 0; i--) {
-      const p = coreOrbitProjectiles[i];
-      p.angle += CORE_ORBIT_TANGENTIAL_SPEED / p.dist;
-      p.dist += CORE_ORBIT_OUTWARD_SPEED;
-      p.x = miniBoss.x + Math.cos(p.angle) * p.dist;
-      p.y = miniBoss.y + Math.sin(p.angle) * p.dist;
-      const dx = ship.x - p.x, dy = ship.y - p.y;
-      if (Math.sqrt(dx * dx + dy * dy) < shipR + CORE_ORBIT_R) {
-        tryEndGame('coreOrbit');
-        break;
-      }
-      if (p.dist > CORE_ORBIT_MAX_DIST) coreOrbitProjectiles.splice(i, 1);
-    }
-
-    // eye beam sub-cycle, running simultaneously with the orbit barrage
-    if (coreEyeBeamState === 'track') {
-      coreEyeBeamY = ship.y;
-      if (frame - coreEyeBeamStateStartFrame >= CORE_EYEBEAM_TRACK_DURATION) {
-        coreEyeBeamState = 'lock';
-        coreEyeBeamStateStartFrame = frame;
-        sfxCoreEyeBeamLock();
-      }
-    } else if (coreEyeBeamState === 'lock') {
-      if (frame - coreEyeBeamStateStartFrame >= CORE_EYEBEAM_LOCK_DURATION) {
-        coreEyeBeamState = 'active';
-        coreEyeBeamStateStartFrame = frame;
-        sfxCoreEyeBeamFire();
-      }
-    } else if (coreEyeBeamState === 'active') {
-      if (shipTop < coreEyeBeamY + CORE_EYEBEAM_THICKNESS / 2 && shipBottom > coreEyeBeamY - CORE_EYEBEAM_THICKNESS / 2) {
-        tryEndGame('coreEyeBeam');
-      }
-      if (frame - coreEyeBeamStateStartFrame >= CORE_EYEBEAM_ACTIVE_DURATION) {
-        coreEyeBeamState = 'cooldown';
-        coreEyeBeamStateStartFrame = frame;
-      }
-    } else if (coreEyeBeamState === 'cooldown') {
-      if (frame - coreEyeBeamStateStartFrame >= CORE_EYEBEAM_COOLDOWN) {
-        coreEyeBeamState = 'track';
-        coreEyeBeamStateStartFrame = frame;
-        sfxCoreEyeBeamTrack();
-      }
-    }
-
-    // tesla discharge burst sub-cycle, running simultaneously with the orbit barrage and eye beam
-    if (coreTeslaState === 'charging') {
-      const teslaElapsed = frame - coreTeslaStateStartFrame;
-      const teslaLockWindow = 20; // final frames before firing -- gap position freezes here for a stable telegraph
-      if (teslaElapsed < CORE_TESLA_CHARGE_DURATION - teslaLockWindow) {
-        coreTeslaEmptySlot = pickCoreTeslaEmptySlot(); // keep tracking the ship's position
-      }
-      if (teslaElapsed >= CORE_TESLA_CHARGE_DURATION) {
-        for (let i = 0; i < CORE_TESLA_SLOT_FRACS.length; i++) {
-          if (i === coreTeslaEmptySlot || i === coreTeslaEmptySlot + 1) continue;
-          const targetY = PLAY_TOP + CORE_TESLA_SLOT_FRACS[i] * (PLAY_BOTTOM - PLAY_TOP);
-          const dx = ship.x - miniBoss.x, dy = targetY - miniBoss.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          coreTeslaProjectiles.push({
-            x: miniBoss.x, y: miniBoss.y,
-            vx: (dx / dist) * CORE_TESLA_PROJECTILE_SPEED,
-            vy: (dy / dist) * CORE_TESLA_PROJECTILE_SPEED
-          });
-        }
-        coreTeslaState = 'cooldown';
-        coreTeslaStateStartFrame = frame;
-        sfxHazardFire('coreTesla');
-      }
-    } else if (coreTeslaState === 'cooldown') {
-      if (frame - coreTeslaStateStartFrame >= CORE_TESLA_COOLDOWN) {
-        coreTeslaState = 'charging';
-        coreTeslaStateStartFrame = frame;
-        coreTeslaEmptySlot = pickCoreTeslaEmptySlot();
-      }
-    }
-    for (let i = coreTeslaProjectiles.length - 1; i >= 0; i--) {
-      const p = coreTeslaProjectiles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      const dx = ship.x - p.x, dy = ship.y - p.y;
-      if (Math.sqrt(dx * dx + dy * dy) < shipR + CORE_TESLA_PROJECTILE_R) {
-        tryEndGame('coreTesla');
-        break;
-      }
-      if (p.x < -50 || p.y < PLAY_TOP - 100 || p.y > PLAY_BOTTOM + 100) {
-        coreTeslaProjectiles.splice(i, 1);
-      }
-    }
-
-    if (stateElapsed >= CORE_ORBIT_BARRAGE_DURATION && coreOrbitSpawned >= CORE_ORBIT_COUNT && coreOrbitProjectiles.length === 0) {
-      miniBossAttackState = 'coreOverloadDying';
-      miniBossAttackStateStartFrame = frame;
-      coreOverloadArcs = [];
-      coreDeathDebris = [];
-      sfxCoreOverload();
-    }
-  } else if (miniBossAttackState === 'coreDying') {
-    const dimEnd = CORE_DEATH_DIM_DURATION;
-    const darkenEnd = dimEnd + CORE_DEATH_DARKEN_DURATION;
-    const collapseEnd = darkenEnd + CORE_DEATH_COLLAPSE_DURATION;
-    const darkenProgress = Math.max(0, Math.min(1, (stateElapsed - dimEnd) / CORE_DEATH_DARKEN_DURATION));
-
-    if (stateElapsed >= dimEnd && stateElapsed < darkenEnd && stateElapsed % 9 === 0) {
-      spawnCoreDeathDebris();
-    } else if (stateElapsed >= darkenEnd && stateElapsed < collapseEnd) {
-      spawnCoreDeathDebris();
-      if (frame % 2 === 0) spawnCoreDeathDebris();
-    }
-    if (stateElapsed === dimEnd) {
-      playElectricCrackles({ count: 8, spacing: 0.018, volume: 0.24 });
-      playSynth({ type: 'square', freq: 2200, freqEnd: 240, duration: 0.08, attack: 0.001, decay: 0.02, sustain: 0.12, release: 0.03, volume: 0.08, filterType: 'highpass', filterFreq: 1000, delaySend: 0.05 });
-    }
-    if (stateElapsed === darkenEnd) sfxCoreDyingCollapse();
-
-    for (let i = coreDeathDebris.length - 1; i >= 0; i--) {
-      const p = coreDeathDebris[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.rotation += p.rotSpeed;
-      p.life++;
-      if (p.life >= p.maxLife) coreDeathDebris.splice(i, 1);
-    }
-
-    if (stateElapsed >= collapseEnd) {
-      coreBossDefeated = true;
-      coreBossDefeatFrame = frame;
-    }
-  } else if (miniBossAttackState === 'coreOverloadDying') {
-    const buildupEnd = CORE_OVERLOAD_BUILDUP_DURATION;
-    const flashEnd = buildupEnd + CORE_OVERLOAD_FLASH_DURATION;
-    const breakdownEnd = flashEnd + CORE_OVERLOAD_BREAKDOWN_DURATION;
-
-    if (stateElapsed < buildupEnd) {
-      // increasing frequency of electrical arcs across the surface as the overload builds
-      const buildupProgress = stateElapsed / buildupEnd;
-      const arcChance = 0.1 + buildupProgress * 0.5;
-      if (Math.random() < arcChance) {
-        coreOverloadArcs.push({
-          angle1: Math.random() * Math.PI * 2,
-          angle2: Math.random() * Math.PI * 2,
-          life: 0,
-          maxLife: 8 + Math.random() * 8
-        });
-      }
-    } else if (stateElapsed === buildupEnd) {
-      sfxCoreOverloadFlash();
-    } else if (stateElapsed === flashEnd) {
-      sfxCoreOverloadBreakdown();
-    } else if (stateElapsed >= flashEnd && stateElapsed < breakdownEnd) {
-      spawnCoreDeathDebris();
-      if (frame % 2 === 0) spawnCoreDeathDebris();
-    }
-
-    for (let i = coreOverloadArcs.length - 1; i >= 0; i--) {
-      const a = coreOverloadArcs[i];
-      a.life++;
-      if (a.life >= a.maxLife) coreOverloadArcs.splice(i, 1);
-    }
-
-    for (let i = coreDeathDebris.length - 1; i >= 0; i--) {
-      const p = coreDeathDebris[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.rotation += p.rotSpeed;
-      p.life++;
-      if (p.life >= p.maxLife) coreDeathDebris.splice(i, 1);
-    }
-
-    if (stateElapsed >= breakdownEnd) {
-      coreBossDefeated = true;
-      coreBossDefeatFrame = frame;
-      coreDeathDebris = [];
-      coreOverloadArcs = [];
-    }
   }
 }
 

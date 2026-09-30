@@ -35,6 +35,12 @@ const DEV_TOOLS_ENABLED = (() => {
   } catch (e) { /* ignore */ }
   return !window.SYNTH_FLIGHT_PLAYER_BUILD;
 })();
+const FORK_GALLERY_ACTIVE = (() => {
+  try { return new URLSearchParams(location.search).get('forkGallery') === '1'; } catch (e) { return false; }
+})();
+const INFERNO_PLAYTEST = (() => {
+  try { return new URLSearchParams(location.search).get('inferno') === '1'; } catch (e) { return false; }
+})();
 if (!DEV_TOOLS_ENABLED) {
   document.documentElement.classList.add('player-build');
   if (document.body) document.body.classList.add('player-build');
@@ -230,6 +236,29 @@ const SHIP_SKINS = [
   { id: 'srank', name: 'S RANK', hint: 'Earn S Rank', unlocked: () => achievedRanks.has('S') }
 ];
 
+function diamondForkWaypoints(pad, gap, forkExtra, wpExtra) {
+  const mk = (centerFrac, islandFrac, more) => ({
+    centerFrac,
+    gapMult: gap,
+    fork: Object.assign({ islandFrac, outerPadPx: pad, shape: 'diamond' }, forkExtra || {}, more || {})
+  });
+  const kind = (wpExtra && wpExtra.kind) || 'a';
+  const wps = kind === 'b' ? [
+    mk(0.42, 0.26, { noseTaper: 1, noseTaperSegs: 48, islandBias: -0.06 }),
+    mk(0.58, 0.23, { islandBias: 0.06 }),
+    mk(0.62, 0.22, { islandBias: 0.08 }),
+    mk(0.36, 0.24, { islandBias: -0.08 }),
+    mk(0.50, 0, { noseTaper: 1, noseTaperSegs: 48, islandBias: 0 })
+  ] : [
+    mk(0.54, 0.26, { noseTaper: 1, noseTaperSegs: 48, islandBias: 0.12 }),
+    mk(0.45, 0.22, { islandBias: -0.14 }),
+    mk(0.53, 0.25, { islandBias: 0.10 }),
+    mk(0.50, 0, { noseTaper: 1, noseTaperSegs: 48, islandBias: 0 })
+  ];
+  if (wpExtra && wpExtra.startDistance != null) wps[0].startDistance = wpExtra.startDistance;
+  return wps;
+}
+
 // ---- Themes ----
 const THEMES = [
   {
@@ -368,15 +397,17 @@ const THEMES = [
     pattern: [
       { centerFrac: 0.56 }, { centerFrac: 0.24 }, { centerFrac: 0.4 },
       { centerFrac: 0.46 }, { centerFrac: 0.59 }, { centerFrac: 0.74 },
-      { centerFrac: 0.74 }, { centerFrac: 0.64 }, { centerFrac: 0.75, gapMult: 0.55 },
-      { centerFrac: 0.61 },
-      // first fork -- extra ceiling/floor room; island size unchanged
-      { centerFrac: 0.5, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.65, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.55, gapMult: 1.15, fork: { islandFrac: 0.26, outerPadPx: 30 } },
+      { centerFrac: 0.74 }, { centerFrac: 0.64 },
+      { centerFrac: 0.62, gapMult: 1.35 },
+      { centerFrac: 0.55, gapMult: 1.4 },
+      // first fork -- diamond tips, faceted body, lanes that kink
+      ...diamondForkWaypoints(96, 1.32),
+      { centerFrac: 0.68, gapMult: 1.32 },
       { centerFrac: 0.82 }, { centerFrac: 0.73 },
       { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 },
       { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 },
-      { centerFrac: 0.63 }, { centerFrac: 0.46, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 }, startDistance: 550 }, { centerFrac: 0.59, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 } },
-      { centerFrac: 0.73, gapMult: 1.45, fork: { islandFrac: 0.26, outerPadPx: 50 } },
+      { centerFrac: 0.63 }, ...diamondForkWaypoints(78, 1.22, null, { startDistance: 550, kind: 'b' }),
+      { centerFrac: 0.58, gapMult: 1.35 },
       // tight slalom right after the fork -- quick alternating swings instead of the
       // gentle wave that was here before
       { centerFrac: 0.28 }, { centerFrac: 0.68 }, { centerFrac: 0.26 }, { centerFrac: 0.7 },
@@ -886,6 +917,43 @@ const THEMES = [
     pattern: [{ spacing: 100000 }]
   }
 ];
+
+function galleryFork(letter, name, shape, extra) {
+  const pad = 82;
+  const gap = 1.38;
+  const island = 0.28;
+  const fork = Object.assign({ islandFrac: island, outerPadPx: pad, shape, label: letter + '  ' + name }, extra || {});
+  const open = { centerFrac: 0.5, gapMult: 1.52 };
+  if (shape === 'diamond') {
+    return [open, { centerFrac: 0.5, gapMult: 1.42 }].concat(
+      diamondForkWaypoints(pad, gap, { label: letter + '  ' + name }),
+      [open]
+    );
+  }
+  return [
+    open, { centerFrac: 0.5, gapMult: 1.42 },
+    { centerFrac: 0.5, gapMult: gap, fork },
+    { centerFrac: 0.52, gapMult: gap, fork: Object.assign({}, fork, { islandFrac: island }) },
+    { centerFrac: 0.47, gapMult: gap, fork: Object.assign({}, fork, { islandFrac: 0.26 }) },
+    open
+  ];
+}
+
+const FORK_GALLERY_PATTERN = [].concat(
+  [{ centerFrac: 0.5, gapMult: 1.6 }, { centerFrac: 0.5, gapMult: 1.55 }, { centerFrac: 0.5, gapMult: 1.5 }],
+  galleryFork('A', 'BLOCK FORT', 'block', { noseTaper: 0.12, noseTaperSegs: 3, nosePower: 1 }),
+  galleryFork('B', 'ARROWHEAD', 'arrow', {}),
+  galleryFork('C', 'DIAMOND', 'diamond', {}),
+  galleryFork('D', 'TEARDROP', 'teardrop', { nosePower: 2.2, noseTaper: 0.48, noseTaperSegs: 12 }),
+  galleryFork('E', 'SHIP HULL', 'hull', { noseTaper: 0.36, noseTaperSegs: 7, nosePower: 1.35 }),
+  galleryFork('F', 'HEX SLAB', 'hex', { noseTaper: 0.22, noseTaperSegs: 4, nosePower: 1 }),
+  [{ centerFrac: 0.5, gapMult: 1.6 }, { centerFrac: 0.5, gapMult: 1.6 }]
+);
+
+function terrainPattern(th) {
+  if (FORK_GALLERY_ACTIVE && th && th.name === 'INFERNO') return FORK_GALLERY_PATTERN;
+  return th.pattern;
+}
 
 // ---- Game state ----
 let state = 'ready'; // home, options, settings, achievements, ready, playing, paused, respawn, gameover, victory
@@ -2023,8 +2091,16 @@ let terrainSegmentsSinceEntry = 0;
 let patternIndex = 0;
 let terrainWaypointTarget = null;
 let terrainWaypointSegLeft = 0;
+let terrainWaypointSegTotal = 1;
 let terrainWaypointGapTarget = null;
 let terrainWaypointIslandTarget = 0;
+let terrainWaypointIslandFrom = 0;
+let terrainWaypointNosePower = 1;
+let terrainWaypointTaperShare = 0.32;
+let terrainWaypointTaperCap = 5;
+let terrainWaypointIslandShape = '';
+let terrainWaypointIslandLabel = '';
+let terrainWaypointIslandBias = 0;
 let terrainMeanderIndex = 0;
 
 let themeIndex = 0;
@@ -2039,115 +2115,4 @@ let devGracePeriodEndFrame = -1; // freezes ship physics (no gravity/lift) after
 const DEV_GRACE_PERIOD_DURATION = 600; // 10s at 60fps -- generous time to navigate the dev panel
 const WARP_LANDING_GRACE_PERIOD = 60; // 1s -- brief safety window right as a new zone begins. Gravity/lift physics run continuously during the warp tunnel itself (a purely visual effect a player isn't expected to actively fly through), which can leave the ship sitting close to the boundary by the time the new zone is actually visible; this gives a beat to see and react rather than dying before the player's first real frame in the zone
 let fireballSpeedMult = 1.6; // lowered from the initial 2.4 per feedback -- live-tunable via dev panel
-
-function clampGhostShipToPlayfield() {
-  const minY = PLAY_TOP + SHIP_H / 2 + 0.5;
-  const maxY = PLAY_BOTTOM - SHIP_H / 2 - 0.5;
-  if (ship.y < minY) { ship.y = minY; if (ship.vy < 0) ship.vy = 0; }
-  if (ship.y > maxY) { ship.y = maxY; if (ship.vy > 0) ship.vy = 0; }
-}
-
-function tryEndGame(hazardType) {
-  if (ghostMode) return;
-  if (bossFinalChargeActive || bossExplosionActive || bossFullyDefeated) return; // victory is already secured -- nothing can kill the player during the boss's death sequence or the fly-off that follows
-  const t = gameNowMs();
-  if (t < invincibilityEndTime) return; // currently within an active protection window -- ignore this collision entirely
-  sfxHazardImpact(hazardType);
-  const maxFreeHits = DIFFICULTY_CONFIG[selectedDifficulty]?.freeHitsPerLife || 0;
-  if (maxFreeHits > 0 && freeHitsUsedThisLife < maxFreeHits && t >= freeHitCooldownEndTime) {
-    // forgiven hit grants a fresh protection window, then the free-pass
-    // cooldown so it cannot be chained indefinitely. Normal only gets this
-    // once per life; Easy / Overdrive can repeat after the cooldown.
-    freeHitsUsedThisLife += 1;
-    invincibilityEndTime = t + INVINCIBILITY_DURATION_MS;
-    freeHitCooldownEndTime = t + FREE_HIT_COOLDOWN_MS;
-    return;
-  }
-  const moltenSpecialHit = hazardType === 'charging' || hazardType === 'chargingClose'
-    || hazardType === 'coreFlame' || hazardType === 'barrageActive';
-  endGame(true, moltenSpecialHit ? { playCollision: false } : undefined);
-}
-let nextThemeIndex = 0;
-let bgParticles = [];
-
-function currentTheme() {
-  return THEMES[themeIndex];
-}
-
-function currentGapSize() {
-  const playHeight = PLAY_BOTTOM - PLAY_TOP;
-  const th = currentTheme();
-  const startFrac = (th.gapFractionStart !== undefined) ? th.gapFractionStart : GAP_FRACTION_START;
-  if (th.gapConstant) {
-    return playHeight * startFrac;
-  }
-  const minFrac = (th.gapFractionMin !== undefined) ? th.gapFractionMin : GAP_FRACTION_MIN;
-  const fraction = Math.max(minFrac, startFrac - distance * 0.0006);
-  return playHeight * fraction;
-}
-
-function currentGateSpacing() {
-  const th = currentTheme();
-  if (th.obstacleShape === 'diamond') {
-    const playHeight = PLAY_BOTTOM - PLAY_TOP;
-    const startFrac = (th.gapFractionStart !== undefined) ? th.gapFractionStart : GAP_FRACTION_START;
-    const maxDiameter = playHeight * startFrac * (1 + (th.pulseAmpFrac || 0));
-    return Math.max(GATE_SPACING, maxDiameter * 1.4);
-  }
-  return th.gateSpacing || GATE_SPACING;
-}
-
-function spawnGate(x) {
-  const th = currentTheme();
-  if (th.obstacleShape === 'asteroid') {
-    return spawnAsteroidCluster(x);
-  }
-  if (th.obstacleShape === 'hbar') {
-    return spawnHBarCluster(x);
-  }
-  if (th.obstacleShape === 'barrier') {
-    return spawnBarrier(x);
-  }
-  if (th.obstacleShape === 'lbolt') {
-    return spawnFloatingBoltCluster(x);
-  }
-  if (th.obstacleShape === 'pendulum') {
-    return spawnPendulumCluster(x);
-  }
-  if (th.obstacleShape === 'aciddrip') {
-    return spawnAcidDrip(x);
-  }
-  if (th.obstacleShape === 'wreckage') {
-    return spawnWreckageCluster(x);
-  }
-  if (th.obstacleShape === 'lightning') {
-    return spawnLightningBolt(x);
-  }
-  if (th.obstacleShape === 'fireball') {
-    return 0; // fireballs spawn on their own timer, not by x-position
-  }
-  const gap = currentGapSize();
-  const margin = 20;
-  const minCenter = PLAY_TOP + gap / 2 + margin;
-  const maxCenter = PLAY_BOTTOM - gap / 2 - margin;
-
-  const entry = th.pattern[patternIndex % th.pattern.length];
-  patternIndex++;
-
-  const playHeight = PLAY_BOTTOM - PLAY_TOP;
-  const baseCenter = Math.max(minCenter, Math.min(maxCenter, PLAY_TOP + entry.centerFrac * playHeight));
-  const maxAmp = Math.max(0, Math.min(baseCenter - minCenter, maxCenter - baseCenter));
-  gates.push({
-    type: 'gate',
-    x: x,
-    baseCenter: baseCenter,
-    amplitude: entry.ampFrac * maxAmp,
-    freq: entry.freq,
-    phase: entry.phase,
-    pulsePhase: entry.pulsePhase || 0,
-    pulseFreq: entry.pulseFreq || 0,
-    passed: false
-  });
-  return entry.spacing;
-}
 

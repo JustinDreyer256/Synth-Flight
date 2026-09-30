@@ -35,6 +35,12 @@ const DEV_TOOLS_ENABLED = (() => {
   } catch (e) { /* ignore */ }
   return !window.SYNTH_FLIGHT_PLAYER_BUILD;
 })();
+const FORK_GALLERY_ACTIVE = (() => {
+  try { return new URLSearchParams(location.search).get('forkGallery') === '1'; } catch (e) { return false; }
+})();
+const INFERNO_PLAYTEST = (() => {
+  try { return new URLSearchParams(location.search).get('inferno') === '1'; } catch (e) { return false; }
+})();
 if (!DEV_TOOLS_ENABLED) {
   document.documentElement.classList.add('player-build');
   if (document.body) document.body.classList.add('player-build');
@@ -230,6 +236,29 @@ const SHIP_SKINS = [
   { id: 'srank', name: 'S RANK', hint: 'Earn S Rank', unlocked: () => achievedRanks.has('S') }
 ];
 
+function diamondForkWaypoints(pad, gap, forkExtra, wpExtra) {
+  const mk = (centerFrac, islandFrac, more) => ({
+    centerFrac,
+    gapMult: gap,
+    fork: Object.assign({ islandFrac, outerPadPx: pad, shape: 'diamond' }, forkExtra || {}, more || {})
+  });
+  const kind = (wpExtra && wpExtra.kind) || 'a';
+  const wps = kind === 'b' ? [
+    mk(0.42, 0.26, { noseTaper: 1, noseTaperSegs: 48, islandBias: -0.06 }),
+    mk(0.58, 0.23, { islandBias: 0.06 }),
+    mk(0.62, 0.22, { islandBias: 0.08 }),
+    mk(0.36, 0.24, { islandBias: -0.08 }),
+    mk(0.50, 0, { noseTaper: 1, noseTaperSegs: 48, islandBias: 0 })
+  ] : [
+    mk(0.54, 0.26, { noseTaper: 1, noseTaperSegs: 48, islandBias: 0.12 }),
+    mk(0.45, 0.22, { islandBias: -0.14 }),
+    mk(0.53, 0.25, { islandBias: 0.10 }),
+    mk(0.50, 0, { noseTaper: 1, noseTaperSegs: 48, islandBias: 0 })
+  ];
+  if (wpExtra && wpExtra.startDistance != null) wps[0].startDistance = wpExtra.startDistance;
+  return wps;
+}
+
 // ---- Themes ----
 const THEMES = [
   {
@@ -368,15 +397,17 @@ const THEMES = [
     pattern: [
       { centerFrac: 0.56 }, { centerFrac: 0.24 }, { centerFrac: 0.4 },
       { centerFrac: 0.46 }, { centerFrac: 0.59 }, { centerFrac: 0.74 },
-      { centerFrac: 0.74 }, { centerFrac: 0.64 }, { centerFrac: 0.75, gapMult: 0.55 },
-      { centerFrac: 0.61 },
-      // first fork -- extra ceiling/floor room; island size unchanged
-      { centerFrac: 0.5, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.65, gapMult: 1.15, fork: { islandFrac: 0.28, outerPadPx: 30 } }, { centerFrac: 0.55, gapMult: 1.15, fork: { islandFrac: 0.26, outerPadPx: 30 } },
+      { centerFrac: 0.74 }, { centerFrac: 0.64 },
+      { centerFrac: 0.62, gapMult: 1.35 },
+      { centerFrac: 0.55, gapMult: 1.4 },
+      // first fork -- diamond tips, faceted body, lanes that kink
+      ...diamondForkWaypoints(96, 1.32),
+      { centerFrac: 0.68, gapMult: 1.32 },
       { centerFrac: 0.82 }, { centerFrac: 0.73 },
       { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 },
       { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 },
-      { centerFrac: 0.63 }, { centerFrac: 0.46, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 }, startDistance: 550 }, { centerFrac: 0.59, gapMult: 1.45, fork: { islandFrac: 0.28, outerPadPx: 50 } },
-      { centerFrac: 0.73, gapMult: 1.45, fork: { islandFrac: 0.26, outerPadPx: 50 } },
+      { centerFrac: 0.63 }, ...diamondForkWaypoints(78, 1.22, null, { startDistance: 550, kind: 'b' }),
+      { centerFrac: 0.58, gapMult: 1.35 },
       // tight slalom right after the fork -- quick alternating swings instead of the
       // gentle wave that was here before
       { centerFrac: 0.28 }, { centerFrac: 0.68 }, { centerFrac: 0.26 }, { centerFrac: 0.7 },
@@ -886,6 +917,43 @@ const THEMES = [
     pattern: [{ spacing: 100000 }]
   }
 ];
+
+function galleryFork(letter, name, shape, extra) {
+  const pad = 82;
+  const gap = 1.38;
+  const island = 0.28;
+  const fork = Object.assign({ islandFrac: island, outerPadPx: pad, shape, label: letter + '  ' + name }, extra || {});
+  const open = { centerFrac: 0.5, gapMult: 1.52 };
+  if (shape === 'diamond') {
+    return [open, { centerFrac: 0.5, gapMult: 1.42 }].concat(
+      diamondForkWaypoints(pad, gap, { label: letter + '  ' + name }),
+      [open]
+    );
+  }
+  return [
+    open, { centerFrac: 0.5, gapMult: 1.42 },
+    { centerFrac: 0.5, gapMult: gap, fork },
+    { centerFrac: 0.52, gapMult: gap, fork: Object.assign({}, fork, { islandFrac: island }) },
+    { centerFrac: 0.47, gapMult: gap, fork: Object.assign({}, fork, { islandFrac: 0.26 }) },
+    open
+  ];
+}
+
+const FORK_GALLERY_PATTERN = [].concat(
+  [{ centerFrac: 0.5, gapMult: 1.6 }, { centerFrac: 0.5, gapMult: 1.55 }, { centerFrac: 0.5, gapMult: 1.5 }],
+  galleryFork('A', 'BLOCK FORT', 'block', { noseTaper: 0.12, noseTaperSegs: 3, nosePower: 1 }),
+  galleryFork('B', 'ARROWHEAD', 'arrow', {}),
+  galleryFork('C', 'DIAMOND', 'diamond', {}),
+  galleryFork('D', 'TEARDROP', 'teardrop', { nosePower: 2.2, noseTaper: 0.48, noseTaperSegs: 12 }),
+  galleryFork('E', 'SHIP HULL', 'hull', { noseTaper: 0.36, noseTaperSegs: 7, nosePower: 1.35 }),
+  galleryFork('F', 'HEX SLAB', 'hex', { noseTaper: 0.22, noseTaperSegs: 4, nosePower: 1 }),
+  [{ centerFrac: 0.5, gapMult: 1.6 }, { centerFrac: 0.5, gapMult: 1.6 }]
+);
+
+function terrainPattern(th) {
+  if (FORK_GALLERY_ACTIVE && th && th.name === 'INFERNO') return FORK_GALLERY_PATTERN;
+  return th.pattern;
+}
 
 // ---- Game state ----
 let state = 'ready'; // home, options, settings, achievements, ready, playing, paused, respawn, gameover, victory
@@ -2023,8 +2091,16 @@ let terrainSegmentsSinceEntry = 0;
 let patternIndex = 0;
 let terrainWaypointTarget = null;
 let terrainWaypointSegLeft = 0;
+let terrainWaypointSegTotal = 1;
 let terrainWaypointGapTarget = null;
 let terrainWaypointIslandTarget = 0;
+let terrainWaypointIslandFrom = 0;
+let terrainWaypointNosePower = 1;
+let terrainWaypointTaperShare = 0.32;
+let terrainWaypointTaperCap = 5;
+let terrainWaypointIslandShape = '';
+let terrainWaypointIslandLabel = '';
+let terrainWaypointIslandBias = 0;
 let terrainMeanderIndex = 0;
 
 let themeIndex = 0;
@@ -2048,6 +2124,7 @@ function clampGhostShipToPlayfield() {
 }
 
 function tryEndGame(hazardType) {
+  if (state !== 'playing') return;
   if (ghostMode) return;
   if (bossFinalChargeActive || bossExplosionActive || bossFullyDefeated) return; // victory is already secured -- nothing can kill the player during the boss's death sequence or the fly-off that follows
   const t = gameNowMs();
@@ -2065,7 +2142,10 @@ function tryEndGame(hazardType) {
   }
   const moltenSpecialHit = hazardType === 'charging' || hazardType === 'chargingClose'
     || hazardType === 'coreFlame' || hazardType === 'barrageActive';
-  endGame(true, moltenSpecialHit ? { playCollision: false } : undefined);
+  // cave / island contact is an out-of-bounds wall, not a hazard: losing
+  // a life here must not carry the hit-cycle mercy window into the next life
+  const wallLike = hazardType === 'terrain';
+  endGame(!wallLike, moltenSpecialHit ? { playCollision: false } : undefined);
 }
 let nextThemeIndex = 0;
 let bgParticles = [];
@@ -4354,8 +4434,16 @@ function initTerrain() {
   terrainLevelX = 0;
   terrainWaypointTarget = null;
   terrainWaypointSegLeft = 0;
+  terrainWaypointSegTotal = 1;
   terrainWaypointGapTarget = null;
   terrainWaypointIslandTarget = 0;
+  terrainWaypointIslandFrom = 0;
+  terrainWaypointNosePower = 1;
+  terrainWaypointTaperShare = 0.32;
+  terrainWaypointTaperCap = 5;
+  terrainWaypointIslandShape = '';
+  terrainWaypointIslandLabel = '';
+  terrainWaypointIslandBias = 0;
   terrainMeanderIndex = 0;
   for (let x = -spacing; x <= W + spacing; x += spacing) {
     terrainSegments.push({ x, topY: startTop, bottomY: startBottom, islandTop: startCenter, islandBottom: startCenter });
@@ -4413,7 +4501,8 @@ function addTerrainSegment() {
     const maxDeltaPerSegment = Math.min(maxClimbSpeed, maxDiveSpeed) * framesPerSegment * safetyFactor;
 
     if (terrainWaypointSegLeft <= 0) {
-      const upcoming = th.pattern[patternIndex % th.pattern.length];
+      const pattern = terrainPattern(th);
+      const upcoming = pattern[patternIndex % pattern.length];
       const genDistance = (terrainLevelX + W) / 10;
       let entry = upcoming;
       let consumePattern = true;
@@ -4443,8 +4532,9 @@ function addTerrainSegment() {
       terrainWaypointGapTarget = entryGap + outerPadPx * 2;
 
       if (entry.fork) {
-        const islandFrac = Math.min(0.45, entry.fork.islandFrac || 0.3);
-        terrainWaypointIslandTarget = Math.max(0, entryGap * islandFrac - SHIP_H * 2);
+        const islandFracRaw = entry.fork.islandFrac;
+        const islandFrac = Math.min(0.45, islandFracRaw == null ? 0.3 : islandFracRaw);
+        terrainWaypointIslandTarget = islandFrac > 0 ? Math.max(0, entryGap * islandFrac - SHIP_H * 2) : 0;
       } else {
         terrainWaypointIslandTarget = 0;
       }
@@ -4452,25 +4542,68 @@ function addTerrainSegment() {
       const holdLastCenter = (last.topY + last.bottomY) / 2;
       const fullDelta = Math.abs(terrainWaypointTarget - holdLastCenter);
       terrainWaypointSegLeft = Math.max(1, Math.ceil(fullDelta / Math.max(1, maxDeltaPerSegment)));
+      if (entry.fork) terrainWaypointSegLeft = Math.max(terrainWaypointSegLeft, 10);
+      terrainWaypointSegTotal = terrainWaypointSegLeft;
+      terrainWaypointIslandFrom = Math.max(0, last.islandBottom - last.islandTop);
+      terrainWaypointNosePower = (entry.fork && entry.fork.nosePower) ? entry.fork.nosePower : 1;
+      terrainWaypointTaperShare = (entry.fork && entry.fork.noseTaper) ? entry.fork.noseTaper : 0.32;
+      terrainWaypointTaperCap = (entry.fork && entry.fork.noseTaperSegs) ? entry.fork.noseTaperSegs : 5;
+      terrainWaypointIslandShape = (entry.fork && entry.fork.shape) ? entry.fork.shape : '';
+      terrainWaypointIslandLabel = (entry.fork && entry.fork.label) ? entry.fork.label : '';
+      terrainWaypointIslandBias = (entry.fork && entry.fork.islandBias) ? entry.fork.islandBias : 0;
     }
 
     const lastCenter = (last.topY + last.bottomY) / 2;
     const lastGap = last.bottomY - last.topY;
-    const lastIsland = last.islandBottom - last.islandTop;
 
     const centerStep = (terrainWaypointTarget - lastCenter) / terrainWaypointSegLeft;
     const gapStep = (terrainWaypointGapTarget - lastGap) / terrainWaypointSegLeft;
-    const islandStep = (terrainWaypointIslandTarget - lastIsland) / terrainWaypointSegLeft;
-
+    const islandT = 1 - (terrainWaypointSegLeft - 1) / Math.max(1, terrainWaypointSegTotal);
+    const islandFrom = terrainWaypointIslandFrom;
+    const islandTo = terrainWaypointIslandTarget;
+    const clampedT = Math.max(0, Math.min(1, islandT));
+    const taperSegs = Math.min(terrainWaypointTaperCap, terrainWaypointSegTotal, Math.max(3, Math.ceil(terrainWaypointSegTotal * terrainWaypointTaperShare)));
+    const taperFrac = taperSegs / Math.max(1, terrainWaypointSegTotal);
+    let islandU;
+    if (islandTo > islandFrom + 0.5) {
+      const u = clampedT >= taperFrac ? 1 : clampedT / taperFrac;
+      islandU = Math.pow(u, terrainWaypointNosePower);
+    } else if (islandTo < islandFrom - 0.5) {
+      const tailStart = 1 - taperFrac;
+      islandU = clampedT <= tailStart ? 0 : (clampedT - tailStart) / taperFrac;
+    } else {
+      islandU = clampedT;
+    }
     const nextCenter = lastCenter + centerStep;
     const nextGap = lastGap + gapStep;
-    const nextIsland = Math.max(0, lastIsland + islandStep);
+    const nextIsland = Math.min(
+      Math.max(0, nextGap * 0.30),
+      Math.max(0, islandFrom + (islandTo - islandFrom) * islandU)
+    );
     terrainWaypointSegLeft--;
 
     targetTop = nextCenter - nextGap / 2;
     targetBottom = nextCenter + nextGap / 2;
-    targetIslandTop = nextCenter - nextIsland / 2;
-    targetIslandBottom = nextCenter + nextIsland / 2;
+    let islandTop = nextCenter - nextIsland / 2;
+    let islandBottom = nextCenter + nextIsland / 2;
+    const shape = terrainWaypointIslandShape;
+    if (shape === 'hull' && islandTo > islandFrom + 0.5 && nextIsland > 1) {
+      const cut = (1 - islandU) * nextIsland * 0.42;
+      islandTop += cut;
+    } else if (shape === 'hex' && islandTo > islandFrom + 0.5 && nextIsland > 1) {
+      const u = Math.min(1, clampedT / Math.max(0.001, taperFrac));
+      const cut = (1 - u) * nextIsland * 0.18;
+      islandTop += cut;
+      islandBottom -= cut;
+    }
+    if (terrainWaypointIslandBias && nextIsland > 1) {
+      const room = Math.max(0, nextGap - nextIsland);
+      const shift = terrainWaypointIslandBias * room * 0.45;
+      islandTop += shift;
+      islandBottom += shift;
+    }
+    targetIslandTop = islandTop;
+    targetIslandBottom = islandBottom;
     }
   }
 
@@ -4508,7 +4641,9 @@ function addTerrainSegment() {
     topY: nextTop,
     bottomY: nextBottom,
     islandTop: nextIslandTop,
-    islandBottom: nextIslandBottom
+    islandBottom: nextIslandBottom,
+    islandShape: terrainWaypointIslandShape,
+    islandLabel: terrainWaypointIslandLabel
   });
 }
 
@@ -5030,6 +5165,8 @@ function respawnInZone(opts) {
   invincibilityEndTime = -1;
   freeHitCooldownEndTime = -1;
   freeHitsUsedThisLife = 0;
+  pendingRespawnMercyEligible = false;
+  resetHitCyclePauseClock();
   initBackgroundParticles(currentTheme());
   reseedZoneObstacles(ship.x + 420);
 }
@@ -5134,6 +5271,23 @@ function startPracticeZone(zoneIndex) {
   prefetchThemeBgm(zoneIndex);
   beginWarp(zoneIndex);
   state = 'playing';
+}
+
+function startInfernoPlaytest() {
+  const zoneIndex = THEMES.findIndex((t) => t.name === 'INFERNO');
+  if (zoneIndex < 0) return;
+  resetGame();
+  isPracticeRun = true;
+  practiceZoneIndex = zoneIndex;
+  distance = 0;
+  themeLevelReached = 0;
+  state = 'playing';
+  beginWarp(zoneIndex);
+  while (warpActive) finishWarp();
+}
+
+function startForkGallery() {
+  startInfernoPlaytest();
 }
 
 // continue-prompt: consumes a continue, resets lives, and respawns in
@@ -6838,6 +6992,7 @@ function update() {
         else endGame();
       }
 
+      if (state === 'playing') {
       const bounds = terrainBoundsAt(ship.x);
       if (bounds) {
         if (shipTop <= bounds.top || shipBottom >= bounds.bottom) {
@@ -6849,6 +7004,7 @@ function update() {
             tryEndGame('terrain');
           }
         }
+      }
       }
     } else {
       for (let g of gates) {
@@ -21164,7 +21320,7 @@ function drawBars(theme) {
   ctx.textAlign = 'right';
   ctx.font = 'bold 13px Courier New';
   ctx.fillStyle = theme.accentA;
-  ctx.fillText(theme.name, W - 14, BAR_HEIGHT / 2 + 2);
+  ctx.fillText(FORK_GALLERY_ACTIVE && theme.name === 'INFERNO' ? 'INFERNO  STYLE GALLERY' : theme.name, W - 14, BAR_HEIGHT / 2 + 2);
 
   // lives indicator -- small triangles left of the theme name
   const liveSize = 7;
@@ -21303,17 +21459,57 @@ function drawTerrain(theme) {
     islGrad.addColorStop(1, theme.accentB);
     ctx.fillStyle = islGrad;
     ctx.beginPath();
-    run.forEach((s, i) => {
-      if (i === 0) ctx.moveTo(s.x, s.islandTop); else ctx.lineTo(s.x, s.islandTop);
-    });
-    for (let i = run.length - 1; i >= 0; i--) {
-      ctx.lineTo(run[i].x, run[i].islandBottom);
+    const leftH = run[0].islandBottom - run[0].islandTop;
+    let bodyH = 0;
+    for (let i = 0; i < run.length; i++) {
+      const h = run[i].islandBottom - run[i].islandTop;
+      if (h > bodyH) bodyH = h;
     }
+    const shape = run[0].islandShape || '';
+    const allowTip = !shape || shape === 'arrow' || shape === 'teardrop' || shape === 'hull';
+    const tapered = allowTip && leftH < bodyH * 0.5 && run.length > 1;
+    if (tapered) {
+      const a = run[0];
+      const b = run[1];
+      const cy0 = (a.islandTop + a.islandBottom) / 2;
+      const cy1 = (b.islandTop + b.islandBottom) / 2;
+      const vx = a.x - b.x;
+      const vy = cy0 - cy1;
+      const inv = 1 / (Math.hypot(vx, vy) || 1);
+      const tipLen = Math.max(16, leftH * 1.1);
+      ctx.moveTo(a.x + vx * inv * tipLen, cy0 + vy * inv * tipLen);
+    } else {
+      ctx.moveTo(run[0].x, run[0].islandTop);
+    }
+    for (let i = tapered ? 0 : 1; i < run.length; i++) {
+      ctx.lineTo(run[i].x, run[i].islandTop);
+    }
+    for (let i = run.length - 1; i >= 0; i--) ctx.lineTo(run[i].x, run[i].islandBottom);
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = theme.accentA;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
     ctx.stroke();
+    const label = run[0].islandLabel;
+    if (label) {
+      let minTop = run[0].islandTop;
+      let midX = 0;
+      for (let i = 0; i < run.length; i++) {
+        if (run[i].islandTop < minTop) minTop = run[i].islandTop;
+        midX += run[i].x;
+      }
+      midX /= run.length;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.font = 'bold 16px Courier New';
+      ctx.fillStyle = '#fff8e8';
+      ctx.strokeStyle = '#1a0000';
+      ctx.lineWidth = 4;
+      ctx.strokeText(label, midX, minTop - 10);
+      ctx.fillText(label, midX, minTop - 10);
+      ctx.restore();
+    }
     run = [];
   };
   for (const s of terrainSegments) {
@@ -22695,7 +22891,9 @@ function captureSimState() {
   return {
     gates, patternIndex, lastSpawnX, fireballSpawnCounter,
     terrainSegments, terrainSegmentsSinceEntry, terrainLevelX,
-    terrainWaypointTarget, terrainWaypointSegLeft, terrainWaypointGapTarget, terrainWaypointIslandTarget,
+    terrainWaypointTarget, terrainWaypointSegLeft, terrainWaypointSegTotal, terrainWaypointGapTarget, terrainWaypointIslandTarget, terrainWaypointIslandFrom,
+    terrainWaypointNosePower, terrainWaypointTaperShare, terrainWaypointTaperCap,
+    terrainWaypointIslandShape, terrainWaypointIslandLabel, terrainWaypointIslandBias,
     themeIndex, distance, frame, ship: { x: ship.x, y: ship.y, vy: ship.vy, rotation: ship.rotation }
   };
 }
@@ -22706,7 +22904,15 @@ function restoreSimState(s) {
   terrainSegments = s.terrainSegments; terrainSegmentsSinceEntry = s.terrainSegmentsSinceEntry;
   terrainLevelX = s.terrainLevelX;
   terrainWaypointTarget = s.terrainWaypointTarget; terrainWaypointSegLeft = s.terrainWaypointSegLeft;
+  terrainWaypointSegTotal = s.terrainWaypointSegTotal || 1;
   terrainWaypointGapTarget = s.terrainWaypointGapTarget; terrainWaypointIslandTarget = s.terrainWaypointIslandTarget;
+  terrainWaypointIslandFrom = s.terrainWaypointIslandFrom || 0;
+  terrainWaypointNosePower = s.terrainWaypointNosePower || 1;
+  terrainWaypointTaperShare = s.terrainWaypointTaperShare || 0.32;
+  terrainWaypointTaperCap = s.terrainWaypointTaperCap || 5;
+  terrainWaypointIslandShape = s.terrainWaypointIslandShape || '';
+  terrainWaypointIslandLabel = s.terrainWaypointIslandLabel || '';
+  terrainWaypointIslandBias = s.terrainWaypointIslandBias || 0;
   themeIndex = s.themeIndex; distance = s.distance; frame = s.frame;
   ship.x = s.ship.x; ship.y = s.ship.y; ship.vy = s.ship.vy; ship.rotation = s.ship.rotation;
 }
@@ -22725,6 +22931,14 @@ function simulateZonePreview(themeIdx, targetDistance) {
   terrainLevelX = 0;
   terrainWaypointTarget = null;
   terrainWaypointSegLeft = 0;
+  terrainWaypointSegTotal = 1;
+  terrainWaypointIslandFrom = 0;
+  terrainWaypointNosePower = 1;
+  terrainWaypointTaperShare = 0.32;
+  terrainWaypointTaperCap = 5;
+  terrainWaypointIslandShape = '';
+  terrainWaypointIslandLabel = '';
+  terrainWaypointIslandBias = 0;
   terrainMeanderIndex = 0;
   ship.x = 0;
   ship.y = (PLAY_TOP + PLAY_BOTTOM) / 2;
@@ -25578,7 +25792,9 @@ window.addEventListener('orientationchange', checkOrientation);
 try {
   checkOrientation();
   resetGame();
-  state = 'home';
+  if (FORK_GALLERY_ACTIVE) startForkGallery();
+  else if (INFERNO_PLAYTEST) startInfernoPlaytest();
+  else state = 'home';
   updateOverlay();
   window.SYNTH_FLIGHT_BOOTED = true;
   hydrateDurableSave();

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent
 HOST = "127.0.0.1"
 PORT = 8777
 GAME_PART_MAX_BYTES = 120000
-GAME_CACHE = "snes357"
+GAME_CACHE = "snes377"
 PLAYER_SAVE_DIR = ROOT / "player-saves"
 PLAYER_SAVE_ID_RE = re.compile(r"^[A-Z0-9]{6,16}$")
 PLAYER_SAVE_MAX_BYTES = 262144
@@ -65,7 +65,9 @@ def write_player_package():
     n = split_game_js()
     write_index_part_tags(n)
     dest = ROOT / "player-build"
-    dest.mkdir(exist_ok=True)
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir()
     html = apply_player_build_html((ROOT / "index.html").read_text(encoding="utf-8"))
     # Chrome treats function declarations in split classic scripts as
     # script-local when the files also use let/const, so resetGame cannot

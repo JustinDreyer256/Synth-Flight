@@ -3458,7 +3458,7 @@ function drawBars(theme) {
   ctx.textAlign = 'right';
   ctx.font = 'bold 13px Courier New';
   ctx.fillStyle = theme.accentA;
-  ctx.fillText(theme.name, W - 14, BAR_HEIGHT / 2 + 2);
+  ctx.fillText(FORK_GALLERY_ACTIVE && theme.name === 'INFERNO' ? 'INFERNO  STYLE GALLERY' : theme.name, W - 14, BAR_HEIGHT / 2 + 2);
 
   // lives indicator -- small triangles left of the theme name
   const liveSize = 7;
@@ -3597,17 +3597,57 @@ function drawTerrain(theme) {
     islGrad.addColorStop(1, theme.accentB);
     ctx.fillStyle = islGrad;
     ctx.beginPath();
-    run.forEach((s, i) => {
-      if (i === 0) ctx.moveTo(s.x, s.islandTop); else ctx.lineTo(s.x, s.islandTop);
-    });
-    for (let i = run.length - 1; i >= 0; i--) {
-      ctx.lineTo(run[i].x, run[i].islandBottom);
+    const leftH = run[0].islandBottom - run[0].islandTop;
+    let bodyH = 0;
+    for (let i = 0; i < run.length; i++) {
+      const h = run[i].islandBottom - run[i].islandTop;
+      if (h > bodyH) bodyH = h;
     }
+    const shape = run[0].islandShape || '';
+    const allowTip = !shape || shape === 'arrow' || shape === 'teardrop' || shape === 'hull';
+    const tapered = allowTip && leftH < bodyH * 0.5 && run.length > 1;
+    if (tapered) {
+      const a = run[0];
+      const b = run[1];
+      const cy0 = (a.islandTop + a.islandBottom) / 2;
+      const cy1 = (b.islandTop + b.islandBottom) / 2;
+      const vx = a.x - b.x;
+      const vy = cy0 - cy1;
+      const inv = 1 / (Math.hypot(vx, vy) || 1);
+      const tipLen = Math.max(16, leftH * 1.1);
+      ctx.moveTo(a.x + vx * inv * tipLen, cy0 + vy * inv * tipLen);
+    } else {
+      ctx.moveTo(run[0].x, run[0].islandTop);
+    }
+    for (let i = tapered ? 0 : 1; i < run.length; i++) {
+      ctx.lineTo(run[i].x, run[i].islandTop);
+    }
+    for (let i = run.length - 1; i >= 0; i--) ctx.lineTo(run[i].x, run[i].islandBottom);
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = theme.accentA;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
     ctx.stroke();
+    const label = run[0].islandLabel;
+    if (label) {
+      let minTop = run[0].islandTop;
+      let midX = 0;
+      for (let i = 0; i < run.length; i++) {
+        if (run[i].islandTop < minTop) minTop = run[i].islandTop;
+        midX += run[i].x;
+      }
+      midX /= run.length;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.font = 'bold 16px Courier New';
+      ctx.fillStyle = '#fff8e8';
+      ctx.strokeStyle = '#1a0000';
+      ctx.lineWidth = 4;
+      ctx.strokeText(label, midX, minTop - 10);
+      ctx.fillText(label, midX, minTop - 10);
+      ctx.restore();
+    }
     run = [];
   };
   for (const s of terrainSegments) {
@@ -3829,450 +3869,3 @@ function draw() {
 
 let lastRenderedOverlayState = null;
 const STATIC_OVERLAY_STATES = new Set(['zone-select', 'settings', 'achievements', 'paused', 'statistics', 'confirm-reset-stats', 'victory']);
-function updateOverlay() {
-  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state;
-  if (__renderKey === lastRenderedOverlayState) return;
-  overlay.classList.toggle('home-layout', state === 'home');
-  pauseToggleBtn.style.display = (state === 'playing' || state === 'paused') ? 'block' : 'none';
-  positionPauseButton();
-  pauseToggleBtn.textContent = (state === 'paused') ? '\u25B6' : 'II';
-  pauseToggleBtn.title = (state === 'paused') ? 'Resume (Esc)' : 'Pause (Esc)';
-  overlay.style.pointerEvents = (state === 'playing' || state === 'ready' || state === 'respawn' || state === 'gameover' || state === 'victory') ? 'none' : 'auto';
-  lastRenderedOverlayState = __renderKey;
-  const __scrollList = (typeof overlay.querySelector === 'function') ? overlay.querySelector('.scrollable-overlay-list') : null;
-  const __savedScrollTop = __scrollList ? __scrollList.scrollTop : null;
-  if (state === 'home') {
-    overlay.innerHTML = `
-      <div class="game-logo-plate home-title-plate">
-        <div class="game-logo home-title">SYNTH FLIGHT</div>
-      </div>
-      <div id="menu-start-prompt" class="clickable" data-action="go-to-options">CLICK TO START</div>
-    `;
-  } else if (state === 'options') {
-    const difficultyLabels = { easy: 'EASY', normal: 'NORMAL', hard: 'HARD', extra: 'OVERDRIVE' };
-    const difficultyClasses = { easy: 'difficulty-easy', normal: 'difficulty-normal', hard: 'difficulty-hard', extra: 'difficulty-extra' };
-    const isLockedExtra = selectedDifficulty === 'extra' && !extraDifficultyUnlocked;
-    const displayLabel = isLockedExtra ? '???' : difficultyLabels[selectedDifficulty];
-    const displayClass = isLockedExtra ? '' : difficultyClasses[selectedDifficulty];
-    overlay.innerHTML = `
-      <div class="game-logo home-title options-title">SYNTH FLIGHT</div>
-      <div class="options-panel-v2">
-        <div class="panel-header">OPTIONS</div>
-        <div class="menu-stack">
-          <div class="options-diff-picker">
-            <div class="settings-picker-label">DIFFICULTY</div>
-            <div class="stepper-control">
-              <button type="button" class="stepper-arrow" data-action="diff-prev">&#9664;</button>
-              <span class="stepper-value ${displayClass}">${displayLabel}</span>
-              <button type="button" class="stepper-arrow" data-action="diff-next">&#9654;</button>
-            </div>
-          </div>
-          <button type="button" class="btn-continue-secondary" data-action="open-zone-select">ZONE SELECT</button>
-          <button type="button" class="btn-continue-secondary" data-action="open-settings">SETTINGS</button>
-          <button type="button" class="btn-continue-secondary" data-action="open-achievements">ACHIEVEMENTS</button>
-          <button type="button" class="btn-continue-secondary" data-action="open-statistics">STATISTICS</button>
-        </div>
-        <div class="start-action-container">
-          <button type="button" class="btn-start-game" data-action="start-game">CLICK TO START</button>
-        </div>
-      </div>
-    `;
-  } else if (state === 'settings') {
-    const deathWindowSeconds = ((FREE_HIT_COOLDOWN_MS - INVINCIBILITY_DURATION_MS) / 1000).toFixed(1);
-    const iframeSeconds = (INVINCIBILITY_DURATION_MS / 1000).toFixed(1);
-    const overdriveLocked = !extraDifficultyUnlocked;
-    overlay.innerHTML = `
-      <div class="menu-panel">
-        <div id="title" style="font-size:32px;">SETTINGS</div>
-        <div class="settings-diff-list scrollable-overlay-list">
-          <div class="achievement-section-header">AUDIO</div>
-          <div class="settings-ship-grid">
-            <div class="settings-picker${audioSettings.sfxEnabled ? '' : ' is-off'}">
-              <div class="settings-toggle${audioSettings.sfxEnabled ? '' : ' is-off'}" data-action="toggle-sfx">
-                <div class="settings-picker-label">SOUND EFFECTS</div>
-                <div class="settings-toggle-value">${audioSettings.sfxEnabled ? 'ON' : 'OFF'}</div>
-              </div>
-              <div class="settings-volume-row">
-                <input type="range" class="settings-volume-slider" min="0" max="100" step="1" value="${audioVolumePercent(audioSettings.sfxVolume)}" data-volume="sfx" aria-label="Sound effects volume">
-                <span class="settings-volume-pct" data-volume-pct="sfx">${audioVolumePercent(audioSettings.sfxVolume)}%</span>
-              </div>
-            </div>
-            <div class="settings-picker${audioSettings.bgmEnabled ? '' : ' is-off'}">
-              <div class="settings-toggle${audioSettings.bgmEnabled ? '' : ' is-off'}" data-action="toggle-bgm">
-                <div class="settings-picker-label">BACKGROUND MUSIC</div>
-                <div class="settings-toggle-value">${audioSettings.bgmEnabled ? 'ON' : 'OFF'}</div>
-              </div>
-              <div class="settings-volume-row">
-                <input type="range" class="settings-volume-slider" min="0" max="100" step="1" value="${audioVolumePercent(audioSettings.bgmVolume)}" data-volume="bgm" aria-label="Background music volume">
-                <span class="settings-volume-pct" data-volume-pct="bgm">${audioVolumePercent(audioSettings.bgmVolume)}%</span>
-              </div>
-            </div>
-          </div>
-          <button type="button" class="settings-audio-default" data-action="reset-audio-defaults">DEFAULT VOLUMES</button>
-          <div class="achievement-section-header" style="margin-top:14px;">SHIP</div>
-          <div class="settings-ship-grid">
-            <div class="settings-picker">
-              <div class="settings-picker-label">TRAIL</div>
-              <div class="stepper-control">
-                <button type="button" class="stepper-arrow" data-action="trail-prev">&#9664;</button>
-                <span class="stepper-value">${currentShipTrail().name}</span>
-                <button type="button" class="stepper-arrow" data-action="trail-next">&#9654;</button>
-              </div>
-              <div class="settings-trail-hint">${currentShipTrail().hint} &middot; ${unlockedShipTrails().length} / ${SHIP_TRAILS.length} unlocked</div>
-            </div>
-            <div class="settings-picker">
-              <div class="settings-picker-label">HULL</div>
-              <div class="stepper-control">
-                <button type="button" class="stepper-arrow" data-action="skin-prev">&#9664;</button>
-                <span class="stepper-value">${currentShipSkin().name}</span>
-                <button type="button" class="stepper-arrow" data-action="skin-next">&#9654;</button>
-              </div>
-              <div class="settings-trail-hint">${currentShipSkin().hint} &middot; ${unlockedShipSkins().length} / ${SHIP_SKINS.length} unlocked</div>
-            </div>
-          </div>
-          <div class="achievement-section-header" style="margin-top:14px;">DIFFICULTY DETAILS</div>
-          <div class="settings-diff-card">
-            <div class="settings-diff-name difficulty-easy">EASY</div>
-            <div class="settings-diff-stats">
-              9 lives &middot; 3 continues<br>
-              ${iframeSeconds}s invincible (blinking) after a hit<br>
-              ${deathWindowSeconds}s vulnerable afterward before it can trigger again
-            </div>
-          </div>
-          <div class="settings-diff-card">
-            <div class="settings-diff-name difficulty-normal">NORMAL</div>
-            <div class="settings-diff-stats">
-              9 lives &middot; 3 continues<br>
-              First hit: ${iframeSeconds}s invincible, then ${deathWindowSeconds}s vulnerable<br>
-              Any hit after that is death
-            </div>
-          </div>
-          <div class="settings-diff-card">
-            <div class="settings-diff-name difficulty-hard">HARD</div>
-            <div class="settings-diff-stats">
-              9 lives &middot; 1 continue<br>
-              No invincibility frames
-            </div>
-          </div>
-          <div class="settings-diff-card difficulty-extra${overdriveLocked ? ' locked' : ''}">
-            <div class="settings-diff-name">OVERDRIVE ${overdriveLocked ? '&#128274;' : ''}</div>
-            <div class="settings-diff-stats">
-              ${overdriveLocked
-                ? 'Beat the game on Normal or Hard to unlock'
-                : '1 life &middot; no continues<br>' +
-                  iframeSeconds + 's invincible (blinking) after a hit<br>' +
-                  deathWindowSeconds + 's vulnerable afterward before it can trigger again'}
-            </div>
-          </div>
-          ${BROWSER_HELP_HTML}
-          <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
-          <div class="settings-picker settings-toggle" data-action="copy-save-id">
-            <div class="settings-picker-label">SAVE ID</div>
-            <div class="settings-toggle-value settings-save-id">${ensurePlayerSaveId()}</div>
-            <div class="settings-trail-hint">Click to copy. Bookmark the page (#sf=${ensurePlayerSaveId()}) or export a file. Clearing cache does not erase a server save.</div>
-          </div>
-          <div class="settings-action-grid">
-            <div class="settings-picker settings-toggle" data-action="export-save">
-              <div class="settings-picker-label">EXPORT</div>
-              <div class="settings-toggle-value">FILE</div>
-            </div>
-            <div class="settings-picker settings-toggle" data-action="import-save">
-              <div class="settings-picker-label">IMPORT</div>
-              <div class="settings-toggle-value">FILE</div>
-            </div>
-            <div class="settings-picker settings-toggle" data-action="restore-save-id">
-              <div class="settings-picker-label">RESTORE ID</div>
-              <div class="settings-toggle-value">LOAD</div>
-            </div>
-          </div>
-        </div>
-        <div id="sub-panel-back" data-action="back-to-options">&#9664; BACK</div>
-      </div>
-    `;
-  } else if (state === 'achievements') {
-    const difficultyLabels = { easy: 'EASY', normal: 'NORMAL', hard: 'HARD', extra: 'OVERDRIVE' };
-    const completedZoneCount = THEMES.filter((th, idx) => completedZones.has(idx)).length;
-    const beatenCount = beatenDifficulties.size;
-    const deathlessCount = THEMES.filter((th, idx) => deathlessZones.has(idx)).length;
-    const DISTANCE_MILESTONES = [10000, 25000, 50000, 100000, 200000];
-    const distanceMilestonesReached = DISTANCE_MILESTONES.filter(m => totalDistanceTraveled >= m).length;
-    const achievementTile = (num, name, done, doneClass) => `
-        <div class="zone-tile achievement-tile${done ? ' achievement-unlocked ' + doneClass : ' locked'}">
-          <span class="tile-num">${num}</span>
-          <span class="tile-name">${name}</span>
-          <span class="tile-status">${done ? '<span class="ach-seal"></span>' : '&#128274;'}</span>
-        </div>
-      `;
-    const completedZoneTilesHtml = THEMES.map((th, idx) => achievementTile((idx + 1) < 10 ? '0' + (idx + 1) : (idx + 1), th.name, completedZones.has(idx), 'achievement-done')).join('');
-    const beatGameTilesHtml = ['easy', 'normal', 'hard', 'extra'].map(diff =>
-      achievementTile('&#127942;', `BEAT GAME: ${difficultyLabels[diff]}`, beatenDifficulties.has(diff), 'achievement-done')
-    ).join('');
-    const deathlessTilesHtml = THEMES.map((th, idx) => achievementTile((idx + 1) < 10 ? '0' + (idx + 1) : (idx + 1), th.name, deathlessZones.has(idx), 'achievement-deathless')).join('');
-    const distanceTilesHtml = DISTANCE_MILESTONES.map(m =>
-      achievementTile('&#128640;', `${(m / 1000)}K METERS`, totalDistanceTraveled >= m, 'achievement-distance')
-    ).join('');
-    const rankTilesHtml = RANK_TIER_ORDER.map(tier =>
-      achievementTile('&#11088;', `RANK ${tier} &mdash; ${RANK_TIER_HINTS[tier]}`, achievedRanks.has(tier), 'achievement-rank')
-    ).join('');
-    const trailTilesHtml = SHIP_TRAILS.map((t, idx) => {
-      const done = t.unlocked();
-      const label = done ? t.name : `${t.name} &mdash; ${t.hint}`;
-      return achievementTile((idx + 1) < 10 ? '0' + (idx + 1) : String(idx + 1), label, done, 'achievement-trail');
-    }).join('');
-    const shipTilesHtml = SHIP_SKINS.map((s, idx) => {
-      const done = s.unlocked();
-      const label = done ? s.name : `${s.name} &mdash; ${s.hint}`;
-      return achievementTile((idx + 1) < 10 ? '0' + (idx + 1) : String(idx + 1), label, done, 'achievement-ship');
-    }).join('');
-    overlay.innerHTML = `
-      <div class="menu-panel zone-select-panel scrollable-overlay-list">
-        <div id="title" style="font-size:32px;">ACHIEVEMENTS</div>
-        <div class="ach-tally" aria-label="Achievement progress">
-          <div class="ach-tally-item"><span class="ach-tally-n">${completedZoneCount}/${THEMES.length}</span><span class="ach-tally-label">ZONES</span></div>
-          <div class="ach-tally-item"><span class="ach-tally-n">${beatenCount}/4</span><span class="ach-tally-label">DIFFS</span></div>
-          <div class="ach-tally-item"><span class="ach-tally-n">${deathlessCount}/${THEMES.length}</span><span class="ach-tally-label">DEATHLESS</span></div>
-          <div class="ach-tally-item"><span class="ach-tally-n">${distanceMilestonesReached}/${DISTANCE_MILESTONES.length}</span><span class="ach-tally-label">DISTANCE</span></div>
-          <div class="ach-tally-item"><span class="ach-tally-n">${achievedRanks.size}/${RANK_TIER_ORDER.length}</span><span class="ach-tally-label">RANKS</span></div>
-          <div class="ach-tally-item"><span class="ach-tally-n">${unlockedShipTrails().length}/${SHIP_TRAILS.length}</span><span class="ach-tally-label">TRAILS</span></div>
-          <div class="ach-tally-item"><span class="ach-tally-n">${unlockedShipSkins().length}/${SHIP_SKINS.length}</span><span class="ach-tally-label">SHIPS</span></div>
-        </div>
-        <div class="stats-cat stats-cat-done">COMPLETED</div>
-        <div class="zone-grid">${completedZoneTilesHtml}${beatGameTilesHtml}</div>
-        <div class="stats-cat stats-cat-deathless">DEATHLESS</div>
-        <div class="achievement-section-note">Clear a zone without dying, on Normal difficulty or higher.</div>
-        <div class="zone-grid">${deathlessTilesHtml}</div>
-        <div class="stats-cat stats-cat-distance">DISTANCE MILESTONES</div>
-        <div class="achievement-section-note">Lifetime distance flown, across every run.</div>
-        <div class="zone-grid">${distanceTilesHtml}</div>
-        <div class="stats-cat stats-cat-ranks">RANKS</div>
-        <div class="achievement-section-note">Awarded when you beat the full game, from deaths on that run. A better rank also unlocks every tier below it.</div>
-        <div class="zone-grid">${rankTilesHtml}</div>
-        <div class="stats-cat stats-cat-trails">SHIP TRAILS</div>
-        <div class="achievement-section-note">Cosmetic exhaust animations. Equip unlocked trails in Settings.</div>
-        <div class="zone-grid">${trailTilesHtml}</div>
-        <div class="stats-cat stats-cat-ships">SHIPS</div>
-        <div class="achievement-section-note">Cosmetic hull skins. Equip unlocked ships in Settings.</div>
-        <div class="zone-grid">${shipTilesHtml}</div>
-        <div id="sub-panel-back" data-action="back-to-options">&#9664; BACK</div>
-      </div>
-    `;
-  } else if (state === 'statistics') {
-    const totalLifetimeDeaths = lifetimeDeathsByZone.reduce((a, b) => a + (b || 0), 0);
-    const totalCompletions = zoneCompletionCounts.reduce((a, b) => a + (b || 0), 0);
-    const maxDeaths = Math.max(1, ...lifetimeDeathsByZone.map(n => n || 0));
-    const maxClears = Math.max(1, ...zoneCompletionCounts.map(n => n || 0));
-    const statZoneTile = (idx, name, count, kind, heatMax) => {
-      const hasValue = count > 0;
-      const heat = hasValue ? Math.max(0.28, count / heatMax) : 0;
-      const num = (idx + 1) < 10 ? '0' + (idx + 1) : String(idx + 1);
-      return `
-        <div class="stat-zone-tile stat-zone-${kind} ${hasValue ? 'has-value' : 'is-empty'}" style="--stat-heat:${heat.toFixed(3)}">
-          <span class="tile-num">${num}</span>
-          <span class="tile-name">${name}</span>
-          <span class="stat-zone-count">${count.toLocaleString()}</span>
-        </div>
-      `;
-    };
-    const deathTilesHtml = THEMES.map((th, idx) => statZoneTile(idx, th.name, lifetimeDeathsByZone[idx] || 0, 'deaths', maxDeaths)).join('');
-    const completionTilesHtml = THEMES.map((th, idx) => statZoneTile(idx, th.name, zoneCompletionCounts[idx] || 0, 'clears', maxClears)).join('');
-    overlay.innerHTML = `
-      <div class="menu-panel zone-select-panel scrollable-overlay-list">
-        <div id="title" style="font-size:32px;">STATISTICS</div>
-        <div class="stats-hero">
-          <div class="stats-hero-card stats-hero-distance">
-            <div class="stats-hero-label">TOTAL DISTANCE</div>
-            <div class="stats-hero-value">${Math.floor(totalDistanceTraveled).toLocaleString()}<span class="stats-hero-unit">m</span></div>
-          </div>
-          <div class="stats-hero-card stats-hero-deaths">
-            <div class="stats-hero-label">TOTAL DEATHS</div>
-            <div class="stats-hero-value">${totalLifetimeDeaths.toLocaleString()}</div>
-          </div>
-          <div class="stats-hero-card stats-hero-clears">
-            <div class="stats-hero-label">ZONE CLEARS</div>
-            <div class="stats-hero-value">${totalCompletions.toLocaleString()}</div>
-          </div>
-        </div>
-        <div class="stats-cat stats-cat-deaths">DEATHS BY ZONE</div>
-        <div class="zone-grid">${deathTilesHtml}</div>
-        <div class="stats-cat stats-cat-clears">ZONE COMPLETIONS</div>
-        <div class="zone-grid">${completionTilesHtml}</div>
-        <div class="menu-btn-row danger-row" data-action="confirm-reset-stats" style="margin-top:20px; justify-content:center;">
-          <span class="menu-btn-label">RESET STATS</span>
-        </div>
-        <div id="sub-panel-back" data-action="back-to-options">&#9664; BACK</div>
-      </div>
-    `;
-  } else if (state === 'confirm-reset-stats') {
-    overlay.innerHTML = `
-      <div class="options-panel-v2 confirm-panel">
-        <div class="panel-header confirm-danger-header">RESET STATS?</div>
-        <div class="confirm-warning-text">
-          This will permanently erase your best distance, unlocked zones, achievements, and all lifetime statistics.
-          <br><br>
-          <strong>This cannot be undone.</strong>
-        </div>
-        <div class="confirm-btn-row">
-          <button type="button" class="btn-confirm-cancel" data-action="cancel-reset-stats">CANCEL</button>
-          <button type="button" class="btn-confirm-danger" data-action="reset-stats-confirmed">YES, DELETE EVERYTHING</button>
-        </div>
-      </div>
-    `;
-  } else if (state === 'zone-select') {
-    const zoneTypeLabel = (th) => th.isBossZone ? 'FINAL BOSS ZONE' : (th.isMiniBossZone ? 'MINI BOSS ZONE' : 'STANDARD ZONE');
-    const tilesHtml = THEMES.map((th, idx) => {
-      const unlocked = unlockedZones.has(idx);
-      const active = idx === zoneSelectPreviewIdx;
-      return `
-        <div class="zone-tile${unlocked ? '' : ' locked'}${active ? ' active' : ''}"${unlocked ? ` data-action="preview-zone" data-zone-idx="${idx}"` : ''}>
-          <span class="tile-num">${(idx + 1) < 10 ? '0' + (idx + 1) : (idx + 1)}</span>
-          <span class="tile-name">${th.name}</span>
-          <span class="tile-status">${unlocked ? '&#9654;' : '&#128274;'}</span>
-        </div>
-      `;
-    }).join('');
-    const previewTheme = THEMES[zoneSelectPreviewIdx];
-    const previewUnlocked = unlockedZones.has(zoneSelectPreviewIdx);
-    for (let i = 0; i < THEMES.length; i++) {
-      if (!unlockedZones.has(i) || zoneScreenshots[i]) continue;
-      try { generateAndStoreZoneStill(i); } catch (e) { /* keep sky fallback */ }
-    }
-    const previewShot = previewUnlocked ? zoneScreenshots[zoneSelectPreviewIdx] : null;
-    const previewViewportInner = previewShot
-      ? `<img class="preview-shot" alt="${previewTheme.name}" src="${previewShot}">`
-      : (previewUnlocked
-        ? ''
-        : '<div class="preview-locked-label">LOCKED</div>');
-    overlay.innerHTML = `
-      <div class="menu-panel zone-select-panel scrollable-overlay-list">
-        <div id="title" style="font-size:26px;">ZONE SELECT</div>
-        <div class="zone-select-subtitle">WARP TO ANY UNLOCKED ZONE -- PRACTICE MODE, DOESN'T AFFECT BEST DISTANCE OR DEATH STATS</div>
-        <div class="zone-select-wrapper">
-          <div class="zone-grid">${tilesHtml}</div>
-          <div class="zone-preview-panel">
-            <div>
-              <div class="preview-viewport${previewUnlocked ? '' : ' locked'}" style="background: linear-gradient(180deg, ${previewTheme.skyTop}, ${previewTheme.skyMid}, ${previewTheme.skyBottom});">${previewViewportInner}</div>
-              <div class="preview-details">
-                <div class="preview-title">${zoneSelectPreviewIdx + 1}. ${previewTheme.name}</div>
-                <div class="preview-stats">
-                  <span>TYPE: ${zoneTypeLabel(previewTheme)}</span>
-                  <span>STATUS: ${previewUnlocked ? 'UNLOCKED' : 'LOCKED'}</span>
-                </div>
-              </div>
-            </div>
-            <button type="button" class="btn-warp" data-action="warp-to-zone"${previewUnlocked ? '' : ' disabled'}>WARP TO ZONE &#9654;</button>
-          </div>
-        </div>
-        <div id="sub-panel-back" data-action="back-to-options">&#9664; BACK</div>
-      </div>
-    `;
-  } else if (state === 'ready') {
-    const diffLabel = selectedDifficulty.toUpperCase();
-    overlay.innerHTML = `
-      <div id="title">CLICK TO START</div>
-      <div id="subtitle">Difficulty: ${diffLabel}<br>Hold to rise, release to fall<br>Fly through the shifting gates<br>New world every 1000 distance<br>${MAX_LIVES} lives per run</div>
-    `;
-  } else if (state === 'paused') {
-    overlay.innerHTML = `
-      <div class="menu-panel continue-panel">
-        <div class="panel-header">PAUSED</div>
-        <div class="menu-stack">
-          <button type="button" class="btn-start-game" data-action="resume-game"><span>RESUME</span><span class="cta-arrow">&#9654;</span></button>
-          <button type="button" class="btn-continue-secondary" data-action="open-pause-options">OPTIONS</button>
-          <button type="button" class="btn-continue-secondary" data-action="quit-to-home">${isPracticeRun ? 'ZONE SELECT' : 'MAIN MENU'}</button>
-        </div>
-      </div>
-    `;
-  } else if (state === 'respawn') {
-    overlay.innerHTML = `
-      <div id="title">LIFE LOST</div>
-      <div id="subtitle">${lives} ${lives === 1 ? 'life' : 'lives'} remaining<br>Restarting at the beginning of this zone<br>Click to continue</div>
-    `;
-  } else if (state === 'continue-prompt') {
-    overlay.innerHTML = `
-      <div class="menu-panel continue-panel">
-        <div class="panel-header">CONTINUE?</div>
-        <div class="continue-credit">${continuesRemaining}</div>
-        <div class="continue-credit-label">${continuesRemaining === 1 ? 'CREDIT REMAINING' : 'CREDITS REMAINING'}</div>
-        <div class="menu-stack">
-          <button type="button" class="btn-start-game" data-action="use-continue"><span>CONTINUE</span><span class="cta-arrow">&#9654;</span></button>
-          <button type="button" class="btn-continue-secondary" data-action="quit-to-home">${isPracticeRun ? 'ZONE SELECT' : 'MAIN MENU'}</button>
-        </div>
-      </div>
-    `;
-  } else if (state === 'gameover') {
-    overlay.innerHTML = `
-      <div id="title">GAME OVER</div>
-      <div id="subtitle">Distance: ${Math.floor(maxDistanceReached)} &nbsp;|&nbsp; Best: ${best}<br>Click to try again</div>
-    `;
-  } else if (state === 'victory') {
-    // rank tier based on total deaths across the run -- 0 deaths within
-    // the S-Rank band is specifically called out as a "perfect run"
-    const rankTier = rankTierForDeaths(totalDeaths);
-    const rankLabel = rankTier === 'S'
-      ? (totalDeaths === 0 ? 'PERFECT RUN &mdash; S RANK' : 'S RANK')
-      : `${rankTier} RANK`;
-
-    const clearTimeSeconds = Math.floor(clearTimeMs / 1000);
-    const clearTimeLabel = `${Math.floor(clearTimeSeconds / 60)}:${String(clearTimeSeconds % 60).padStart(2, '0')}`;
-
-    // natural reading order -- the grid (2 columns) fills left-to-right,
-    // top-to-bottom on its own, so 01 sits next to 02, 03 next to 04, etc.
-    const zoneRowHtml = (th, idx) => {
-      const num = (idx + 1) < 10 ? '0' + (idx + 1) : (idx + 1);
-      const deaths = deathsByZone[th.name] || 0;
-      return `<div class="zone-stat-row"><span><span class="skull">&#128128;</span> ${num} ${th.name}</span><span class="deaths">${deaths}</span></div>`;
-    };
-    const zoneRowsHtml = THEMES.map((th, idx) => zoneRowHtml(th, idx)).join('');
-
-    const unlockBanner = justUnlockedExtraDifficulty
-      ? `<div id="subtitle" style="font-size:14px; color:#ff0000; text-shadow:0 0 10px rgba(255,0,0,0.8); margin-top:12px;">&#128274; OVERDRIVE DIFFICULTY UNLOCKED</div>`
-      : '';
-    overlay.innerHTML = `
-      <div id="title" style="font-size:38px; text-shadow: 0 0 12px var(--neon-cyan), 0 0 25px var(--neon-pink);">THE SIGNAL IS SILENCED</div>
-      <div id="subtitle" style="font-size:15px; margin-top:28px;">The Signal has been destroyed. Synth Flight is complete.</div>
-      ${unlockBanner}
-      <div class="reward-card">
-        <div class="rank-badge">
-          <span class="star">&#9733;</span>
-          <span class="rank-text">${rankLabel}</span>
-          <span class="star">&#9733;</span>
-        </div>
-        <div class="stats-matrix">
-          <div class="stat-box">
-            <div class="stat-label">TOTAL DEATHS</div>
-            <div class="stat-value">${totalDeaths}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">CLEAR TIME</div>
-            <div class="stat-value">${clearTimeLabel}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">ZONES CLEARED</div>
-            <div class="stat-value">${THEMES.length} / ${THEMES.length}</div>
-          </div>
-        </div>
-        <div class="zone-breakdown-grid">
-          ${zoneRowsHtml}
-        </div>
-        <button type="button" class="btn-continue">CLICK TO CONTINUE &#9654;</button>
-      </div>
-    `;
-  } else {
-    overlay.innerHTML = '';
-  }
-  if (__savedScrollTop !== null) {
-    const __newScrollList = overlay.querySelector('.scrollable-overlay-list');
-    if (__newScrollList) __newScrollList.scrollTop = __savedScrollTop;
-  }
-}
-
-// ---- Dev tools ----
-const devToggle = document.getElementById('dev-toggle');
-const devPanel = document.getElementById('dev-panel');
-
-if (DEV_TOOLS_ENABLED && devToggle && devPanel) {
-  devToggle.addEventListener('click', () => {
-    devPanel.classList.toggle('active');
-  });
-}
-

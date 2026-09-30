@@ -1,3 +1,499 @@
+function beginCoreBulkhead(moving) {
+  miniBossAttackState = 'coreBulkheadTelegraph';
+  coreBulkheadIsMoving = !!moving;
+  coreBulkheadX = ship.x + 150;
+  if (!moving) coreBulkheadGapCenter = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.5;
+  miniBossAttackStateStartFrame = frame;
+  sfxCoreBulkheadTelegraph();
+}
+
+function updateReactorCoreBoss() {
+  if (coreBossDefeated) {
+    if (!shipFlyOffActive && frame - coreBossDefeatFrame >= CORE_BOSS_DEFEAT_PAUSE) {
+      shipFlyOffActive = true;
+      ship.vx = 0;
+    }
+    if (shipFlyOffActive && ship.x > W + 60) {
+      shipFlyOffActive = false;
+      miniBoss = null;
+      ship.x = W * 0.28;
+      ship.vx = 0;
+      beginWarp(); // no escape run for this boss
+    }
+    return;
+  }
+
+  const stateElapsed = frame - miniBossAttackStateStartFrame;
+  const shipTop = ship.y - SHIP_H / 2, shipBottom = ship.y + SHIP_H / 2;
+  const shipR = SHIP_W * 0.4;
+
+  let sparkTarget = coreSparkSpawned;
+  if (miniBossAttackState === 'coreSparkDeploy') sparkTarget = CORE_SPARK_COUNT;
+  else if (coreBossPhase === 6 && (miniBossAttackState === 'coreCrossfireTelegraph' ||
+      miniBossAttackState === 'coreCrossfireActive' || miniBossAttackState === 'coreCrossfireGap')) {
+    sparkTarget = CORE_P6_SPARK_COUNT;
+  }
+  if (sparkTarget > 0 || coreSparks.length > 0) {
+    updateCoreSparks(coreSparkPhaseStartFrame, sparkTarget, shipTop, shipBottom, shipR);
+  }
+
+  if (miniBossAttackState === 'coreFloating') {
+    miniBoss.x = miniBoss.restX;
+    miniBoss.y = miniBoss.baseY; // static wall -- no floating bob
+
+    if (coreBossPhase >= 9) {
+      miniBossAttackState = 'coreDying';
+      miniBossAttackStateStartFrame = frame;
+      sfxCoreDying();
+      coreDeathPatches = [];
+      for (let i = 0; i < CORE_DEATH_PATCH_COUNT; i++) {
+        coreDeathPatches.push({
+          angle: Math.random() * Math.PI * 2,
+          distFrac: 0.15 + Math.random() * 0.55,
+          sizeFrac: 0.35 + Math.random() * 0.35,
+          startFrac: (i / CORE_DEATH_PATCH_COUNT) * 0.5 + Math.random() * 0.15
+        });
+      }
+      coreDeathDebris = [];
+      return;
+    }
+
+    if (coreBossPhase === 7) {
+      if (coreSparks.length === 0) beginCoreBulkhead(true);
+      return;
+    }
+
+    const floatDuration = !coreBossHadFirstFloat ? CORE_BOSS_INITIAL_FLOAT : (coreBossPhase === 3 ? 35 : CORE_BOSS_PRE_ATTACK_FLOAT);
+    if (stateElapsed >= floatDuration) {
+      coreBossHadFirstFloat = true;
+      if (coreBossPhase === 1) {
+        miniBossAttackState = 'coreLaserTelegraph';
+        coreLaserIndex = 0;
+        coreLaserHeights = shuffleArray(CORE_LASER_HEIGHT_FRACS);
+        coreLaserY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * coreLaserHeights[0];
+        sfxHazardFire('coreLaserTelegraph');
+      } else if (coreBossPhase === 2) {
+        miniBossAttackState = 'coreBulkheadTelegraph';
+        coreBulkheadIsMoving = false;
+        coreBulkheadX = ship.x + 150; // well clear of the boss (which sits around ship.x+366), so the wall reads as a distinct obstacle between ship and boss, not overlapping it
+        coreBulkheadGapCenter = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * 0.5;
+      } else if (coreBossPhase === 3) {
+        miniBossAttackState = 'coreSparkDeploy';
+        coreSparkSpawned = 0;
+        coreSparks = [];
+        coreSparkPhaseStartFrame = frame;
+        coreP3BeamVolleysFired = 0;
+        coreP3BeamState = 'none';
+        coreP3BeamYs = [];
+      } else if (coreBossPhase === 4) {
+        miniBossAttackState = 'coreBulkheadTelegraph';
+        coreBulkheadIsMoving = true;
+        coreBulkheadX = ship.x + 150; // well clear of the boss (which sits around ship.x+366), so the wall reads as a distinct obstacle between ship and boss, not overlapping it
+      } else if (coreBossPhase === 5) {
+        miniBossAttackState = 'coreEmpTelegraph';
+        coreEmpPulses = [];
+        coreEmpWavesLaunched = 0;
+        miniBoss.y = miniBoss.baseY; // pin to center -- otherwise it's frozen wherever the floating bob happened to be, misaligning EMP lanes against the (always-centered) squeeze walls
+      } else if (coreBossPhase === 6) {
+        miniBossAttackState = 'coreCrossfireTelegraph';
+        coreCrossfireRound = 0;
+        const safeSlot = Math.floor(Math.random() * CORE_CROSSFIRE_SLOT_FRACS.length);
+        coreCrossfireBeamYs = computeCrossfireBeamYs(safeSlot);
+        coreSparkSpawned = 0;
+        coreSparks = [];
+        coreSparkPhaseStartFrame = frame;
+      } else if (coreBossPhase === 7) {
+        miniBossAttackState = 'coreBulkheadTelegraph';
+        coreBulkheadIsMoving = true;
+        coreBulkheadX = ship.x + 150; // well clear of the boss (which sits around ship.x+366), so the wall reads as a distinct obstacle between ship and boss, not overlapping it
+      } else if (coreBossPhase === 8) {
+        miniBossAttackState = 'coreGateOpen';
+        coreGateOpenAmount = 0;
+        coreOrbitSpawned = 0;
+        coreOrbitProjectiles = [];
+        coreOrbitEmitAngle = 0;
+        sfxCoreGateOpen();
+      }
+      miniBossAttackStateStartFrame = frame;
+      if (miniBossAttackState === 'coreBulkheadTelegraph') sfxCoreBulkheadTelegraph();
+      if (miniBossAttackState === 'coreEmpTelegraph') sfxCoreEmpTelegraph();
+    }
+  } else if (miniBossAttackState === 'coreLaserTelegraph') {
+    if (stateElapsed >= CORE_LASER_TELEGRAPH) {
+      miniBossAttackState = 'coreLaserActive';
+      miniBossAttackStateStartFrame = frame;
+      sfxHazardFire('coreLaserActive');
+    }
+  } else if (miniBossAttackState === 'coreLaserActive') {
+    if (shipTop < coreLaserY + CORE_LASER_THICKNESS / 2 && shipBottom > coreLaserY - CORE_LASER_THICKNESS / 2) {
+      tryEndGame('coreLaserActive');
+    }
+    if (stateElapsed >= CORE_LASER_ACTIVE) {
+      coreLaserIndex++;
+      if (coreLaserIndex >= CORE_LASER_COUNT) {
+        coreBossPhase = 2;
+        miniBossAttackState = 'coreFloating';
+        miniBossAttackStateStartFrame = frame;
+      } else {
+        miniBossAttackState = 'coreLaserGap';
+        miniBossAttackStateStartFrame = frame;
+      }
+    }
+  } else if (miniBossAttackState === 'coreLaserGap') {
+    if (stateElapsed >= CORE_LASER_GAP) {
+      coreLaserY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * coreLaserHeights[coreLaserIndex];
+      miniBossAttackState = 'coreLaserTelegraph';
+      miniBossAttackStateStartFrame = frame;
+      sfxHazardFire('coreLaserTelegraph');
+    }
+  } else if (miniBossAttackState === 'coreBulkheadTelegraph') {
+    if (stateElapsed >= CORE_BULKHEAD_TELEGRAPH) {
+      miniBossAttackState = 'coreBulkheadActive';
+      miniBossAttackStateStartFrame = frame;
+      sfxCoreBulkheadLock();
+      startCoreBulkheadHoldSound();
+    }
+  } else if (miniBossAttackState === 'coreBulkheadActive') {
+    let gapCenter = coreBulkheadGapCenter;
+    if (coreBulkheadIsMoving) {
+      gapCenter = (PLAY_TOP + PLAY_BOTTOM) / 2 + CORE_BULKHEAD_DRIFT_AMPLITUDE * Math.sin(stateElapsed * (2 * Math.PI / CORE_BULKHEAD_DRIFT_PERIOD));
+    }
+    const gapTop = gapCenter - CORE_BULKHEAD_GAP_HEIGHT / 2;
+    const gapBottom = gapCenter + CORE_BULKHEAD_GAP_HEIGHT / 2;
+    if (shipTop < gapTop || shipBottom > gapBottom) {
+      tryEndGame('coreBulkheadActive');
+    }
+    if (stateElapsed >= CORE_BULKHEAD_ACTIVE) {
+      coreBossPhase = coreBossPhase + 1;
+      miniBossAttackState = 'coreFloating';
+      miniBossAttackStateStartFrame = frame;
+    }
+  } else if (miniBossAttackState === 'coreSparkDeploy') {
+    // beam volleys, firing simultaneously alongside the weaving sparks
+    if (coreP3BeamState === 'none' && coreP3BeamVolleysFired < CORE_P3_BEAM_TRIGGER_TIMES.length &&
+        stateElapsed >= CORE_P3_BEAM_TRIGGER_TIMES[coreP3BeamVolleysFired]) {
+      coreP3BeamState = 'telegraph';
+      coreP3BeamStateStartFrame = frame;
+      const safeSlot = Math.floor(Math.random() * CORE_P3_BEAM_SLOT_FRACS.length);
+      coreP3BeamYs = CORE_P3_BEAM_SLOT_FRACS.map((f, i) => i).filter(i => i !== safeSlot)
+        .map(i => PLAY_TOP + CORE_P3_BEAM_SLOT_FRACS[i] * (PLAY_BOTTOM - PLAY_TOP));
+    } else if (coreP3BeamState === 'telegraph' && frame - coreP3BeamStateStartFrame >= CORE_P3_BEAM_TELEGRAPH) {
+      coreP3BeamState = 'active';
+      coreP3BeamStateStartFrame = frame;
+      sfxCoreCrossfireVolley();
+    } else if (coreP3BeamState === 'active') {
+      for (const by of coreP3BeamYs) {
+        if (shipTop < by + CORE_P3_BEAM_THICKNESS / 2 && shipBottom > by - CORE_P3_BEAM_THICKNESS / 2) {
+          tryEndGame('coreLaserActive');
+          break;
+        }
+      }
+      if (frame - coreP3BeamStateStartFrame >= CORE_P3_BEAM_ACTIVE) {
+        coreP3BeamState = 'none';
+        coreP3BeamYs = [];
+        coreP3BeamVolleysFired++;
+      }
+    }
+    if (coreSparkSpawned >= CORE_SPARK_COUNT && coreSparks.length === 0 &&
+        coreP3BeamVolleysFired >= CORE_P3_BEAM_TRIGGER_TIMES.length && coreP3BeamState === 'none') {
+      coreBossPhase = 4;
+      beginCoreBulkhead(true);
+    }
+  } else if (miniBossAttackState === 'coreEmpTelegraph') {
+    if (stateElapsed >= CORE_EMP_TELEGRAPH) {
+      miniBossAttackState = 'coreEmpActive';
+      miniBossAttackStateStartFrame = frame;
+      coreEmpPhaseStartFrame = frame;
+    }
+  } else if (miniBossAttackState === 'coreEmpActive') {
+    const squeezeCenter = (PLAY_TOP + PLAY_BOTTOM) / 2;
+    const cyclePos = ((frame - coreEmpPhaseStartFrame) % CORE_SQUEEZE_PERIOD) / CORE_SQUEEZE_PERIOD;
+    const squeezeFrac = (1 - Math.cos(cyclePos * 2 * Math.PI)) / 2;
+    const squeezeGap = CORE_SQUEEZE_MAX_GAP - (CORE_SQUEEZE_MAX_GAP - CORE_SQUEEZE_MIN_GAP) * squeezeFrac;
+    coreSqueezeTopY = squeezeCenter - squeezeGap / 2;
+    coreSqueezeBottomY = squeezeCenter + squeezeGap / 2;
+    if (shipTop <= coreSqueezeTopY || shipBottom >= coreSqueezeBottomY) {
+      tryEndGame('coreEmpActive');
+    }
+
+    const waveElapsed = frame - coreEmpPhaseStartFrame;
+    if (coreEmpWavesLaunched < CORE_EMP_WAVE_COUNT && waveElapsed >= coreEmpWavesLaunched * CORE_EMP_WAVE_INTERVAL) {
+      const safeLane = Math.floor(Math.random() * 3);
+      for (let lane = 0; lane < 3; lane++) {
+        if (lane === safeLane) continue;
+        coreEmpPulses.push({
+          x: miniBoss.x,
+          y: miniBoss.y + (lane - 1) * CORE_EMP_LANE_SPACING,
+          vx: -CORE_EMP_SPEED
+        });
+      }
+      coreEmpWavesLaunched++;
+      sfxHazardFire('coreEmpPulse');
+    }
+    for (let i = coreEmpPulses.length - 1; i >= 0; i--) {
+      const e = coreEmpPulses[i];
+      e.x += e.vx;
+      const dx = ship.x - e.x, dy = ship.y - e.y;
+      if (Math.sqrt(dx * dx + dy * dy) < shipR + CORE_EMP_R) {
+        tryEndGame('coreEmpPulse');
+        break;
+      }
+      if (e.x < -100) coreEmpPulses.splice(i, 1);
+    }
+
+    if (stateElapsed >= CORE_EMP_ACTIVE) {
+      coreBossPhase = 6;
+      miniBossAttackState = 'coreFloating';
+      miniBossAttackStateStartFrame = frame;
+    }
+  } else if (miniBossAttackState === 'coreCrossfireTelegraph') {
+    if (stateElapsed >= CORE_CROSSFIRE_TELEGRAPH) {
+      miniBossAttackState = 'coreCrossfireActive';
+      miniBossAttackStateStartFrame = frame;
+      sfxCoreCrossfireVolley();
+    }
+  } else if (miniBossAttackState === 'coreCrossfireActive') {
+    for (const by of coreCrossfireBeamYs) {
+      if (shipTop < by + CORE_CROSSFIRE_THICKNESS / 2 && shipBottom > by - CORE_CROSSFIRE_THICKNESS / 2) {
+        tryEndGame('coreCrossfireActive');
+        break;
+      }
+    }
+    if (stateElapsed >= CORE_CROSSFIRE_ACTIVE) {
+      coreCrossfireRound++;
+      if (coreCrossfireRound >= CORE_CROSSFIRE_ROUNDS) {
+        coreBossPhase = 7;
+        if (coreSparks.length === 0) {
+          beginCoreBulkhead(true);
+        } else {
+          miniBossAttackState = 'coreFloating';
+          miniBossAttackStateStartFrame = frame;
+        }
+      } else {
+        miniBossAttackState = 'coreCrossfireGap';
+        miniBossAttackStateStartFrame = frame;
+      }
+    }
+  } else if (miniBossAttackState === 'coreCrossfireGap') {
+    if (stateElapsed >= CORE_CROSSFIRE_GAP) {
+      const safeSlot = Math.floor(Math.random() * CORE_CROSSFIRE_SLOT_FRACS.length);
+      coreCrossfireBeamYs = computeCrossfireBeamYs(safeSlot);
+      miniBossAttackState = 'coreCrossfireTelegraph';
+      miniBossAttackStateStartFrame = frame;
+    }
+  } else if (miniBossAttackState === 'coreGateOpen') {
+    coreGateOpenAmount = Math.min(1, stateElapsed / CORE_GATE_OPEN_DURATION);
+    if (stateElapsed >= CORE_GATE_OPEN_DURATION) {
+      miniBossAttackState = 'coreSphereEmerge';
+      miniBossAttackStateStartFrame = frame;
+      miniBoss.x = miniBoss.restX;
+      miniBoss.y = miniBoss.baseY;
+      miniBoss.r = miniBoss.maxR;
+      sfxCoreEmerge();
+    }
+  } else if (miniBossAttackState === 'coreSphereEmerge') {
+    const emergeT = Math.min(1, stateElapsed / CORE_SPHERE_EMERGE_DURATION);
+    const startX = miniBoss.restX, targetX = Math.min(ship.x + CORE_SPHERE_X_OFFSET, miniBoss.restX);
+    miniBoss.x = startX + (targetX - startX) * emergeT;
+    miniBoss.y = miniBoss.baseY;
+    if (stateElapsed >= CORE_SPHERE_EMERGE_DURATION) {
+      miniBossAttackState = 'coreOrbitBarrageActive';
+      miniBossAttackStateStartFrame = frame;
+      coreEyeBeamState = 'track';
+      coreEyeBeamStateStartFrame = frame;
+      coreEyeBeamY = ship.y;
+      sfxCoreEyeBeamTrack();
+      coreTeslaState = 'charging';
+      coreTeslaStateStartFrame = frame;
+      coreTeslaProjectiles = [];
+      coreTeslaEmptySlot = pickCoreTeslaEmptySlot();
+    }
+  } else if (miniBossAttackState === 'coreOrbitBarrageActive') {
+    miniBoss.x = Math.min(ship.x + CORE_SPHERE_X_OFFSET, miniBoss.restX);
+    miniBoss.y = miniBoss.baseY;
+    coreOrbitEmitAngle += CORE_ORBIT_EMIT_ROTATION_SPEED;
+
+    if (coreOrbitSpawned < CORE_ORBIT_COUNT && stateElapsed >= coreOrbitSpawned * CORE_ORBIT_SPAWN_INTERVAL) {
+      coreOrbitProjectiles.push({ angle: coreOrbitEmitAngle, dist: CORE_ORBIT_START_DIST, x: 0, y: 0 });
+      coreOrbitSpawned++;
+      sfxHazardFire('coreOrbit');
+    }
+    for (let i = coreOrbitProjectiles.length - 1; i >= 0; i--) {
+      const p = coreOrbitProjectiles[i];
+      p.angle += CORE_ORBIT_TANGENTIAL_SPEED / p.dist;
+      p.dist += CORE_ORBIT_OUTWARD_SPEED;
+      p.x = miniBoss.x + Math.cos(p.angle) * p.dist;
+      p.y = miniBoss.y + Math.sin(p.angle) * p.dist;
+      const dx = ship.x - p.x, dy = ship.y - p.y;
+      if (Math.sqrt(dx * dx + dy * dy) < shipR + CORE_ORBIT_R) {
+        tryEndGame('coreOrbit');
+        break;
+      }
+      if (p.dist > CORE_ORBIT_MAX_DIST) coreOrbitProjectiles.splice(i, 1);
+    }
+
+    // eye beam sub-cycle, running simultaneously with the orbit barrage
+    if (coreEyeBeamState === 'track') {
+      coreEyeBeamY = ship.y;
+      if (frame - coreEyeBeamStateStartFrame >= CORE_EYEBEAM_TRACK_DURATION) {
+        coreEyeBeamState = 'lock';
+        coreEyeBeamStateStartFrame = frame;
+        sfxCoreEyeBeamLock();
+      }
+    } else if (coreEyeBeamState === 'lock') {
+      if (frame - coreEyeBeamStateStartFrame >= CORE_EYEBEAM_LOCK_DURATION) {
+        coreEyeBeamState = 'active';
+        coreEyeBeamStateStartFrame = frame;
+        sfxCoreEyeBeamFire();
+      }
+    } else if (coreEyeBeamState === 'active') {
+      if (shipTop < coreEyeBeamY + CORE_EYEBEAM_THICKNESS / 2 && shipBottom > coreEyeBeamY - CORE_EYEBEAM_THICKNESS / 2) {
+        tryEndGame('coreEyeBeam');
+      }
+      if (frame - coreEyeBeamStateStartFrame >= CORE_EYEBEAM_ACTIVE_DURATION) {
+        coreEyeBeamState = 'cooldown';
+        coreEyeBeamStateStartFrame = frame;
+      }
+    } else if (coreEyeBeamState === 'cooldown') {
+      if (frame - coreEyeBeamStateStartFrame >= CORE_EYEBEAM_COOLDOWN) {
+        coreEyeBeamState = 'track';
+        coreEyeBeamStateStartFrame = frame;
+        sfxCoreEyeBeamTrack();
+      }
+    }
+
+    // tesla discharge burst sub-cycle, running simultaneously with the orbit barrage and eye beam
+    if (coreTeslaState === 'charging') {
+      const teslaElapsed = frame - coreTeslaStateStartFrame;
+      const teslaLockWindow = 20; // final frames before firing -- gap position freezes here for a stable telegraph
+      if (teslaElapsed < CORE_TESLA_CHARGE_DURATION - teslaLockWindow) {
+        coreTeslaEmptySlot = pickCoreTeslaEmptySlot(); // keep tracking the ship's position
+      }
+      if (teslaElapsed >= CORE_TESLA_CHARGE_DURATION) {
+        for (let i = 0; i < CORE_TESLA_SLOT_FRACS.length; i++) {
+          if (i === coreTeslaEmptySlot || i === coreTeslaEmptySlot + 1) continue;
+          const targetY = PLAY_TOP + CORE_TESLA_SLOT_FRACS[i] * (PLAY_BOTTOM - PLAY_TOP);
+          const dx = ship.x - miniBoss.x, dy = targetY - miniBoss.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          coreTeslaProjectiles.push({
+            x: miniBoss.x, y: miniBoss.y,
+            vx: (dx / dist) * CORE_TESLA_PROJECTILE_SPEED,
+            vy: (dy / dist) * CORE_TESLA_PROJECTILE_SPEED
+          });
+        }
+        coreTeslaState = 'cooldown';
+        coreTeslaStateStartFrame = frame;
+        sfxHazardFire('coreTesla');
+      }
+    } else if (coreTeslaState === 'cooldown') {
+      if (frame - coreTeslaStateStartFrame >= CORE_TESLA_COOLDOWN) {
+        coreTeslaState = 'charging';
+        coreTeslaStateStartFrame = frame;
+        coreTeslaEmptySlot = pickCoreTeslaEmptySlot();
+      }
+    }
+    for (let i = coreTeslaProjectiles.length - 1; i >= 0; i--) {
+      const p = coreTeslaProjectiles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      const dx = ship.x - p.x, dy = ship.y - p.y;
+      if (Math.sqrt(dx * dx + dy * dy) < shipR + CORE_TESLA_PROJECTILE_R) {
+        tryEndGame('coreTesla');
+        break;
+      }
+      if (p.x < -50 || p.y < PLAY_TOP - 100 || p.y > PLAY_BOTTOM + 100) {
+        coreTeslaProjectiles.splice(i, 1);
+      }
+    }
+
+    if (stateElapsed >= CORE_ORBIT_BARRAGE_DURATION && coreOrbitSpawned >= CORE_ORBIT_COUNT && coreOrbitProjectiles.length === 0) {
+      miniBossAttackState = 'coreOverloadDying';
+      miniBossAttackStateStartFrame = frame;
+      coreOverloadArcs = [];
+      coreDeathDebris = [];
+      sfxCoreOverload();
+    }
+  } else if (miniBossAttackState === 'coreDying') {
+    const dimEnd = CORE_DEATH_DIM_DURATION;
+    const darkenEnd = dimEnd + CORE_DEATH_DARKEN_DURATION;
+    const collapseEnd = darkenEnd + CORE_DEATH_COLLAPSE_DURATION;
+    const darkenProgress = Math.max(0, Math.min(1, (stateElapsed - dimEnd) / CORE_DEATH_DARKEN_DURATION));
+
+    if (stateElapsed >= dimEnd && stateElapsed < darkenEnd && stateElapsed % 9 === 0) {
+      spawnCoreDeathDebris();
+    } else if (stateElapsed >= darkenEnd && stateElapsed < collapseEnd) {
+      spawnCoreDeathDebris();
+      if (frame % 2 === 0) spawnCoreDeathDebris();
+    }
+    if (stateElapsed === dimEnd) {
+      playElectricCrackles({ count: 8, spacing: 0.018, volume: 0.24 });
+      playSynth({ type: 'square', freq: 2200, freqEnd: 240, duration: 0.08, attack: 0.001, decay: 0.02, sustain: 0.12, release: 0.03, volume: 0.08, filterType: 'highpass', filterFreq: 1000, delaySend: 0.05 });
+    }
+    if (stateElapsed === darkenEnd) sfxCoreDyingCollapse();
+
+    for (let i = coreDeathDebris.length - 1; i >= 0; i--) {
+      const p = coreDeathDebris[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rotation += p.rotSpeed;
+      p.life++;
+      if (p.life >= p.maxLife) coreDeathDebris.splice(i, 1);
+    }
+
+    if (stateElapsed >= collapseEnd) {
+      coreBossDefeated = true;
+      coreBossDefeatFrame = frame;
+    }
+  } else if (miniBossAttackState === 'coreOverloadDying') {
+    const buildupEnd = CORE_OVERLOAD_BUILDUP_DURATION;
+    const flashEnd = buildupEnd + CORE_OVERLOAD_FLASH_DURATION;
+    const breakdownEnd = flashEnd + CORE_OVERLOAD_BREAKDOWN_DURATION;
+
+    if (stateElapsed < buildupEnd) {
+      // increasing frequency of electrical arcs across the surface as the overload builds
+      const buildupProgress = stateElapsed / buildupEnd;
+      const arcChance = 0.1 + buildupProgress * 0.5;
+      if (Math.random() < arcChance) {
+        coreOverloadArcs.push({
+          angle1: Math.random() * Math.PI * 2,
+          angle2: Math.random() * Math.PI * 2,
+          life: 0,
+          maxLife: 8 + Math.random() * 8
+        });
+      }
+    } else if (stateElapsed === buildupEnd) {
+      sfxCoreOverloadFlash();
+    } else if (stateElapsed === flashEnd) {
+      sfxCoreOverloadBreakdown();
+    } else if (stateElapsed >= flashEnd && stateElapsed < breakdownEnd) {
+      spawnCoreDeathDebris();
+      if (frame % 2 === 0) spawnCoreDeathDebris();
+    }
+
+    for (let i = coreOverloadArcs.length - 1; i >= 0; i--) {
+      const a = coreOverloadArcs[i];
+      a.life++;
+      if (a.life >= a.maxLife) coreOverloadArcs.splice(i, 1);
+    }
+
+    for (let i = coreDeathDebris.length - 1; i >= 0; i--) {
+      const p = coreDeathDebris[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rotation += p.rotSpeed;
+      p.life++;
+      if (p.life >= p.maxLife) coreDeathDebris.splice(i, 1);
+    }
+
+    if (stateElapsed >= breakdownEnd) {
+      coreBossDefeated = true;
+      coreBossDefeatFrame = frame;
+      coreDeathDebris = [];
+      coreOverloadArcs = [];
+    }
+  }
+}
+
 function update() {
   noteFrameTime();
   syncGlowDangerSound();
@@ -829,6 +1325,7 @@ function update() {
         else endGame();
       }
 
+      if (state === 'playing') {
       const bounds = terrainBoundsAt(ship.x);
       if (bounds) {
         if (shipTop <= bounds.top || shipBottom >= bounds.bottom) {
@@ -840,6 +1337,7 @@ function update() {
             tryEndGame('terrain');
           }
         }
+      }
       }
     } else {
       for (let g of gates) {
@@ -2087,593 +2585,3 @@ async function hydrateDurableSave() {
   durableHydrated = true;
   if (state === 'settings' || state === 'options' || state === 'home' || state === 'statistics' || state === 'achievements') updateOverlay();
 }
-function exportPlayerSaveFile() {
-  const blob = collectDurableSave();
-  const text = JSON.stringify(blob, null, 2);
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-  a.download = 'synth-flight-save-' + blob.saveId + '.json';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    URL.revokeObjectURL(a.href);
-    a.remove();
-  }, 500);
-  writeAllDurableLayers(blob);
-}
-async function importPlayerSaveObject(parsed) {
-  if (!parsed || typeof parsed !== 'object' || !parsed.profile) throw new Error('Not a Synth Flight save');
-  if (parsed.saveId) persistSaveId(parsed.saveId);
-  applyDurableSave(mergeDurableSaves([parsed, collectDurableSave()]));
-  await writeAllDurableLayers(collectDurableSave());
-  updateOverlay();
-}
-function promptRestoreSaveId() {
-  const next = normalizeSaveId(window.prompt('Enter your SAVE ID to restore this profile (from another device or after clearing site data).', playerSaveId));
-  if (!next) return;
-  persistSaveId(next);
-  fetchServerSave(next).then(async (server) => {
-    const idb = await readIndexedDbSave();
-    if (!server && !idb) {
-      window.alert('No cloud save found for ' + next + '. Import a backup file, or keep playing to create a new save under this ID.');
-      return;
-    }
-    applyDurableSave(mergeDurableSaves([server, idb, collectDurableSave()]));
-    await writeAllDurableLayers(collectDurableSave());
-    updateOverlay();
-  });
-}
-function copySaveIdToClipboard() {
-  const id = ensurePlayerSaveId();
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(id).catch(() => { window.alert('SAVE ID: ' + id); });
-  } else {
-    window.alert('SAVE ID: ' + id);
-  }
-}
-
-function setAudioBusVolume(bus, unit, opts) {
-  const next = clampAudioVolume(unit, null);
-  if (next == null) return;
-  if (bus === 'sfx') audioSettings.sfxVolume = next;
-  else if (bus === 'bgm') audioSettings.bgmVolume = next;
-  else return;
-  applyAudioSettings();
-  if (opts && opts.save) saveAudioSettings();
-  if (state === 'settings') {
-    const pct = overlay.querySelector('[data-volume-pct="' + bus + '"]');
-    if (pct) pct.textContent = audioVolumePercent(next) + '%';
-  }
-}
-
-function handleAudioVolumeInput(e) {
-  const slider = e.target && e.target.closest ? e.target.closest('.settings-volume-slider') : null;
-  if (!slider || state !== 'settings') return;
-  setAudioBusVolume(slider.dataset.volume, Number(slider.value) / 100, { save: e.type === 'change' });
-  if (e.type === 'change' && slider.dataset.volume === 'sfx' && audioSettings.sfxEnabled) {
-    try { sfxUiClick(); } catch (err) { /* preview must never block settings */ }
-  }
-}
-overlay.addEventListener('input', handleAudioVolumeInput);
-overlay.addEventListener('change', handleAudioVolumeInput);
-
-function resetAudioVolumesToDefault() {
-  audioSettings.sfxVolume = DEFAULT_SFX_VOLUME;
-  audioSettings.bgmVolume = DEFAULT_BGM_VOLUME;
-  applyAudioSettings();
-  saveAudioSettings();
-  lastRenderedOverlayState = null;
-}
-
-function toggleSfxEnabled() {
-  audioSettings.sfxEnabled = !audioSettings.sfxEnabled;
-  saveAudioSettings();
-  applyAudioSettings();
-  if (audioSettings.sfxEnabled) sfxUiClick(); // audible confirmation only when turning it back on
-}
-function toggleBgmEnabled() {
-  audioSettings.bgmEnabled = !audioSettings.bgmEnabled;
-  saveAudioSettings();
-  applyAudioSettings();
-  if (!audioSettings.bgmEnabled) stopBgm(); // silence immediately rather than waiting for the next scheduled step
-}
-
-function initAudio() {
-  if (audioCtx) return;
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return; // no Web Audio support -- game still works, just silently
-  audioCtx = new AC();
-  masterGain = audioCtx.createGain();
-  const compressor = audioCtx.createDynamicsCompressor();
-  compressor.threshold.value = -16;
-  compressor.knee.value = 10;
-  compressor.ratio.value = 2.8;
-  compressor.attack.value = 0.008;
-  compressor.release.value = 0.18;
-  masterGain.connect(compressor);
-  compressor.connect(audioCtx.destination);
-
-  sfxGain = audioCtx.createGain();
-  sfxGain.connect(masterGain);
-  bgmGain = audioCtx.createGain();
-  bgmGain.connect(masterGain);
-
-  const delay = audioCtx.createDelay(0.8);
-  delay.delayTime.value = 0.46;
-  const delayFeedback = audioCtx.createGain();
-  delayFeedback.gain.value = 0.42;
-  const delayWet = audioCtx.createGain();
-  delayWet.gain.value = 0.38;
-  delayInput = audioCtx.createGain();
-  delayInput.connect(delay);
-  delay.connect(delayFeedback);
-  delayFeedback.connect(delay);
-  delay.connect(delayWet);
-  delayWet.connect(masterGain);
-
-  applyAudioSettings();
-}
-
-function unlockAudio() {
-  if (audioUnlocked) return;
-  initAudio();
-  if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
-  }
-  audioUnlocked = true;
-  prefetchThemeBgm(0);
-  if (state === 'zone-select') prefetchThemeBgm(zoneSelectPreviewIdx);
-}
-
-function playSynth({
-  type = 'sawtooth',
-  freq = 440,
-  freqEnd = null,
-  when = null,
-  duration = 0.2,
-  attack = 0.01,
-  decay = 0.08,
-  sustain = 0.45,
-  release = 0.12,
-  volume = 0.2,
-  filterType = 'lowpass',
-  filterFreq = 2400,
-  filterQ = 1.1,
-  filterEnd = null,
-  detune = 0,
-  dest = sfxGain,
-  delaySend = 0,
-} = {}) {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted || !dest) return;
-  const t0 = when != null ? when : audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  osc.type = type;
-  osc.frequency.setValueAtTime(Math.max(20, freq), t0);
-  if (freqEnd != null) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), t0 + duration);
-  if (detune) osc.detune.setValueAtTime(detune, t0);
-  const filter = audioCtx.createBiquadFilter();
-  filter.type = filterType;
-  filter.Q.value = filterQ;
-  filter.frequency.setValueAtTime(Math.max(60, filterFreq), t0);
-  if (filterEnd != null) filter.frequency.exponentialRampToValueAtTime(Math.max(60, filterEnd), t0 + duration);
-  const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.0001, t0);
-  gain.gain.linearRampToValueAtTime(volume, t0 + Math.max(0.001, attack));
-  gain.gain.linearRampToValueAtTime(Math.max(0.0001, volume * sustain), t0 + attack + decay);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration + release);
-  osc.connect(filter);
-  filter.connect(gain);
-  gain.connect(dest);
-  if (delaySend > 0 && delayInput) {
-    const send = audioCtx.createGain();
-    send.gain.value = delaySend;
-    gain.connect(send);
-    send.connect(delayInput);
-  }
-  osc.start(t0);
-  osc.stop(t0 + duration + release + 0.03);
-}
-
-function playNoiseBurst({
-  duration = 0.2,
-  filterFreq = 1200,
-  filterType = 'lowpass',
-  filterEnd = null,
-  filterQ = 0.8,
-  volume = 1,
-  attack = 0,
-  when = null,
-  dest = sfxGain,
-  delaySend = 0,
-} = {}) {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted || !dest) return;
-  const t0 = when != null ? when : audioCtx.currentTime;
-  const bufferSize = Math.max(1, Math.floor(audioCtx.sampleRate * duration));
-  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-  const noise = audioCtx.createBufferSource();
-  noise.buffer = buffer;
-  const filter = audioCtx.createBiquadFilter();
-  filter.type = filterType;
-  filter.Q.value = filterQ;
-  filter.frequency.setValueAtTime(filterFreq, t0);
-  if (filterEnd != null) filter.frequency.exponentialRampToValueAtTime(Math.max(80, filterEnd), t0 + duration);
-  const gain = audioCtx.createGain();
-  const peak = Math.max(0.0001, volume);
-  if (attack > 0) {
-    gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.linearRampToValueAtTime(peak, t0 + attack);
-    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
-  } else {
-    gain.gain.setValueAtTime(peak, t0);
-    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
-  }
-  noise.connect(filter);
-  filter.connect(gain);
-  gain.connect(dest);
-  if (delaySend > 0 && delayInput) {
-    const send = audioCtx.createGain();
-    send.gain.value = delaySend;
-    gain.connect(send);
-    send.connect(delayInput);
-  }
-  noise.start(t0);
-  noise.stop(t0 + duration);
-}
-
-// SNES / Mega Man X-style tone: triangle+sine (sample-like), lowpass, short
-// echo. dutyCycle only sets brightness now -- 0.125 dark, 0.25 mid, 0.5 bright.
-function playPulseTone({
-  freq = 440,
-  dutyCycle = 0.25,
-  freqSteps = null,
-  duration = 0.15,
-  attack = 0.006,
-  decay = 0.04,
-  sustain = 0.55,
-  release = 0.08,
-  volume = 1,
-  dest = sfxGain,
-  delaySend = 0,
-} = {}) {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted || !dest) return;
-  const now = audioCtx.currentTime;
-  const brightness = dutyCycle <= 0.15 ? 1600 : dutyCycle <= 0.3 ? 2400 : 3400;
-  const stopAt = now + duration + release + 0.03;
-
-  const makeVoice = (type, volMul, detuneCents) => {
-    const osc = audioCtx.createOscillator();
-    osc.type = type;
-    if (detuneCents) osc.detune.setValueAtTime(detuneCents, now);
-    if (freqSteps) {
-      let t = now;
-      for (const step of freqSteps) {
-        osc.frequency.setValueAtTime(Math.max(20, step.freq), t);
-        t += step.time;
-      }
-    } else {
-      osc.frequency.setValueAtTime(Math.max(20, freq), now);
-    }
-    const filter = audioCtx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = brightness;
-    filter.Q.value = 0.8;
-    const gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(volume * volMul, now + Math.max(0.001, attack));
-    gain.gain.linearRampToValueAtTime(Math.max(0.0001, volume * volMul * sustain), now + attack + decay);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration + release);
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(dest);
-    if (delayInput) {
-      const send = audioCtx.createGain();
-      send.gain.value = delaySend > 0 ? delaySend : 0.22;
-      gain.connect(send);
-      send.connect(delayInput);
-    }
-    osc.start(now);
-    osc.stop(stopAt);
-  };
-
-  makeVoice('triangle', 1, 0);
-  makeVoice('sine', 0.5, 6);
-}
-
-// ---- SFX (SNES / Mega Man X: punchy blips, echo, no harsh NES squares) ----
-function sfxUiClick() {
-  playPulseTone({
-    dutyCycle: 0.25,
-    freqSteps: [{ freq: 1046.5, time: 0.035 }, { freq: 1568, time: 0.04 }],
-    duration: 0.07, attack: 0.002, decay: 0.012, sustain: 0.65, release: 0.02, volume: 0.42,
-  });
-}
-
-function sfxCollision() {
-  playNoiseBurst({ duration: 0.22, filterFreq: 900, filterEnd: 180, filterType: 'lowpass', filterQ: 0.55, volume: 0.48 });
-  playNoiseBurst({ duration: 0.07, filterFreq: 3200, filterType: 'highpass', volume: 0.22 });
-  playSynth({ type: 'sine', freq: 92, freqEnd: 32, duration: 0.24, attack: 0.002, decay: 0.06, sustain: 0.35, release: 0.1, volume: 0.3, filterFreq: 220, delaySend: 0 });
-}
-
-function sfxGhostHit() {
-  playNoiseBurst({ duration: 0.05, filterFreq: 4200, filterType: 'highpass', volume: 0.18 });
-  playSynth({ type: 'sine', freq: 1680, freqEnd: 620, duration: 0.08, attack: 0.001, decay: 0.02, sustain: 0.2, release: 0.04, volume: 0.16, filterFreq: 2800, delaySend: 0.12 });
-}
-
-const HAZARD_FAMILY = {
-  gate: 'rock', lightning: 'electric', barrier: 'rock', hbar: 'rock', pendulum: 'whoosh',
-  lbolt: 'electric', blackhole: 'gravity', windvortex: 'whoosh', cloudarc: 'whoosh',
-  stormchargebolttelegraph: 'electric', stormchargebolt: 'electric',
-  securitydrone: 'drone', billboard: 'rock', turret: 'metal', turretshot: 'laser',
-  searchlight: 'laser', zone2storm: 'whoosh', orbiter: 'plasma', arcplanet: 'plasma',
-  signalcorruption: 'electric', emp: 'electric', pulsingorb: 'plasma', boomerang: 'whoosh',
-  echotrail: 'echo', lensingzone: 'gravity', supernova: 'nova', supernovadebris: 'nova',
-  wreckage: 'rock', lasergrid: 'laser', asteroid: 'rock', splitrock: 'rock', fireball: 'fire',
-  toxicpool: 'drip', geyser: 'fire', movingdoor: 'metal', sparkhub: 'electric',
-  sparkprojectile: 'electric', accesskey: 'key', specialdoor: 'metal', shootingstar: 'whoosh',
-  aciddrip: 'drip', terrain: 'rock',
-  bossattack: 'plasma', bossvolleytelegraph: 'laser', bossember: 'fire', bossashcloud: 'whoosh',
-  bosschargebeamtelegraph: 'laser', bosschargebeam: 'laser', bossragepulse: 'bossHeavy',
-  bossdiagonalring: 'bossHeavy', bossdrone: 'fire',
-  corespark: 'electric', coreLaser: 'laser', coreLaserActive: 'laser', coreLaserTelegraph: 'laser',
-  coreBulkhead: 'metal', coreBulkheadActive: 'metal', coreBulkheadTelegraph: 'metal',
-  coreEmp: 'electric', coreEmpActive: 'electric', coreEmpTelegraph: 'electric', coreEmpPulse: 'electric',
-  coreCrossfire: 'laser', coreCrossfireActive: 'laser', coreCrossfireTelegraph: 'laser',
-  coreOrbit: 'plasma', coreEyeBeam: 'laser', coreTesla: 'electric',
-  coreSparkDeploy: 'electric', coreFlame: 'fire', flameWallActive: 'fire', flameWallTelegraph: 'fire',
-  barrageActive: 'fire', barrageTelegraph: 'fire', charging: 'fire', chargingClose: 'fire',
-  generic: 'generic',
-};
-
-function hazardFamily(type) {
-  if (!type) return 'generic';
-  if (HAZARD_FAMILY[type]) return HAZARD_FAMILY[type];
-  const key = Object.keys(HAZARD_FAMILY).find((k) => type.startsWith(k) || type.includes(k));
-  return key ? HAZARD_FAMILY[key] : 'generic';
-}
-
-const lastHazardSfxAt = {};
-function sfxHazardRateOk(key, minMs) {
-  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-  if (lastHazardSfxAt[key] && now - lastHazardSfxAt[key] < minMs) return false;
-  lastHazardSfxAt[key] = now;
-  return true;
-}
-
-function playElectricCrackles({ count = 5, spacing = 0.013, volume = 0.24, when = null } = {}) {
-  if (!audioUnlocked || !audioCtx) return;
-  const t0 = when != null ? when : audioCtx.currentTime;
-  for (let i = 0; i < count; i++) {
-    playNoiseBurst({
-      duration: 0.016 + (i % 3) * 0.008,
-      filterFreq: 2800 + (i % 4) * 700,
-      filterType: i % 2 ? 'highpass' : 'bandpass',
-      filterQ: 3.2,
-      volume: volume * (1 - i * 0.11),
-      when: t0 + i * spacing,
-      delaySend: 0.06,
-    });
-  }
-}
-
-function playStormChargeTelegraph() {
-  if (!audioUnlocked || !audioCtx) return;
-  playNoiseBurst({ duration: 0.55, filterFreq: 900, filterEnd: 1600, filterType: 'bandpass', filterQ: 0.7, volume: 0.12, delaySend: 0.08 });
-  playElectricCrackles({ count: 4, spacing: 0.16, volume: 0.12 });
-}
-
-function playThunderRoll(when) {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted || !sfxGain) return;
-  const t0 = when != null ? when : audioCtx.currentTime;
-  const sr = audioCtx.sampleRate;
-  const dur = 2.2;
-  const n = Math.max(1, Math.floor(sr * dur));
-  const buf = audioCtx.createBuffer(1, n, sr);
-  const data = buf.getChannelData(0);
-  let brown = 0;
-  for (let i = 0; i < n; i++) {
-    brown = (brown + (Math.random() * 2 - 1) * 0.03) * 0.985;
-    data[i] = brown * 4.2;
-  }
-  const src = audioCtx.createBufferSource();
-  src.buffer = buf;
-  const lp = audioCtx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.Q.value = 0.65;
-  lp.frequency.setValueAtTime(480, t0);
-  lp.frequency.exponentialRampToValueAtTime(110, t0 + dur);
-  const bp = audioCtx.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.frequency.setValueAtTime(190, t0);
-  bp.Q.value = 0.7;
-  bp.frequency.exponentialRampToValueAtTime(95, t0 + dur);
-  const g = audioCtx.createGain();
-  g.gain.setValueAtTime(0.0001, t0);
-  g.gain.linearRampToValueAtTime(0.78, t0 + 0.14);
-  g.gain.exponentialRampToValueAtTime(0.26, t0 + 0.32);
-  g.gain.linearRampToValueAtTime(0.7, t0 + 0.5);
-  g.gain.exponentialRampToValueAtTime(0.2, t0 + 0.82);
-  g.gain.linearRampToValueAtTime(0.4, t0 + 1.12);
-  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-  src.connect(lp);
-  lp.connect(bp);
-  bp.connect(g);
-  g.connect(sfxGain);
-  if (delayInput) {
-    const send = audioCtx.createGain();
-    send.gain.value = 0.28;
-    g.connect(send);
-    send.connect(delayInput);
-  }
-  src.start(t0);
-  src.stop(t0 + dur + 0.04);
-}
-
-function playStormThunderStrike() {
-  if (!audioUnlocked || !audioCtx) return;
-  const t0 = audioCtx.currentTime;
-  playThunderRoll(t0);
-  playNoiseBurst({ duration: 0.5, filterFreq: 260, filterEnd: 90, filterType: 'lowpass', volume: 0.52, attack: 0.08, when: t0, delaySend: 0.22 });
-  playNoiseBurst({ duration: 0.62, filterFreq: 200, filterEnd: 85, filterType: 'lowpass', volume: 0.36, attack: 0.06, when: t0 + 0.34, delaySend: 0.26 });
-  playNoiseBurst({ duration: 0.8, filterFreq: 150, filterEnd: 80, filterType: 'lowpass', volume: 0.26, attack: 0.08, when: t0 + 0.78, delaySend: 0.3 });
-  playSynth({ type: 'triangle', freq: 86, freqEnd: 46, duration: 0.7, attack: 0.08, decay: 0.16, sustain: 0.32, release: 0.36, volume: 0.16, filterFreq: 170, delaySend: 0.1, when: t0 });
-}
-
-function isHazardTelegraph(type) {
-  return /telegraph/i.test(type || '');
-}
-
-function isChargeBeamType(type) {
-  return /chargebeam|coreLaser|crossfire|eyeBeam|searchlight|lasergrid/i.test(type || '');
-}
-
-let lastUpdateTimeMs = 0;
-let smoothedFrameSec = 1 / 60;
-function noteFrameTime() {
-  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-  if (lastUpdateTimeMs > 0) {
-    const dt = (now - lastUpdateTimeMs) / 1000;
-    if (dt > 0.004 && dt < 0.08) smoothedFrameSec = smoothedFrameSec * 0.85 + dt * 0.15;
-  }
-  lastUpdateTimeMs = now;
-}
-function framesToSeconds(frames) {
-  return Math.max(0.05, (frames || 0) * smoothedFrameSec);
-}
-
-let lastBossChargeBeamSfx = { duration: 2, size: 1, isSuperBeam: false };
-let megaManChargeCtl = null;
-
-const CHARGE_TELEGRAPH_OPTIONS = [
-  { id: 'xCharge', name: 'X CHARGE' },
-  { id: 'sweep', name: 'SWEEP WHINE' },
-  { id: 'heartbeat', name: 'HEARTBEAT' },
-  { id: 'static', name: 'STATIC BUILD' },
-];
-
-function currentChargeTelegraphId() {
-  const id = audioSettings.chargeTelegraph;
-  return CHARGE_TELEGRAPH_OPTIONS.some((o) => o.id === id) ? id : 'static';
-}
-
-function currentChargeTelegraphLabel() {
-  return CHARGE_TELEGRAPH_OPTIONS.find((o) => o.id === currentChargeTelegraphId()).name;
-}
-
-function cycleChargeTelegraph(dir) {
-  const ids = CHARGE_TELEGRAPH_OPTIONS.map((o) => o.id);
-  const i = Math.max(0, ids.indexOf(currentChargeTelegraphId()));
-  audioSettings.chargeTelegraph = ids[(i + dir + ids.length) % ids.length];
-  saveAudioSettings();
-  playChargeTelegraph({ duration: framesToSeconds(BOSS_CHARGE_BEAM_TELEGRAPH_DURATION), size: 1 });
-}
-
-const GLOW_DANGER_OPTIONS = [
-  { id: 'siren', name: 'SIREN PULSE' },
-  { id: 'overheat', name: 'OVERHEAT' },
-  { id: 'klaxon', name: 'RED ALERT' },
-  { id: 'meltdown', name: 'MELTDOWN' },
-];
-
-function currentGlowDangerId() {
-  const id = audioSettings.glowDanger;
-  return GLOW_DANGER_OPTIONS.some((o) => o.id === id) ? id : 'siren';
-}
-
-function currentGlowDangerLabel() {
-  return GLOW_DANGER_OPTIONS.find((o) => o.id === currentGlowDangerId()).name;
-}
-
-function cycleGlowDanger(dir) {
-  const ids = GLOW_DANGER_OPTIONS.map((o) => o.id);
-  const i = Math.max(0, ids.indexOf(currentGlowDangerId()));
-  audioSettings.glowDanger = ids[(i + dir + ids.length) % ids.length];
-  saveAudioSettings();
-  refreshSfxGlowDangerUi();
-  if (typeof isGlowDangerTesterLoop === 'function' && isGlowDangerTesterLoop()) {
-    glowDangerPreviewUrgency = 0.85;
-    stopGlowDangerSound();
-    startGlowDangerSound();
-    updateGlowDangerUrgency();
-    return;
-  }
-  previewGlowDangerSound();
-}
-
-function stopMegaManCharge(fadeSec = 0.04) {
-  if (!megaManChargeCtl || !audioCtx) return;
-  const ctl = megaManChargeCtl;
-  megaManChargeCtl = null;
-  const t = audioCtx.currentTime;
-  const fade = Math.max(0.01, fadeSec);
-  try {
-    ctl.master.gain.cancelScheduledValues(t);
-    ctl.master.gain.setValueAtTime(Math.max(0.0001, ctl.master.gain.value), t);
-    ctl.master.gain.linearRampToValueAtTime(0.0001, t + fade);
-  } catch (e) { /* already stopped */ }
-  const halt = t + fade + 0.02;
-  for (const node of ctl.nodes) {
-    try { node.stop(halt); } catch (e) { /* already stopped */ }
-  }
-}
-
-function playMegaManCharge({ duration = 2, size = 1, isSuperBeam = false } = {}) {
-  if (!audioUnlocked || !audioCtx || audioSettings.muted) return;
-  stopMegaManCharge(0.02);
-  const now = audioCtx.currentTime;
-  const dur = Math.max(0.12, duration);
-  const s = Math.min(6, Math.max(1, size));
-  const vol = (0.055 + s * 0.022) * (isSuperBeam ? 1.25 : 1);
-
-  const master = audioCtx.createGain();
-  master.gain.setValueAtTime(1, now);
-  if (dur > 0.06) master.gain.setValueAtTime(1, now + dur - 0.05);
-  master.gain.linearRampToValueAtTime(0.0001, now + dur);
-  master.connect(sfxGain);
-
-  const osc = audioCtx.createOscillator();
-  osc.type = 'square';
-  osc.frequency.setValueAtTime(200, now);
-  osc.frequency.exponentialRampToValueAtTime(isSuperBeam ? 880 : 720, now + dur);
-
-  const harm = audioCtx.createOscillator();
-  harm.type = 'sine';
-  harm.frequency.setValueAtTime(400, now);
-  harm.frequency.exponentialRampToValueAtTime(isSuperBeam ? 1760 : 1440, now + dur);
-
-  const filt = audioCtx.createBiquadFilter();
-  filt.type = 'lowpass';
-  filt.Q.value = 0.9;
-  filt.frequency.setValueAtTime(900, now);
-  filt.frequency.exponentialRampToValueAtTime(2800, now + dur);
-
-  const amp = audioCtx.createGain();
-  amp.gain.setValueAtTime(vol * 0.5, now);
-
-  const pulse = audioCtx.createOscillator();
-  pulse.type = 'square';
-  pulse.frequency.setValueAtTime(5.5, now);
-  pulse.frequency.exponentialRampToValueAtTime(isSuperBeam ? 22 : 16, now + dur * 0.85);
-
-  const pulseDepth = audioCtx.createGain();
-  pulseDepth.gain.value = vol * 0.5;
-  pulse.connect(pulseDepth);
-  pulseDepth.connect(amp.gain);
-
-  osc.connect(filt);
-  harm.connect(filt);
-  filt.connect(amp);
-  amp.connect(master);
-
-  const stopAt = now + dur + 0.04;
-  osc.start(now);
-  harm.start(now);
-  pulse.start(now);
-  osc.stop(stopAt);
-  harm.stop(stopAt);
-  pulse.stop(stopAt);
-
-  megaManChargeCtl = { master, nodes: [osc, harm, pulse] };
-}
-

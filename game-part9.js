@@ -166,7 +166,9 @@ window.addEventListener('orientationchange', checkOrientation);
 try {
   checkOrientation();
   resetGame();
-  state = 'home';
+  if (FORK_GALLERY_ACTIVE) startForkGallery();
+  else if (INFERNO_PLAYTEST) startInfernoPlaytest();
+  else state = 'home';
   updateOverlay();
   window.SYNTH_FLIGHT_BOOTED = true;
   hydrateDurableSave();
