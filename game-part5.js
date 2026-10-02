@@ -2614,7 +2614,8 @@ function getBgmElement(src) {
   if (!bgmElementCache[src]) {
     const el = new Audio();
     el.preload = 'auto';
-    el.src = src;
+    el.playsInline = true;
+    el.src = src + (src.includes('?') ? '&' : '?') + 'build=snes381';
     bgmElementCache[src] = el;
   }
   return bgmElementCache[src];
@@ -2672,21 +2673,17 @@ function playBgm(profileName) {
 }
 
 function startHtmlBgm(track) {
-  if (!audioCtx || !bgmGain || audioSettings.muted) return;
+  if (audioSettings.muted) return;
   stopSynthBgm();
   const prevEl = bgmHtmlAudio;
-  const prevGain = bgmFileGainNode;
-  const t0 = audioCtx.currentTime;
-  const fade = 0.18;
   const el = getBgmElement(track.src);
-  const media = getBgmMediaNode(track.src, el);
-  const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.0001, t0);
-  gain.gain.exponentialRampToValueAtTime(0.8, t0 + fade);
-  try { media.disconnect(); } catch (e) { /* first connect */ }
-  media.connect(gain);
-  gain.connect(bgmGain);
-  el.volume = 1;
+  // Keep file-backed music on the HTMLAudio output instead of routing it
+  // through MediaElementAudioSource. itch.io may serve game assets from a
+  // separate CDN origin; browsers deliberately silence cross-origin media
+  // when it is connected to Web Audio, even though direct playback is valid.
+  el.volume = (!audioSettings.muted && audioSettings.bgmEnabled)
+    ? Math.max(0, Math.min(1, audioSettings.bgmVolume * 0.8))
+    : 0;
   el.loop = track.loopEnd == null;
   const offset = track.start != null ? track.start : 0;
   try { el.currentTime = offset; } catch (e) { /* not seekable yet */ }
@@ -2696,21 +2693,17 @@ function startHtmlBgm(track) {
       if (bgmFileTrackId !== track.id) return;
       bgmFileTrackId = null;
       playBgm('standard');
+      // Keep the failed file marked for this zone so the draw loop does not
+      // cancel the synth fallback and retry a rejected play() every frame.
+      bgmFileTrackId = track.id;
     });
   }
   bgmHtmlAudio = el;
-  bgmFileGainNode = gain;
+  bgmFileGainNode = null;
   bgmFileTrackId = track.id;
   bgmActiveFileTrack = track;
   if (prevEl && prevEl !== el) {
     try { prevEl.pause(); } catch (e) { /* already paused */ }
-  }
-  if (prevGain && prevGain !== gain) {
-    try {
-      prevGain.gain.cancelScheduledValues(t0);
-      prevGain.gain.setValueAtTime(Math.max(0.0001, prevGain.gain.value), t0);
-      prevGain.gain.exponentialRampToValueAtTime(0.0001, t0 + fade);
-    } catch (e) { /* already stopped */ }
   }
 }
 

@@ -10,12 +10,13 @@ import shutil
 import sys
 import time
 import urllib.parse
+import zipfile
 
 ROOT = Path(__file__).resolve().parent
 HOST = "127.0.0.1"
 PORT = 8777
 GAME_PART_MAX_BYTES = 120000
-GAME_CACHE = "snes377"
+GAME_CACHE = "snes386"
 PLAYER_SAVE_DIR = ROOT / "player-saves"
 PLAYER_SAVE_ID_RE = re.compile(r"^[A-Z0-9]{6,16}$")
 PLAYER_SAVE_MAX_BYTES = 262144
@@ -50,13 +51,18 @@ def split_game_js():
     return len(chunks)
 
 
-PLAYER_BUILD_FLAG = "<script>window.SYNTH_FLIGHT_PLAYER_BUILD=true;</script>\n"
+PLAYER_BUILD_FLAG = (
+    "<script>"
+    "window.SYNTH_FLIGHT_PLAYER_BUILD=true;"
+    "document.documentElement.classList.add('player-build');"
+    "</script>\n"
+)
 
 
 def apply_player_build_html(html):
     html = re.sub(r"<title>Synth Flight[^<]*</title>", "<title>Synth Flight</title>", html)
     if "SYNTH_FLIGHT_PLAYER_BUILD" not in html:
-        html = html.replace("<body>", "<body>\n" + PLAYER_BUILD_FLAG, 1)
+        html = html.replace("<head>", "<head>\n" + PLAYER_BUILD_FLAG, 1)
     return html
 
 
@@ -102,11 +108,29 @@ def write_player_package():
     return dest
 
 
+def write_player_zip(dest):
+    """Create an itch.io ZIP with portable forward-slash entry names."""
+    out = ROOT / "Synth-Flight-itch.zip"
+    if out.exists():
+        out.unlink()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for src in sorted(dest.rglob("*")):
+            if src.is_file():
+                archive.write(src, src.relative_to(dest).as_posix())
+    return out
+
+
 def write_index_part_tags(part_count):
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     html = re.sub(
         r"<title>Synth Flight[^<]*</title>",
         "<title>Synth Flight %s</title>" % GAME_CACHE,
+        html,
+        count=1,
+    )
+    html = re.sub(
+        r'<script src="custom-levels\.js(?:\?v=[^"]*)?"></script>',
+        '<script src="custom-levels.js?v=%s"></script>' % GAME_CACHE,
         html,
         count=1,
     )
@@ -343,8 +367,9 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     if "--package" in sys.argv:
         dest = write_player_package()
+        archive = write_player_zip(dest)
         print("Player build: %s" % dest)
-        print("Zip that folder and upload it, or run a static server from inside it.")
+        print("Itch ZIP: %s" % archive)
         sys.exit(0)
     offline = build_offline_html()
     n = len(list(ROOT.glob("game-part*.js")))

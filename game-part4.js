@@ -1,3 +1,22 @@
+function queueDurableSave() {
+  if (durableWriteLock) return;
+  clearTimeout(durableSaveTimer);
+  durableSaveTimer = setTimeout(() => {
+    writeAllDurableLayers(collectDurableSave());
+  }, 700);
+}
+async function hydrateDurableSave() {
+  ensurePlayerSaveId();
+  const local = collectDurableSave();
+  const [idb, server] = await Promise.all([readIndexedDbSave(), fetchServerSave(playerSaveId)]);
+  const merged = mergeDurableSaves([idb, server, local]);
+  if (durableProgressScore(merged) >= durableProgressScore(local) || (server && durableProgressScore(server) > 0) || (idb && durableProgressScore(idb) > durableProgressScore(local))) {
+    applyDurableSave(merged);
+  }
+  await writeAllDurableLayers(collectDurableSave());
+  durableHydrated = true;
+  if (state === 'settings' || state === 'options' || state === 'home' || state === 'statistics' || state === 'achievements') updateOverlay();
+}
 function exportPlayerSaveFile() {
   const blob = collectDurableSave();
   const text = JSON.stringify(blob, null, 2);

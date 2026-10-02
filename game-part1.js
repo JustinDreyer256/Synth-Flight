@@ -1521,8 +1521,8 @@ let clearTimeMs = 0;
 const DIFFICULTY_CONFIG = {
   easy: { lives: 9, continues: 3, invincibilityFrames: true, freeHitsPerLife: Infinity },
   normal: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 1 },
-  hard: { lives: 9, continues: 1, invincibilityFrames: false, freeHitsPerLife: 0 },
-  extra: { lives: 1, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
+  hard: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 0 },
+  extra: { lives: 3, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
 };
 const INVINCIBILITY_DURATION_MS = 1500; // 1.5 seconds of play time -- how long a granted protection window lasts. Measured on the game clock so pause does not burn it down.
 const FREE_HIT_COOLDOWN_MS = 4000; // 4 seconds of play time -- how often a hazard touch can be forgiven outright (Easy / Overdrive, or Normal's single first hit). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
@@ -1844,7 +1844,7 @@ let coreEyeBeamY = 0; // current tracked (or locked) target height
 // beam's single aimed shot
 const CORE_TESLA_CHARGE_DURATION = 75; // telegraph
 const CORE_TESLA_COOLDOWN = 110; // rest before the next burst
-const CORE_TESLA_PROJECTILE_SPEED = 4.2; // px/frame -- fast, but the ship only needs to find the gap, not outrun it
+const CORE_TESLA_PROJECTILE_SPEED = 3.63258; // px/frame -- another 7% slower than 3.906
 const CORE_TESLA_PROJECTILE_R = 9;
 const CORE_TESLA_SLOT_FRACS = [0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 0.95]; // 7 target heights across the play area, one left empty each burst
 let coreTeslaState = 'charging'; // 'charging' | 'cooldown' (bursts fire instantly at the charge->cooldown transition)

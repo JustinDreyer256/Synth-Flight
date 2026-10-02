@@ -128,9 +128,9 @@ window.SHIPPED_CUSTOM_LEVELS = {
     null,
     [
       {
-        "triggerDistance": 123.33333333333331,
-        "yFrac": 0.2899531637527301,
-        "coreR": 325,
+        "triggerDistance": 109.33333333333331,
+        "yFrac": 0.2547026999308377,
+        "coreR": 290,
         "reachR": 510
       },
       {
@@ -140,15 +140,15 @@ window.SHIPPED_CUSTOM_LEVELS = {
         "reachR": 615
       },
       {
-        "triggerDistance": 591.2,
-        "yFrac": 0.48410596026490066,
-        "coreR": 195,
-        "reachR": 320
+        "triggerDistance": 593.0666666666667,
+        "yFrac": 0.5008138555442245,
+        "coreR": 160,
+        "reachR": 270
       },
       {
-        "triggerDistance": 743.7333333333332,
-        "yFrac": 0.12980132450331128,
-        "coreR": 400,
+        "triggerDistance": 746.9333333333333,
+        "yFrac": 0.16319650075563039,
+        "coreR": 370,
         "reachR": 660
       },
       {
@@ -340,7 +340,7 @@ window.SHIPPED_CUSTOM_LEVELS = {
         "yFrac": 0.2708609271523179,
         "planetR": 140,
         "variant": "timer",
-        "dormantFrames": 200,
+        "dormantFrames": 130,
         "warningFrames": 100
       },
       {
@@ -360,11 +360,11 @@ window.SHIPPED_CUSTOM_LEVELS = {
         "warningFrames": 100
       },
       {
-        "triggerDistance": 755.8666666666668,
-        "yFrac": 0.5317880794701988,
+        "triggerDistance": 769.8666666666668,
+        "yFrac": 0.6848695904045924,
         "planetR": 140,
         "variant": "timer",
-        "dormantFrames": 130,
+        "dormantFrames": 100,
         "warningFrames": 100
       },
       {
@@ -437,13 +437,13 @@ window.SHIPPED_CUSTOM_LEVELS = {
         "anchor": "top",
         "mountOffset": 70,
         "numShots": 7,
-        "fireInterval": 80,
+        "fireInterval": 70,
         "fireAngleDeg": 50,
         "projectileSpeed": 6.5,
         "projectileR": 10
       },
       {
-        "triggerDistance": 342.33333333333337,
+        "triggerDistance": 346.73333333333335,
         "anchor": "top",
         "mountOffset": 70,
         "numShots": 7,
@@ -569,7 +569,7 @@ window.SHIPPED_CUSTOM_LEVELS = {
     null,
     [
       {
-        "triggerDistance": 469.2,
+        "triggerDistance": 495.46666666666664,
         "anchor": "top",
         "reachDepth": 300,
         "chargeFrames": 250,

@@ -3059,6 +3059,10 @@ function beginRunFromOptions() {
   holding = false;
   beginWarp(0);
   state = 'playing';
+  // Start file-backed music while the click/key gesture is still active.
+  // Embedded hosts such as itch.io can reject HTMLAudio.play() when it is
+  // deferred until the next animation frame, even though Web Audio SFX work.
+  updateBgmForState();
   lastRenderedOverlayState = null;
   updateOverlay();
 }
@@ -3153,6 +3157,7 @@ function startPracticeZone(zoneIndex) {
   prefetchThemeBgm(zoneIndex);
   beginWarp(zoneIndex);
   state = 'playing';
+  updateBgmForState();
 }
 
 function startInfernoPlaytest() {
@@ -3190,9 +3195,22 @@ function useContinue() {
 // and pen handling and don't depend on the browser synthesizing a 'click'
 // event afterward, which has had reliability quirks on some mobile
 // browsers/webviews, especially combined with CSS transitions on the target.
+function focusGameKeyboardInput() {
+  try { window.focus(); } catch (e) { /* embedded host may deny window focus */ }
+  try {
+    canvas.focus({ preventScroll: true });
+  } catch (e) {
+    try { canvas.focus(); } catch (err) { /* keyboard still has window fallback */ }
+  }
+}
+
 function handleOverlayActivate(e) {
   if (e && e.type === 'click' && performance.now() < overlayNavLockUntil) return;
   if (e && e.type !== 'click' && e.pointerType === 'mouse' && e.button !== 0) return;
+  const targetTag = e && e.target && e.target.tagName;
+  if (targetTag !== 'INPUT' && targetTag !== 'SELECT' && targetTag !== 'TEXTAREA') {
+    focusGameKeyboardInput();
+  }
   if (state === 'home') {
     unlockAudio();
     try { sfxUiClick(); } catch (err) { /* audio must never block the menu */ }
@@ -3304,6 +3322,7 @@ function onCanvasPointerDown(e) {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   if (state === 'home') return;
   e.preventDefault();
+  focusGameKeyboardInput();
   pointerHolding = true;
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* older engines */ }
   canvasStartPress();
@@ -3323,6 +3342,7 @@ window.addEventListener('blur', () => {
 
 const pauseToggleBtn = document.getElementById('pause-toggle');
 pauseToggleBtn.addEventListener('pointerup', () => {
+  focusGameKeyboardInput();
   if (state === 'playing') pauseGame();
   else if (state === 'paused') resumeGame();
 });
@@ -3510,40 +3530,3 @@ function spawnCoreDeathDebris() {
 // 'core'), own variables, own collision checks done inline rather than
 // through the shared gates array. Stays at its resting position the whole
 // fight (never charges), cycling through 5 attacks then a power-down death.
-function computeCrossfireBeamYs(safeSlot) {
-  return CORE_CROSSFIRE_SLOT_FRACS.map((frac, i) => i).filter(i => i !== safeSlot).map(i => {
-    const jitter = (Math.random() * 2 - 1) * CORE_CROSSFIRE_SLOT_JITTER;
-    return PLAY_TOP + (CORE_CROSSFIRE_SLOT_FRACS[i] + jitter) * (PLAY_BOTTOM - PLAY_TOP);
-  });
-}
-
-function updateCoreSparks(phaseStartFrame, targetCount, shipTop, shipBottom, shipR) {
-  const elapsed = frame - phaseStartFrame;
-  if (coreSparkSpawned < targetCount && elapsed >= coreSparkSpawned * CORE_SPARK_SPAWN_INTERVAL) {
-    const baseFrac = CORE_SPARK_BASE_FRACS[coreSparkSpawned % CORE_SPARK_BASE_FRACS.length];
-    const baseY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * baseFrac;
-    coreSparks.push({
-      x: miniBoss.x,
-      spawnX: miniBoss.x,
-      baseY: baseY,
-      y: baseY,
-      phase: (coreSparkSpawned % 2) * Math.PI // alternate starting phase for variety
-    });
-    coreSparkSpawned++;
-    sfxHazardFire('corespark');
-  }
-  for (let i = coreSparks.length - 1; i >= 0; i--) {
-    const s = coreSparks[i];
-    s.x -= CORE_SPARK_SPEED_X;
-    const travelled = s.spawnX - s.x;
-    s.y = s.baseY + CORE_SPARK_AMPLITUDE * Math.sin(CORE_SPARK_FREQUENCY * travelled + s.phase);
-    s.y = Math.max(PLAY_TOP + CORE_SPARK_R, Math.min(PLAY_BOTTOM - CORE_SPARK_R, s.y));
-    const dx = ship.x - s.x, dy = ship.y - s.y;
-    if (Math.sqrt(dx * dx + dy * dy) < shipR + CORE_SPARK_R) {
-      tryEndGame('corespark');
-      break;
-    }
-    if (s.x < -50) coreSparks.splice(i, 1);
-  }
-}
-

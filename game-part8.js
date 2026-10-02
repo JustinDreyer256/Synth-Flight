@@ -119,7 +119,7 @@ function updateOverlay() {
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-hard">HARD</div>
             <div class="settings-diff-stats">
-              9 lives &middot; 1 continue<br>
+              9 lives &middot; 3 continues<br>
               No invincibility frames
             </div>
           </div>
@@ -128,7 +128,7 @@ function updateOverlay() {
             <div class="settings-diff-stats">
               ${overdriveLocked
                 ? 'Beat the game on Normal or Hard to unlock'
-                : '1 life &middot; no continues<br>' +
+                : '3 lives &middot; no continues<br>' +
                   iframeSeconds + 's invincible (blinking) after a hit<br>' +
                   deathWindowSeconds + 's vulnerable afterward before it can trigger again'}
             </div>

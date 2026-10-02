@@ -8087,6 +8087,10 @@ function beginRunFromOptions() {
   holding = false;
   beginWarp(0);
   state = 'playing';
+  // Start file-backed music while the click/key gesture is still active.
+  // Embedded hosts such as itch.io can reject HTMLAudio.play() when it is
+  // deferred until the next animation frame, even though Web Audio SFX work.
+  updateBgmForState();
   lastRenderedOverlayState = null;
   updateOverlay();
 }
@@ -8181,6 +8185,7 @@ function startPracticeZone(zoneIndex) {
   prefetchThemeBgm(zoneIndex);
   beginWarp(zoneIndex);
   state = 'playing';
+  updateBgmForState();
 }
 
 function startInfernoPlaytest() {
@@ -17064,6 +17069,8 @@ function getBgmElement(src) {
   if (!bgmElementCache[src]) {
     const el = new Audio();
     el.preload = 'auto';
+    el.crossOrigin = 'anonymous';
+    el.playsInline = true;
     el.src = src;
     bgmElementCache[src] = el;
   }
@@ -17146,6 +17153,9 @@ function startHtmlBgm(track) {
       if (bgmFileTrackId !== track.id) return;
       bgmFileTrackId = null;
       playBgm('standard');
+      // Keep the failed file marked for this zone so the draw loop does not
+      // cancel the synth fallback and retry a rejected play() every frame.
+      bgmFileTrackId = track.id;
     });
   }
   bgmHtmlAudio = el;

@@ -1521,8 +1521,8 @@ let clearTimeMs = 0;
 const DIFFICULTY_CONFIG = {
   easy: { lives: 9, continues: 3, invincibilityFrames: true, freeHitsPerLife: Infinity },
   normal: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 1 },
-  hard: { lives: 9, continues: 1, invincibilityFrames: false, freeHitsPerLife: 0 },
-  extra: { lives: 1, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
+  hard: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 0 },
+  extra: { lives: 3, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
 };
 const INVINCIBILITY_DURATION_MS = 1500; // 1.5 seconds of play time -- how long a granted protection window lasts. Measured on the game clock so pause does not burn it down.
 const FREE_HIT_COOLDOWN_MS = 4000; // 4 seconds of play time -- how often a hazard touch can be forgiven outright (Easy / Overdrive, or Normal's single first hit). After a free pass is used, there's a stretch where protection has worn off but a new free pass isn't available yet -- a hit landing in that stretch costs a life.
@@ -1844,7 +1844,7 @@ let coreEyeBeamY = 0; // current tracked (or locked) target height
 // beam's single aimed shot
 const CORE_TESLA_CHARGE_DURATION = 75; // telegraph
 const CORE_TESLA_COOLDOWN = 110; // rest before the next burst
-const CORE_TESLA_PROJECTILE_SPEED = 4.2; // px/frame -- fast, but the ship only needs to find the gap, not outrun it
+const CORE_TESLA_PROJECTILE_SPEED = 3.63258; // px/frame -- another 7% slower than 3.906
 const CORE_TESLA_PROJECTILE_R = 9;
 const CORE_TESLA_SLOT_FRACS = [0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 0.95]; // 7 target heights across the play area, one left empty each burst
 let coreTeslaState = 'charging'; // 'charging' | 'cooldown' (bursts fire instantly at the charge->cooldown transition)
@@ -5177,6 +5177,10 @@ function beginRunFromOptions() {
   holding = false;
   beginWarp(0);
   state = 'playing';
+  // Start file-backed music while the click/key gesture is still active.
+  // Embedded hosts such as itch.io can reject HTMLAudio.play() when it is
+  // deferred until the next animation frame, even though Web Audio SFX work.
+  updateBgmForState();
   lastRenderedOverlayState = null;
   updateOverlay();
 }
@@ -5271,6 +5275,7 @@ function startPracticeZone(zoneIndex) {
   prefetchThemeBgm(zoneIndex);
   beginWarp(zoneIndex);
   state = 'playing';
+  updateBgmForState();
 }
 
 function startInfernoPlaytest() {
@@ -5308,9 +5313,22 @@ function useContinue() {
 // and pen handling and don't depend on the browser synthesizing a 'click'
 // event afterward, which has had reliability quirks on some mobile
 // browsers/webviews, especially combined with CSS transitions on the target.
+function focusGameKeyboardInput() {
+  try { window.focus(); } catch (e) { /* embedded host may deny window focus */ }
+  try {
+    canvas.focus({ preventScroll: true });
+  } catch (e) {
+    try { canvas.focus(); } catch (err) { /* keyboard still has window fallback */ }
+  }
+}
+
 function handleOverlayActivate(e) {
   if (e && e.type === 'click' && performance.now() < overlayNavLockUntil) return;
   if (e && e.type !== 'click' && e.pointerType === 'mouse' && e.button !== 0) return;
+  const targetTag = e && e.target && e.target.tagName;
+  if (targetTag !== 'INPUT' && targetTag !== 'SELECT' && targetTag !== 'TEXTAREA') {
+    focusGameKeyboardInput();
+  }
   if (state === 'home') {
     unlockAudio();
     try { sfxUiClick(); } catch (err) { /* audio must never block the menu */ }
@@ -5422,6 +5440,7 @@ function onCanvasPointerDown(e) {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   if (state === 'home') return;
   e.preventDefault();
+  focusGameKeyboardInput();
   pointerHolding = true;
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* older engines */ }
   canvasStartPress();
@@ -5441,6 +5460,7 @@ window.addEventListener('blur', () => {
 
 const pauseToggleBtn = document.getElementById('pause-toggle');
 pauseToggleBtn.addEventListener('pointerup', () => {
+  focusGameKeyboardInput();
   if (state === 'playing') pauseGame();
   else if (state === 'paused') resumeGame();
 });
@@ -7983,6 +8003,11 @@ const audioSettings = {
 // recomputes the live gain node values from current settings -- called on
 // init and whenever a Settings-screen toggle changes
 function applyAudioSettings() {
+  if (bgmHtmlAudio) {
+    bgmHtmlAudio.volume = (!audioSettings.muted && audioSettings.bgmEnabled)
+      ? Math.max(0, Math.min(1, audioSettings.bgmVolume * 0.8))
+      : 0;
+  }
   if (!audioCtx) return;
   masterGain.gain.value = audioSettings.muted ? 0 : audioSettings.masterVolume;
   sfxGain.gain.value = audioSettings.sfxEnabled ? audioSettings.sfxVolume : 0;
@@ -14145,7 +14170,8 @@ function getBgmElement(src) {
   if (!bgmElementCache[src]) {
     const el = new Audio();
     el.preload = 'auto';
-    el.src = src;
+    el.playsInline = true;
+    el.src = src + (src.includes('?') ? '&' : '?') + 'build=snes381';
     bgmElementCache[src] = el;
   }
   return bgmElementCache[src];
@@ -14203,21 +14229,17 @@ function playBgm(profileName) {
 }
 
 function startHtmlBgm(track) {
-  if (!audioCtx || !bgmGain || audioSettings.muted) return;
+  if (audioSettings.muted) return;
   stopSynthBgm();
   const prevEl = bgmHtmlAudio;
-  const prevGain = bgmFileGainNode;
-  const t0 = audioCtx.currentTime;
-  const fade = 0.18;
   const el = getBgmElement(track.src);
-  const media = getBgmMediaNode(track.src, el);
-  const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.0001, t0);
-  gain.gain.exponentialRampToValueAtTime(0.8, t0 + fade);
-  try { media.disconnect(); } catch (e) { /* first connect */ }
-  media.connect(gain);
-  gain.connect(bgmGain);
-  el.volume = 1;
+  // Keep file-backed music on the HTMLAudio output instead of routing it
+  // through MediaElementAudioSource. itch.io may serve game assets from a
+  // separate CDN origin; browsers deliberately silence cross-origin media
+  // when it is connected to Web Audio, even though direct playback is valid.
+  el.volume = (!audioSettings.muted && audioSettings.bgmEnabled)
+    ? Math.max(0, Math.min(1, audioSettings.bgmVolume * 0.8))
+    : 0;
   el.loop = track.loopEnd == null;
   const offset = track.start != null ? track.start : 0;
   try { el.currentTime = offset; } catch (e) { /* not seekable yet */ }
@@ -14227,21 +14249,17 @@ function startHtmlBgm(track) {
       if (bgmFileTrackId !== track.id) return;
       bgmFileTrackId = null;
       playBgm('standard');
+      // Keep the failed file marked for this zone so the draw loop does not
+      // cancel the synth fallback and retry a rejected play() every frame.
+      bgmFileTrackId = track.id;
     });
   }
   bgmHtmlAudio = el;
-  bgmFileGainNode = gain;
+  bgmFileGainNode = null;
   bgmFileTrackId = track.id;
   bgmActiveFileTrack = track;
   if (prevEl && prevEl !== el) {
     try { prevEl.pause(); } catch (e) { /* already paused */ }
-  }
-  if (prevGain && prevGain !== gain) {
-    try {
-      prevGain.gain.cancelScheduledValues(t0);
-      prevGain.gain.setValueAtTime(Math.max(0.0001, prevGain.gain.value), t0);
-      prevGain.gain.exponentialRampToValueAtTime(0.0001, t0 + fade);
-    } catch (e) { /* already stopped */ }
   }
 }
 
@@ -21852,7 +21870,7 @@ function updateOverlay() {
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-hard">HARD</div>
             <div class="settings-diff-stats">
-              9 lives &middot; 1 continue<br>
+              9 lives &middot; 3 continues<br>
               No invincibility frames
             </div>
           </div>
@@ -21861,7 +21879,7 @@ function updateOverlay() {
             <div class="settings-diff-stats">
               ${overdriveLocked
                 ? 'Beat the game on Normal or Hard to unlock'
-                : '1 life &middot; no continues<br>' +
+                : '3 lives &middot; no continues<br>' +
                   iframeSeconds + 's invincible (blinking) after a hit<br>' +
                   deathWindowSeconds + 's vulnerable afterward before it can trigger again'}
             </div>
