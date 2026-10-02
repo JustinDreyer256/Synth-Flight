@@ -1,40 +1,3 @@
-function computeCrossfireBeamYs(safeSlot) {
-  return CORE_CROSSFIRE_SLOT_FRACS.map((frac, i) => i).filter(i => i !== safeSlot).map(i => {
-    const jitter = (Math.random() * 2 - 1) * CORE_CROSSFIRE_SLOT_JITTER;
-    return PLAY_TOP + (CORE_CROSSFIRE_SLOT_FRACS[i] + jitter) * (PLAY_BOTTOM - PLAY_TOP);
-  });
-}
-
-function updateCoreSparks(phaseStartFrame, targetCount, shipTop, shipBottom, shipR) {
-  const elapsed = frame - phaseStartFrame;
-  if (coreSparkSpawned < targetCount && elapsed >= coreSparkSpawned * CORE_SPARK_SPAWN_INTERVAL) {
-    const baseFrac = CORE_SPARK_BASE_FRACS[coreSparkSpawned % CORE_SPARK_BASE_FRACS.length];
-    const baseY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * baseFrac;
-    coreSparks.push({
-      x: miniBoss.x,
-      spawnX: miniBoss.x,
-      baseY: baseY,
-      y: baseY,
-      phase: (coreSparkSpawned % 2) * Math.PI // alternate starting phase for variety
-    });
-    coreSparkSpawned++;
-    sfxHazardFire('corespark');
-  }
-  for (let i = coreSparks.length - 1; i >= 0; i--) {
-    const s = coreSparks[i];
-    s.x -= CORE_SPARK_SPEED_X;
-    const travelled = s.spawnX - s.x;
-    s.y = s.baseY + CORE_SPARK_AMPLITUDE * Math.sin(CORE_SPARK_FREQUENCY * travelled + s.phase);
-    s.y = Math.max(PLAY_TOP + CORE_SPARK_R, Math.min(PLAY_BOTTOM - CORE_SPARK_R, s.y));
-    const dx = ship.x - s.x, dy = ship.y - s.y;
-    if (Math.sqrt(dx * dx + dy * dy) < shipR + CORE_SPARK_R) {
-      tryEndGame('corespark');
-      break;
-    }
-    if (s.x < -50) coreSparks.splice(i, 1);
-  }
-}
-
 function beginCoreBulkhead(moving) {
   miniBossAttackState = 'coreBulkheadTelegraph';
   coreBulkheadIsMoving = !!moving;
@@ -532,7 +495,6 @@ function updateReactorCoreBoss() {
 }
 
 function update() {
-  noteFrameTime();
   syncGlowDangerSound();
   syncFireballBreathSound();
   syncToxicHazardSounds();
@@ -2607,4 +2569,23 @@ async function writeAllDurableLayers(blob) {
   durableWriteLock = false;
   await writeIndexedDbSave(payload);
   await putServerSave(payload);
+}
+function queueDurableSave() {
+  if (durableWriteLock) return;
+  clearTimeout(durableSaveTimer);
+  durableSaveTimer = setTimeout(() => {
+    writeAllDurableLayers(collectDurableSave());
+  }, 700);
+}
+async function hydrateDurableSave() {
+  ensurePlayerSaveId();
+  const local = collectDurableSave();
+  const [idb, server] = await Promise.all([readIndexedDbSave(), fetchServerSave(playerSaveId)]);
+  const merged = mergeDurableSaves([idb, server, local]);
+  if (durableProgressScore(merged) >= durableProgressScore(local) || (server && durableProgressScore(server) > 0) || (idb && durableProgressScore(idb) > durableProgressScore(local))) {
+    applyDurableSave(merged);
+  }
+  await writeAllDurableLayers(collectDurableSave());
+  durableHydrated = true;
+  if (state === 'settings' || state === 'options' || state === 'home' || state === 'statistics' || state === 'achievements') updateOverlay();
 }

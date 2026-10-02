@@ -103,10 +103,11 @@ window.addEventListener('resize', () => {
 
 loadCustomTerrain();
 
-const SIM_HZ = 60;
+const SIM_HZ = GAMEPLAY_HZ;
 const SIM_STEP_MS = 1000 / SIM_HZ;
-const MAX_SIM_STEPS = 5;
+const MAX_SIM_STEPS = 8;
 let simLastNow = 0;
+let simAccumulatorMs = 0;
 
 function loop() {
   const now = performance.now();
@@ -118,16 +119,24 @@ function loop() {
       if (elapsed > 100) elapsed = 100;
 
       if (state === 'playing' || state === 'victory') {
-        // One tick per paint so a 120/144Hz panel stays at the speed this
-        // game was tuned for. Extra ticks only when a frame actually ran
-        // long (dropped frames), not to "catch up" Chrome 60Hz vsync.
-        let steps = 1;
-        if (elapsed > 20) {
-          steps = Math.min(MAX_SIM_STEPS, Math.round(elapsed / SIM_STEP_MS));
-          if (steps < 1) steps = 1;
+        // Gameplay was authored at 144 Hz. Accumulate real time and run the
+        // same 144 simulation ticks per second on every display: a 60 Hz
+        // panel performs 2-3 updates per paint, while faster panels may draw
+        // between ticks. Rendering smoothness varies; gameplay speed does not.
+        simAccumulatorMs += elapsed;
+        let steps = 0;
+        while (simAccumulatorMs >= SIM_STEP_MS && steps < MAX_SIM_STEPS) {
+          update();
+          simAccumulatorMs -= SIM_STEP_MS;
+          steps++;
         }
-        for (let i = 0; i < steps; i++) update();
+        // Drop excess backlog after a major stall instead of allowing a long
+        // catch-up burst that would feel like the game suddenly fast-forwarded.
+        if (steps === MAX_SIM_STEPS && simAccumulatorMs >= SIM_STEP_MS) {
+          simAccumulatorMs %= SIM_STEP_MS;
+        }
       } else {
+        simAccumulatorMs = 0;
         update();
       }
       draw();
@@ -137,6 +146,7 @@ function loop() {
     }
   } else {
     simLastNow = now;
+    simAccumulatorMs = 0;
   }
   requestAnimationFrame(loop);
 }

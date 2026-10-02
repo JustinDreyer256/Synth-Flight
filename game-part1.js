@@ -1,27 +1,4 @@
 window.SYNTH_FLIGHT_JS_STARTED = true;
-const BROWSER_HELP_HTML = `
-          <div class="achievement-section-header" style="margin-top:14px;">BROWSERS</div>
-          <div class="settings-diff-card">
-            <div class="settings-diff-name">EDGE</div>
-            <div class="settings-diff-stats">
-              Best default. If another browser feels shaky, slow, or input-laggy, play here.
-            </div>
-          </div>
-          <div class="settings-diff-card">
-            <div class="settings-diff-name">CHROME</div>
-            <div class="settings-diff-stats">
-              Usually fine now. If the ship moves at the wrong speed or the picture shakes, switch to Edge.
-            </div>
-          </div>
-          <div class="settings-diff-card">
-            <div class="settings-diff-name">BRAVE</div>
-            <div class="settings-diff-stats">
-              Can hitch while Shields are on. Click the lion in the address bar and turn Shields down for this site (or allow fingerprinting).<br>
-              Keep graphics acceleration on in Brave Settings &rarr; System.<br>
-              Play from an extracted folder or http://127.0.0.1 &mdash; not from inside a .zip.
-            </div>
-          </div>
-`;
 const canvas = document.getElementById('gameCanvas');
 let ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
@@ -2115,4 +2092,38 @@ let devGracePeriodEndFrame = -1; // freezes ship physics (no gravity/lift) after
 const DEV_GRACE_PERIOD_DURATION = 600; // 10s at 60fps -- generous time to navigate the dev panel
 const WARP_LANDING_GRACE_PERIOD = 60; // 1s -- brief safety window right as a new zone begins. Gravity/lift physics run continuously during the warp tunnel itself (a purely visual effect a player isn't expected to actively fly through), which can leave the ship sitting close to the boundary by the time the new zone is actually visible; this gives a beat to see and react rather than dying before the player's first real frame in the zone
 let fireballSpeedMult = 1.6; // lowered from the initial 2.4 per feedback -- live-tunable via dev panel
+
+function clampGhostShipToPlayfield() {
+  const minY = PLAY_TOP + SHIP_H / 2 + 0.5;
+  const maxY = PLAY_BOTTOM - SHIP_H / 2 - 0.5;
+  if (ship.y < minY) { ship.y = minY; if (ship.vy < 0) ship.vy = 0; }
+  if (ship.y > maxY) { ship.y = maxY; if (ship.vy > 0) ship.vy = 0; }
+}
+
+function tryEndGame(hazardType) {
+  if (state !== 'playing') return;
+  if (ghostMode) return;
+  if (bossFinalChargeActive || bossExplosionActive || bossFullyDefeated) return; // victory is already secured -- nothing can kill the player during the boss's death sequence or the fly-off that follows
+  const t = gameNowMs();
+  if (t < invincibilityEndTime) return; // currently within an active protection window -- ignore this collision entirely
+  sfxHazardImpact(hazardType);
+  const maxFreeHits = DIFFICULTY_CONFIG[selectedDifficulty]?.freeHitsPerLife || 0;
+  if (maxFreeHits > 0 && freeHitsUsedThisLife < maxFreeHits && t >= freeHitCooldownEndTime) {
+    // forgiven hit grants a fresh protection window, then the free-pass
+    // cooldown so it cannot be chained indefinitely. Normal only gets this
+    // once per life; Easy / Overdrive can repeat after the cooldown.
+    freeHitsUsedThisLife += 1;
+    invincibilityEndTime = t + INVINCIBILITY_DURATION_MS;
+    freeHitCooldownEndTime = t + FREE_HIT_COOLDOWN_MS;
+    return;
+  }
+  const moltenSpecialHit = hazardType === 'charging' || hazardType === 'chargingClose'
+    || hazardType === 'coreFlame' || hazardType === 'barrageActive';
+  // cave / island contact is an out-of-bounds wall, not a hazard: losing
+  // a life here must not carry the hit-cycle mercy window into the next life
+  const wallLike = hazardType === 'terrain';
+  endGame(!wallLike, moltenSpecialHit ? { playCollision: false } : undefined);
+}
+let nextThemeIndex = 0;
+let bgParticles = [];
 

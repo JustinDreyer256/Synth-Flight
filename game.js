@@ -1,27 +1,4 @@
 window.SYNTH_FLIGHT_JS_STARTED = true;
-const BROWSER_HELP_HTML = `
-          <div class="achievement-section-header" style="margin-top:14px;">BROWSERS</div>
-          <div class="settings-diff-card">
-            <div class="settings-diff-name">EDGE</div>
-            <div class="settings-diff-stats">
-              Best default. If another browser feels shaky, slow, or input-laggy, play here.
-            </div>
-          </div>
-          <div class="settings-diff-card">
-            <div class="settings-diff-name">CHROME</div>
-            <div class="settings-diff-stats">
-              Usually fine now. If the ship moves at the wrong speed or the picture shakes, switch to Edge.
-            </div>
-          </div>
-          <div class="settings-diff-card">
-            <div class="settings-diff-name">BRAVE</div>
-            <div class="settings-diff-stats">
-              Can hitch while Shields are on. Click the lion in the address bar and turn Shields down for this site (or allow fingerprinting).<br>
-              Keep graphics acceleration on in Brave Settings &rarr; System.<br>
-              Play from an extracted folder or http://127.0.0.1 &mdash; not from inside a .zip.
-            </div>
-          </div>
-`;
 const canvas = document.getElementById('gameCanvas');
 let ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
@@ -5325,6 +5302,11 @@ function focusGameKeyboardInput() {
 function handleOverlayActivate(e) {
   if (e && e.type === 'click' && performance.now() < overlayNavLockUntil) return;
   if (e && e.type !== 'click' && e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e && e.type === 'pointerup' && overlayPointerStart && e.pointerId === overlayPointerStart.id) {
+    const moved = Math.hypot(e.clientX - overlayPointerStart.x, e.clientY - overlayPointerStart.y);
+    overlayPointerStart = null;
+    if (moved > 10) return;
+  }
   const targetTag = e && e.target && e.target.tagName;
   if (targetTag !== 'INPUT' && targetTag !== 'SELECT' && targetTag !== 'TEXTAREA') {
     focusGameKeyboardInput();
@@ -5404,7 +5386,12 @@ function handleOverlayActivate(e) {
   updateOverlay();
 }
 let overlayNavLockUntil = 0;
+let overlayPointerStart = null;
+overlay.addEventListener('pointerdown', (e) => {
+  overlayPointerStart = { id: e.pointerId, x: e.clientX, y: e.clientY };
+});
 overlay.addEventListener('pointerup', handleOverlayActivate);
+overlay.addEventListener('pointercancel', () => { overlayPointerStart = null; });
 overlay.addEventListener('click', handleOverlayActivate);
 
 // Input
@@ -6182,7 +6169,6 @@ function updateReactorCoreBoss() {
 }
 
 function update() {
-  noteFrameTime();
   syncGlowDangerSound();
   syncFireballBreathSound();
   syncToxicHazardSounds();
@@ -8718,18 +8704,9 @@ function isChargeBeamType(type) {
   return /chargebeam|coreLaser|crossfire|eyeBeam|searchlight|lasergrid/i.test(type || '');
 }
 
-let lastUpdateTimeMs = 0;
-let smoothedFrameSec = 1 / 60;
-function noteFrameTime() {
-  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-  if (lastUpdateTimeMs > 0) {
-    const dt = (now - lastUpdateTimeMs) / 1000;
-    if (dt > 0.004 && dt < 0.08) smoothedFrameSec = smoothedFrameSec * 0.85 + dt * 0.15;
-  }
-  lastUpdateTimeMs = now;
-}
+const GAMEPLAY_HZ = 144;
 function framesToSeconds(frames) {
-  return Math.max(0.05, (frames || 0) * smoothedFrameSec);
+  return Math.max(0.05, (frames || 0) / GAMEPLAY_HZ);
 }
 
 let lastBossChargeBeamSfx = { duration: 2, size: 1, isSuperBeam: false };
@@ -21884,7 +21861,6 @@ function updateOverlay() {
                   deathWindowSeconds + 's vulnerable afterward before it can trigger again'}
             </div>
           </div>
-          ${BROWSER_HELP_HTML}
           <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
           <div class="settings-picker settings-toggle" data-action="copy-save-id">
             <div class="settings-picker-label">SAVE ID</div>
@@ -25747,10 +25723,11 @@ window.addEventListener('resize', () => {
 
 loadCustomTerrain();
 
-const SIM_HZ = 60;
+const SIM_HZ = GAMEPLAY_HZ;
 const SIM_STEP_MS = 1000 / SIM_HZ;
-const MAX_SIM_STEPS = 5;
+const MAX_SIM_STEPS = 8;
 let simLastNow = 0;
+let simAccumulatorMs = 0;
 
 function loop() {
   const now = performance.now();
@@ -25762,16 +25739,24 @@ function loop() {
       if (elapsed > 100) elapsed = 100;
 
       if (state === 'playing' || state === 'victory') {
-        // One tick per paint so a 120/144Hz panel stays at the speed this
-        // game was tuned for. Extra ticks only when a frame actually ran
-        // long (dropped frames), not to "catch up" Chrome 60Hz vsync.
-        let steps = 1;
-        if (elapsed > 20) {
-          steps = Math.min(MAX_SIM_STEPS, Math.round(elapsed / SIM_STEP_MS));
-          if (steps < 1) steps = 1;
+        // Gameplay was authored at 144 Hz. Accumulate real time and run the
+        // same 144 simulation ticks per second on every display: a 60 Hz
+        // panel performs 2-3 updates per paint, while faster panels may draw
+        // between ticks. Rendering smoothness varies; gameplay speed does not.
+        simAccumulatorMs += elapsed;
+        let steps = 0;
+        while (simAccumulatorMs >= SIM_STEP_MS && steps < MAX_SIM_STEPS) {
+          update();
+          simAccumulatorMs -= SIM_STEP_MS;
+          steps++;
         }
-        for (let i = 0; i < steps; i++) update();
+        // Drop excess backlog after a major stall instead of allowing a long
+        // catch-up burst that would feel like the game suddenly fast-forwarded.
+        if (steps === MAX_SIM_STEPS && simAccumulatorMs >= SIM_STEP_MS) {
+          simAccumulatorMs %= SIM_STEP_MS;
+        }
       } else {
+        simAccumulatorMs = 0;
         update();
       }
       draw();
@@ -25781,6 +25766,7 @@ function loop() {
     }
   } else {
     simLastNow = now;
+    simAccumulatorMs = 0;
   }
   requestAnimationFrame(loop);
 }

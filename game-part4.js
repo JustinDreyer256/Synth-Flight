@@ -1,22 +1,3 @@
-function queueDurableSave() {
-  if (durableWriteLock) return;
-  clearTimeout(durableSaveTimer);
-  durableSaveTimer = setTimeout(() => {
-    writeAllDurableLayers(collectDurableSave());
-  }, 700);
-}
-async function hydrateDurableSave() {
-  ensurePlayerSaveId();
-  const local = collectDurableSave();
-  const [idb, server] = await Promise.all([readIndexedDbSave(), fetchServerSave(playerSaveId)]);
-  const merged = mergeDurableSaves([idb, server, local]);
-  if (durableProgressScore(merged) >= durableProgressScore(local) || (server && durableProgressScore(server) > 0) || (idb && durableProgressScore(idb) > durableProgressScore(local))) {
-    applyDurableSave(merged);
-  }
-  await writeAllDurableLayers(collectDurableSave());
-  durableHydrated = true;
-  if (state === 'settings' || state === 'options' || state === 'home' || state === 'statistics' || state === 'achievements') updateOverlay();
-}
 function exportPlayerSaveFile() {
   const blob = collectDurableSave();
   const text = JSON.stringify(blob, null, 2);
@@ -458,18 +439,9 @@ function isChargeBeamType(type) {
   return /chargebeam|coreLaser|crossfire|eyeBeam|searchlight|lasergrid/i.test(type || '');
 }
 
-let lastUpdateTimeMs = 0;
-let smoothedFrameSec = 1 / 60;
-function noteFrameTime() {
-  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-  if (lastUpdateTimeMs > 0) {
-    const dt = (now - lastUpdateTimeMs) / 1000;
-    if (dt > 0.004 && dt < 0.08) smoothedFrameSec = smoothedFrameSec * 0.85 + dt * 0.15;
-  }
-  lastUpdateTimeMs = now;
-}
+const GAMEPLAY_HZ = 144;
 function framesToSeconds(frames) {
-  return Math.max(0.05, (frames || 0) * smoothedFrameSec);
+  return Math.max(0.05, (frames || 0) / GAMEPLAY_HZ);
 }
 
 let lastBossChargeBeamSfx = { duration: 2, size: 1, isSuperBeam: false };

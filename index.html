@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-store">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Synth Flight snes386</title>
+<title>Synth Flight snes389</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Monoton&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -31,7 +31,7 @@
     align-items: center;
     height: 100vh;
     width: 100vw;
-    touch-action: none;
+    touch-action: manipulation;
   }
   canvas {
     display: block;
@@ -246,6 +246,13 @@
     max-width: 90vw;
     box-sizing: border-box;
     pointer-events: auto;
+    max-height: calc(100vh - 96px);
+    max-height: calc(100dvh - 96px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
   }
@@ -2263,7 +2270,7 @@
   <div id="sfx-tester-list"></div>
 </div>
 
-<script src="custom-levels.js?v=snes386"></script>
+<script src="custom-levels.js?v=snes389"></script>
 <script>
 (function () {
   var overlay = document.getElementById('overlay');
@@ -2276,15 +2283,15 @@
 })();
 </script>
 <!-- GAME_PARTS -->
-<script src="game-part1.js?v=snes386"></script>
-<script src="game-part2.js?v=snes386"></script>
-<script src="game-part3.js?v=snes386"></script>
-<script src="game-part4.js?v=snes386"></script>
-<script src="game-part5.js?v=snes386"></script>
-<script src="game-part6.js?v=snes386"></script>
-<script src="game-part7.js?v=snes386"></script>
-<script src="game-part8.js?v=snes386"></script>
-<script src="game-part9.js?v=snes386"></script>
+<script src="game-part1.js?v=snes389"></script>
+<script src="game-part2.js?v=snes389"></script>
+<script src="game-part3.js?v=snes389"></script>
+<script src="game-part4.js?v=snes389"></script>
+<script src="game-part5.js?v=snes389"></script>
+<script src="game-part6.js?v=snes389"></script>
+<script src="game-part7.js?v=snes389"></script>
+<script src="game-part8.js?v=snes389"></script>
+<script src="game-part9.js?v=snes389"></script>
 <!-- /GAME_PARTS -->
 </body>
 </html>

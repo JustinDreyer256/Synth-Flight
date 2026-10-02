@@ -1,41 +1,6 @@
-function clampGhostShipToPlayfield() {
-  const minY = PLAY_TOP + SHIP_H / 2 + 0.5;
-  const maxY = PLAY_BOTTOM - SHIP_H / 2 - 0.5;
-  if (ship.y < minY) { ship.y = minY; if (ship.vy < 0) ship.vy = 0; }
-  if (ship.y > maxY) { ship.y = maxY; if (ship.vy > 0) ship.vy = 0; }
-}
-
-function tryEndGame(hazardType) {
-  if (state !== 'playing') return;
-  if (ghostMode) return;
-  if (bossFinalChargeActive || bossExplosionActive || bossFullyDefeated) return; // victory is already secured -- nothing can kill the player during the boss's death sequence or the fly-off that follows
-  const t = gameNowMs();
-  if (t < invincibilityEndTime) return; // currently within an active protection window -- ignore this collision entirely
-  sfxHazardImpact(hazardType);
-  const maxFreeHits = DIFFICULTY_CONFIG[selectedDifficulty]?.freeHitsPerLife || 0;
-  if (maxFreeHits > 0 && freeHitsUsedThisLife < maxFreeHits && t >= freeHitCooldownEndTime) {
-    // forgiven hit grants a fresh protection window, then the free-pass
-    // cooldown so it cannot be chained indefinitely. Normal only gets this
-    // once per life; Easy / Overdrive can repeat after the cooldown.
-    freeHitsUsedThisLife += 1;
-    invincibilityEndTime = t + INVINCIBILITY_DURATION_MS;
-    freeHitCooldownEndTime = t + FREE_HIT_COOLDOWN_MS;
-    return;
-  }
-  const moltenSpecialHit = hazardType === 'charging' || hazardType === 'chargingClose'
-    || hazardType === 'coreFlame' || hazardType === 'barrageActive';
-  // cave / island contact is an out-of-bounds wall, not a hazard: losing
-  // a life here must not carry the hit-cycle mercy window into the next life
-  const wallLike = hazardType === 'terrain';
-  endGame(!wallLike, moltenSpecialHit ? { playCollision: false } : undefined);
-}
-let nextThemeIndex = 0;
-let bgParticles = [];
-
 function currentTheme() {
   return THEMES[themeIndex];
 }
-
 function currentGapSize() {
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
   const th = currentTheme();
@@ -3207,6 +3172,11 @@ function focusGameKeyboardInput() {
 function handleOverlayActivate(e) {
   if (e && e.type === 'click' && performance.now() < overlayNavLockUntil) return;
   if (e && e.type !== 'click' && e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e && e.type === 'pointerup' && overlayPointerStart && e.pointerId === overlayPointerStart.id) {
+    const moved = Math.hypot(e.clientX - overlayPointerStart.x, e.clientY - overlayPointerStart.y);
+    overlayPointerStart = null;
+    if (moved > 10) return;
+  }
   const targetTag = e && e.target && e.target.tagName;
   if (targetTag !== 'INPUT' && targetTag !== 'SELECT' && targetTag !== 'TEXTAREA') {
     focusGameKeyboardInput();
@@ -3286,7 +3256,12 @@ function handleOverlayActivate(e) {
   updateOverlay();
 }
 let overlayNavLockUntil = 0;
+let overlayPointerStart = null;
+overlay.addEventListener('pointerdown', (e) => {
+  overlayPointerStart = { id: e.pointerId, x: e.clientX, y: e.clientY };
+});
 overlay.addEventListener('pointerup', handleOverlayActivate);
+overlay.addEventListener('pointercancel', () => { overlayPointerStart = null; });
 overlay.addEventListener('click', handleOverlayActivate);
 
 // Input
@@ -3530,3 +3505,40 @@ function spawnCoreDeathDebris() {
 // 'core'), own variables, own collision checks done inline rather than
 // through the shared gates array. Stays at its resting position the whole
 // fight (never charges), cycling through 5 attacks then a power-down death.
+function computeCrossfireBeamYs(safeSlot) {
+  return CORE_CROSSFIRE_SLOT_FRACS.map((frac, i) => i).filter(i => i !== safeSlot).map(i => {
+    const jitter = (Math.random() * 2 - 1) * CORE_CROSSFIRE_SLOT_JITTER;
+    return PLAY_TOP + (CORE_CROSSFIRE_SLOT_FRACS[i] + jitter) * (PLAY_BOTTOM - PLAY_TOP);
+  });
+}
+
+function updateCoreSparks(phaseStartFrame, targetCount, shipTop, shipBottom, shipR) {
+  const elapsed = frame - phaseStartFrame;
+  if (coreSparkSpawned < targetCount && elapsed >= coreSparkSpawned * CORE_SPARK_SPAWN_INTERVAL) {
+    const baseFrac = CORE_SPARK_BASE_FRACS[coreSparkSpawned % CORE_SPARK_BASE_FRACS.length];
+    const baseY = PLAY_TOP + (PLAY_BOTTOM - PLAY_TOP) * baseFrac;
+    coreSparks.push({
+      x: miniBoss.x,
+      spawnX: miniBoss.x,
+      baseY: baseY,
+      y: baseY,
+      phase: (coreSparkSpawned % 2) * Math.PI // alternate starting phase for variety
+    });
+    coreSparkSpawned++;
+    sfxHazardFire('corespark');
+  }
+  for (let i = coreSparks.length - 1; i >= 0; i--) {
+    const s = coreSparks[i];
+    s.x -= CORE_SPARK_SPEED_X;
+    const travelled = s.spawnX - s.x;
+    s.y = s.baseY + CORE_SPARK_AMPLITUDE * Math.sin(CORE_SPARK_FREQUENCY * travelled + s.phase);
+    s.y = Math.max(PLAY_TOP + CORE_SPARK_R, Math.min(PLAY_BOTTOM - CORE_SPARK_R, s.y));
+    const dx = ship.x - s.x, dy = ship.y - s.y;
+    if (Math.sqrt(dx * dx + dy * dy) < shipR + CORE_SPARK_R) {
+      tryEndGame('corespark');
+      break;
+    }
+    if (s.x < -50) coreSparks.splice(i, 1);
+  }
+}
+

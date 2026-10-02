@@ -133,7 +133,6 @@ function updateOverlay() {
                   deathWindowSeconds + 's vulnerable afterward before it can trigger again'}
             </div>
           </div>
-          ${BROWSER_HELP_HTML}
           <div class="achievement-section-header" style="margin-top:14px;">PROFILE SAVE</div>
           <div class="settings-picker settings-toggle" data-action="copy-save-id">
             <div class="settings-picker-label">SAVE ID</div>
