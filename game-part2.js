@@ -1,6 +1,7 @@
 function currentTheme() {
   return THEMES[themeIndex];
 }
+
 function currentGapSize() {
   const playHeight = PLAY_BOTTOM - PLAY_TOP;
   const th = currentTheme();

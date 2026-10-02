@@ -1821,7 +1821,7 @@ let coreEyeBeamY = 0; // current tracked (or locked) target height
 // beam's single aimed shot
 const CORE_TESLA_CHARGE_DURATION = 75; // telegraph
 const CORE_TESLA_COOLDOWN = 110; // rest before the next burst
-const CORE_TESLA_PROJECTILE_SPEED = 3.63258; // px/frame -- another 7% slower than 3.906
+const CORE_TESLA_PROJECTILE_SPEED = 2.9423898; // px/frame -- another 10% slower than 3.269322
 const CORE_TESLA_PROJECTILE_R = 9;
 const CORE_TESLA_SLOT_FRACS = [0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 0.95]; // 7 target heights across the play area, one left empty each burst
 let coreTeslaState = 'charging'; // 'charging' | 'cooldown' (bursts fire instantly at the charge->cooldown transition)
