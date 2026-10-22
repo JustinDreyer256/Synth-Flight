@@ -2732,9 +2732,9 @@ function drawBackground(theme) {
     ctx.lineWidth = 1;
     ctx.globalAlpha = bossGridFadeEnabled ? 1 - colorProgress : 1;
     const gridSpacing = 40;
-    const offset = Math.round((frame * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing);
+    const offset = (mobileRenderFrame() * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing;
     for (let x = -offset; x < W; x += gridSpacing) {
-      const px = Math.round(x) + 0.5;
+      const px = MOBILE_PERFORMANCE_MODE ? x + 0.5 : Math.round(x) + 0.5;
       ctx.beginPath();
       ctx.moveTo(px, PLAY_TOP);
       ctx.lineTo(px, PLAY_BOTTOM);

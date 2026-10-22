@@ -1358,7 +1358,7 @@ function spawnBossVolleyTelegraph() {
 function fireBossVolley(lockedY) {
   if (!boss) return;
   const numProjectiles = 3;
-  const speed = 6.5;
+  const speed = 5.85; // 10% slower than 6.5
   const dx = ship.x - boss.x, dy = lockedY - boss.y; // straight-line toward the locked target
   const dist = Math.hypot(dx, dy) || 1;
   for (let i = 0; i < numProjectiles; i++) {
@@ -1423,8 +1423,8 @@ function spawnBossChargeBeamTelegraph() {
   const isSuperBeam = bossChargeBeamCount === 8;
   let effThickness;
   if (isSuperBeam) {
-    // 56.4% of play height, then 3% more open gap on each side (6% thinner)
-    effThickness = (PLAY_BOTTOM - PLAY_TOP) * (0.6 * 0.94 - 0.06);
+    // 40.3% of the playable height.
+    effThickness = (PLAY_BOTTOM - PLAY_TOP) * 0.403;
   } else if (bossChargeBeamCount >= 6) {
     effThickness = BOSS_CHARGE_BEAM_THICKNESS * 4; // shots 6 and 7 -- same, quadruple size
   } else if (bossChargeBeamCount >= 4) {
@@ -1944,9 +1944,20 @@ function spawnExtraSparkHub() {
     ? PLAY_TOP + entry.towerLength
     : PLAY_BOTTOM - entry.towerLength;
 
+  let hubX = W + 60;
+  const nearbyDoor = gates
+    .filter(g => g.type === 'movingdoor' && Math.abs(g.x - hubX) < 120)
+    .sort((a, b) => Math.abs(a.x - hubX) - Math.abs(b.x - hubX))[0];
+  if (nearbyDoor) {
+    // Keep the tower clearly to the left of a nearby moving door. The hub's
+    // outer spikes reach about 17px from center; this leaves another 24px of
+    // visible air beyond the door's edge.
+    hubX = nearbyDoor.x - nearbyDoor.width / 2 - 17 - 24;
+  }
+
   gates.push({
     type: 'sparkhub',
-    x: W + 60,
+    x: hubX,
     y: y,
     mountSide: entry.mountSide,
     towerLength: entry.towerLength,
@@ -2869,8 +2880,21 @@ const RANK_TIER_HINTS = {
   C: '19+ deaths'
 };
 
+function tryAwardDeathless() {
+  // Hard only, no lives lost this zone visit, and not a DEV session.
+  // Zone Select practice is allowed so a true deathless clear can be earned
+  // one zone at a time.
+  if (devSessionActive) return false;
+  if (selectedDifficulty !== 'hard') return false;
+  if (diedInCurrentZone) return false;
+  if (deathlessZones.has(themeIndex)) return false;
+  deathlessZones.add(themeIndex);
+  return true;
+}
+
 function triggerVictory() {
   if (isPracticeRun) {
+    if (tryAwardDeathless()) savePlayerProfile();
     endPracticeRun();
     return;
   }
@@ -2894,10 +2918,7 @@ function triggerVictory() {
   }
   zoneCompletionCounts[themeIndex] = (zoneCompletionCounts[themeIndex] || 0) + 1;
   profileChanged = true;
-  if (selectedDifficulty !== 'easy' && !diedInCurrentZone && !deathlessZones.has(themeIndex)) {
-    deathlessZones.add(themeIndex);
-    profileChanged = true;
-  }
+  if (tryAwardDeathless()) profileChanged = true;
   if (!beatenDifficulties.has(selectedDifficulty)) {
     beatenDifficulties.add(selectedDifficulty);
     profileChanged = true;
@@ -2963,8 +2984,11 @@ function resetGame() {
   freeHitsUsedThisLife = 0;
   pendingRespawnMercyEligible = false;
   diedInCurrentZone = false;
+  awaitingFirstFlyHold = false;
+  showFlyControlsHint = false;
   lives = MAX_LIVES;
   maxDistanceReached = 0;
+  lastDeathDistance = 0;
   zoneStartDistance = 0;
   zoneStartFrame = 0;
   portalObject = null;
@@ -3019,8 +3043,38 @@ function respawnInZone(opts) {
   reseedZoneObstacles(ship.x + 420);
 }
 
+function armFlyControlsHint() {
+  if (flyControlsHintSeen) return;
+  flyControlsHintSeen = true;
+  awaitingFirstFlyHold = true;
+  showFlyControlsHint = true;
+  lastRenderedOverlayState = null;
+}
+
+function flyControlsHintHtml() {
+  const sub = MOBILE_PERFORMANCE_MODE
+    ? 'TAP AND HOLD  ·  RELEASE TO FALL'
+    : 'LEFT CLICK OR SPACE  ·  RELEASE TO FALL';
+  return `
+      <div class="fly-controls-hint" aria-live="polite">
+        <div class="fly-controls-hint-title">HOLD TO FLY</div>
+        <div class="fly-controls-hint-sub">${sub}</div>
+      </div>
+    `;
+}
+
+function noteFlyHold() {
+  if (!awaitingFirstFlyHold && !showFlyControlsHint) return;
+  awaitingFirstFlyHold = false;
+  if (showFlyControlsHint) {
+    showFlyControlsHint = false;
+    lastRenderedOverlayState = null;
+  }
+}
+
 function beginRunFromOptions() {
   resetGame(); // locks in MAX_LIVES/continuesRemaining for the chosen difficulty
+  armFlyControlsHint();
   sfxStart();
   holding = false;
   beginWarp(0);
@@ -3050,6 +3104,7 @@ function startPress() {
     pendingRespawnMercyEligible = false;
   } else if (state === 'gameover' || state === 'victory') {
     resetGame();
+    flyControlsHintSeen = false;
     state = 'home';
     return;
   }
@@ -3098,6 +3153,7 @@ function quitToHome() {
     return;
   }
   resetGame();
+  flyControlsHintSeen = false;
   state = 'home';
   savePlayerProfile();
 }
@@ -3121,6 +3177,7 @@ function startPracticeZone(zoneIndex) {
   themeLevelReached = 0;
   sfxStart();
   prefetchThemeBgm(zoneIndex);
+  armFlyControlsHint();
   beginWarp(zoneIndex);
   state = 'playing';
   updateBgmForState();
@@ -3407,6 +3464,7 @@ function beginWarp(targetIndex) {
   if (isPracticeRun && typeof targetIndex !== 'number') {
     // practice runs only ever play the one selected zone -- any attempt to
     // sequentially advance to "the next zone" ends the run instead
+    if (tryAwardDeathless()) savePlayerProfile();
     endPracticeRun();
     return;
   }
@@ -3423,13 +3481,7 @@ function beginWarp(targetIndex) {
     }
     zoneCompletionCounts[themeIndex] = (zoneCompletionCounts[themeIndex] || 0) + 1;
     profileChanged = true;
-    // deathless additionally requires a non-Easy difficulty and no death
-    // during this specific zone visit -- Easy mode's forgiveness mechanics
-    // would otherwise trivialize what's meant to be a real challenge
-    if (selectedDifficulty !== 'easy' && !diedInCurrentZone && !deathlessZones.has(themeIndex)) {
-      deathlessZones.add(themeIndex);
-      profileChanged = true;
-    }
+    if (tryAwardDeathless()) profileChanged = true;
     if (profileChanged) savePlayerProfile();
   }
   warpActive = true;

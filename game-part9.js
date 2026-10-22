@@ -108,6 +108,8 @@ const SIM_STEP_MS = 1000 / SIM_HZ;
 const MAX_SIM_STEPS = 8;
 let simLastNow = 0;
 let simAccumulatorMs = 0;
+let simPrevShipY = NaN;
+let simPrevShipRotation = NaN;
 
 function loop() {
   const now = performance.now();
@@ -126,6 +128,8 @@ function loop() {
         simAccumulatorMs += elapsed;
         let steps = 0;
         while (simAccumulatorMs >= SIM_STEP_MS && steps < MAX_SIM_STEPS) {
+          simPrevShipY = ship.y;
+          simPrevShipRotation = ship.rotation;
           update();
           simAccumulatorMs -= SIM_STEP_MS;
           steps++;
@@ -137,6 +141,8 @@ function loop() {
         }
       } else {
         simAccumulatorMs = 0;
+        simPrevShipY = ship.y;
+        simPrevShipRotation = ship.rotation;
         update();
       }
       draw();

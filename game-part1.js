@@ -4,6 +4,20 @@ let ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 const rotateOverlay = document.getElementById('rotate-overlay');
 
+const MOBILE_PERFORMANCE_MODE = (() => {
+  const ua = navigator.userAgent || '';
+  const uaDataMobile = !!(navigator.userAgentData && navigator.userAgentData.mobile);
+  const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  const coarseTouch = navigator.maxTouchPoints > 0
+    && window.matchMedia
+    && window.matchMedia('(pointer: coarse)').matches;
+  return uaDataMobile || mobileUA || coarseTouch;
+})();
+window.SYNTH_FLIGHT_MOBILE_PERFORMANCE = MOBILE_PERFORMANCE_MODE;
+if (MOBILE_PERFORMANCE_MODE) {
+  document.documentElement.classList.add('mobile-performance');
+}
+
 const DEV_TOOLS_ENABLED = (() => {
   try {
     const params = new URLSearchParams(location.search);
@@ -70,6 +84,11 @@ function applyCanvasRenderScale() {
 }
 
 function currentDisplayScale() {
+  // Phone DPR values commonly reach 2-3. Rendering the 1280x720 playfield at
+  // that density creates millions of unnecessary pixels inside a small mobile
+  // browser view. Native game resolution is still sharp while being far less
+  // expensive to redraw, helping the browser maintain a steady display rate.
+  if (MOBILE_PERFORMANCE_MODE) return 1;
   const dpr = window.devicePixelRatio || 1;
   return Math.max(1, Math.min(2, dpr));
 }
@@ -77,7 +96,9 @@ function currentDisplayScale() {
 function sharpenCanvasContext(context) {
   if (!context) return;
   context.imageSmoothingEnabled = true;
-  if ('imageSmoothingQuality' in context) context.imageSmoothingQuality = 'high';
+  if ('imageSmoothingQuality' in context) {
+    context.imageSmoothingQuality = MOBILE_PERFORMANCE_MODE ? 'low' : 'high';
+  }
 }
 
 function resizeCanvas() {
@@ -128,11 +149,7 @@ function positionPauseButton() {
 }
 
 function checkOrientation() {
-  // Chromium (including Cursor's preview panel) often reports touch even on
-  // desktop. Only block portrait on real mobile browsers so we can play in a
-  // tall editor side panel.
-  const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-  const portrait = isMobileUA && window.innerHeight > window.innerWidth;
+  const portrait = MOBILE_PERFORMANCE_MODE && window.innerHeight > window.innerWidth;
   isPortraitBlocked = portrait;
   rotateOverlay.classList.toggle('active', portrait);
   if (!portrait) {
@@ -190,7 +207,7 @@ const SHIP_TRAILS = [
   { id: 'pulse', name: 'PULSE JET', hint: 'Complete any zone', unlocked: () => completedZones.size >= 1 },
   { id: 'echo', name: 'AFTERIMAGE', hint: 'Fly 10,000m', unlocked: () => totalDistanceTraveled >= 10000 },
   { id: 'twin', name: 'TWIN THRUST', hint: 'Complete 6 zones', unlocked: () => completedZones.size >= 6 },
-  { id: 'sparks', name: 'SPARK WAKE', hint: 'Clear a zone deathless', unlocked: () => deathlessZones.size >= 1 },
+  { id: 'sparks', name: 'SPARK WAKE', hint: 'Clear a zone deathless on Hard', unlocked: () => deathlessZones.size >= 1 },
   { id: 'ribbon', name: 'NEON RIBBON', hint: 'Fly 50,000m', unlocked: () => totalDistanceTraveled >= 50000 },
   { id: 'helix', name: 'ION HELIX', hint: 'Fly 100,000m', unlocked: () => totalDistanceTraveled >= 100000 },
   { id: 'glitch', name: 'SIGNAL GLITCH', hint: 'Beat the game', unlocked: () => beatenDifficulties.size >= 1 },
@@ -942,6 +959,14 @@ let selectedDifficulty = 'normal';
 // zone, unlocking Overdrive, or counting toward deaths-by-zone stats
 let isPracticeRun = false;
 let practiceZoneIndex = 0;
+// first launch of a campaign or Zone Select run waits for an actual hold
+// so a menu click cannot dump the ship into gravity with no on-screen
+// explanation of the controls
+let awaitingFirstFlyHold = false;
+let showFlyControlsHint = false;
+// one-shot for the in-play HOLD TO FLY prompt. Survives zone warps,
+// Zone Select, and resetGame(); only cleared when returning to the title.
+let flyControlsHintSeen = false;
 // true once any dev tool (Edit Zone jump, boss-phase skips, etc.) has
 // placed the player into a zone -- everything that follows this session
 // is dev testing, not real play, so it must not silently mark zones as
@@ -1438,9 +1463,8 @@ zoneScreenshots = loadZoneScreenshots();
 // from unlockedZones, which only requires having reached a zone's start.
 // Drives the per-zone "Completed Zone <name>" achievements.
 let completedZones = new Set(__loadedProfile.completedZones);
-// zone indices completed without dying even once, on a non-Easy
-// difficulty, during real sequential progression (not Zone Select
-// practice). Drives the "DEATHLESS: ZONE <name>" achievements.
+// zone indices completed without dying even once on Hard, in campaign
+// or Zone Select practice. Drives the "DEATHLESS: ZONE <name>" achievements.
 let deathlessZones = new Set(__loadedProfile.deathlessZones);
 // difficulty strings ('easy'/'normal'/'hard'/'extra') the game has been
 // beaten on at least once. Drives the "BEAT GAME: <difficulty>" achievements.
@@ -1498,7 +1522,7 @@ let clearTimeMs = 0;
 const DIFFICULTY_CONFIG = {
   easy: { lives: 9, continues: 3, invincibilityFrames: true, freeHitsPerLife: Infinity },
   normal: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 1 },
-  hard: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 0 },
+  hard: { lives: 9, continues: 5, invincibilityFrames: false, freeHitsPerLife: 0 },
   extra: { lives: 3, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
 };
 const INVINCIBILITY_DURATION_MS = 1500; // 1.5 seconds of play time -- how long a granted protection window lasts. Measured on the game clock so pause does not burn it down.
@@ -1532,6 +1556,7 @@ let freeHitCooldownEndTime = -1; // game-clock timestamp (ms) at which a hazard 
 let freeHitsUsedThisLife = 0; // forgiven hazard hits on the current life -- reset on respawn / new run
 let pendingRespawnMercyEligible = false; // true only when the death that caused the current respawn was a hazard death -- wall deaths are never eligible for the post-respawn mercy window
 let maxDistanceReached = 0;
+let lastDeathDistance = 0; // zone-local distance shown on the Life Lost screen
 let zoneStartDistance = 0;
 let zoneStartFrame = 0; // frame at which the current zone began -- used so frame-based oscillations (swinging gates, pulsing gaps, wind) always start at the same phase regardless of how long it took to reach this zone
 
@@ -1598,7 +1623,7 @@ const MINI_BOSS_DEATH_PATCH_COUNT = 7; // number of ash patches that spread acro
 // with the fork/branch sections stripped out
 const MINI_BOSS_ESCAPE_RUN_DISTANCE = 600;
 const MINI_BOSS_ESCAPE_RUN_PATTERN = [
-  { centerFrac: 0.56 }, { centerFrac: 0.24 }, { centerFrac: 0.4 }, { centerFrac: 0.46 }, { centerFrac: 0.59 }, { centerFrac: 0.74 }, { centerFrac: 0.74 }, { centerFrac: 0.64 }, { centerFrac: 0.75, gapMult: 0.55 }, { centerFrac: 0.61 }, { centerFrac: 0.82 }, { centerFrac: 0.73 }, { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 }, { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 }, { centerFrac: 0.63 }, { centerFrac: 0.28 }, { centerFrac: 0.68 }, { centerFrac: 0.26 }, { centerFrac: 0.7 }, { centerFrac: 0.3 }, { centerFrac: 0.66, gapMult: 0.7 }, { centerFrac: 0.27 }, { centerFrac: 0.65 }, { centerFrac: 0.79 }, { centerFrac: 0.71 }, { centerFrac: 0.85, gapMult: 1.5 }, { centerFrac: 0.73 }, { centerFrac: 0.68 }, { centerFrac: 0.6, gapMult: 0.55 }, { centerFrac: 0.37 }, { centerFrac: 0.51 }, { centerFrac: 0.62 }, { centerFrac: 0.8 }, { centerFrac: 0.73 }, { centerFrac: 0.81, gapMult: 0.5 }, { centerFrac: 0.74, gapMult: 0.5 }, { centerFrac: 0.78 }, { centerFrac: 0.78 }, { centerFrac: 0.61 }, { centerFrac: 0.47 }, { centerFrac: 0.34 }, { centerFrac: 0.19 }, { centerFrac: 0.22 }, { centerFrac: 0.28 }, { centerFrac: 0.2, gapMult: 0.55 }, { centerFrac: 0.3 }, { centerFrac: 0.54 }, { centerFrac: 0.4 }, { centerFrac: 0.32 }, { centerFrac: 0.18 }, { centerFrac: 0.31 }, { centerFrac: 0.41 }, { centerFrac: 0.26 }, { centerFrac: 0.22 }, { centerFrac: 0.24 }, { centerFrac: 0.38 }, { centerFrac: 0.25 }
+  { centerFrac: 0.56 }, { centerFrac: 0.24 }, { centerFrac: 0.4 }, { centerFrac: 0.46 }, { centerFrac: 0.59 }, { centerFrac: 0.74 }, { centerFrac: 0.74 }, { centerFrac: 0.64 }, { centerFrac: 0.70, gapMult: 0.88 }, { centerFrac: 0.61 }, { centerFrac: 0.82 }, { centerFrac: 0.73 }, { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 }, { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48, gapMult: 1.16 }, { centerFrac: 0.63, gapMult: 1.16 }, { centerFrac: 0.34, gapMult: 1.2 }, { centerFrac: 0.66, gapMult: 1.16 }, { centerFrac: 0.34, gapMult: 1.2 }, { centerFrac: 0.66, gapMult: 1.16 }, { centerFrac: 0.36, gapMult: 1.16 }, { centerFrac: 0.64, gapMult: 1.05 }, { centerFrac: 0.36, gapMult: 1.12 }, { centerFrac: 0.62 }, { centerFrac: 0.79 }, { centerFrac: 0.71 }, { centerFrac: 0.85, gapMult: 1.5 }, { centerFrac: 0.73 }, { centerFrac: 0.68 }, { centerFrac: 0.58, gapMult: 0.9 }, { centerFrac: 0.45 }, { centerFrac: 0.51 }, { centerFrac: 0.58 }, { centerFrac: 0.68 }, { centerFrac: 0.62 }, { centerFrac: 0.66, gapMult: 0.9 }, { centerFrac: 0.60, gapMult: 0.95 }, { centerFrac: 0.55, gapMult: 1.12 }, { centerFrac: 0.52, gapMult: 1.18 }, { centerFrac: 0.50, gapMult: 1.22 }, { centerFrac: 0.48, gapMult: 1.22 }, { centerFrac: 0.52, gapMult: 1.25 }, { centerFrac: 0.50, gapMult: 1.25 }, { centerFrac: 0.50, gapMult: 1.28 }
 ];
 
 // mini boss attack 1: exits off-screen right, waits off-screen, then

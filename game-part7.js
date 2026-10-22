@@ -2377,15 +2377,26 @@ function drawGates(theme) {
     const botH = PLAY_BOTTOM - botY;
 
     ctx.save();
+    const gateX = MOBILE_PERFORMANCE_MODE ? Math.round(g.x) : g.x;
     ctx.shadowColor = theme.accentB;
-    ctx.shadowBlur = 14;
-    const grad = ctx.createLinearGradient(g.x, 0, g.x + GATE_WIDTH, 0);
+    ctx.shadowBlur = MOBILE_PERFORMANCE_MODE ? 6 : 14;
+    const grad = ctx.createLinearGradient(gateX, 0, gateX + GATE_WIDTH, 0);
     grad.addColorStop(0, theme.accentA);
     grad.addColorStop(1, theme.accentB);
     ctx.fillStyle = grad;
 
-    ctx.fillRect(g.x, PLAY_TOP, GATE_WIDTH, topH);
-    ctx.fillRect(g.x, botY, GATE_WIDTH, botH);
+    ctx.fillRect(gateX, PLAY_TOP, GATE_WIDTH, topH);
+    ctx.fillRect(gateX, botY, GATE_WIDTH, botH);
+    if (MOBILE_PERFORMANCE_MODE) {
+      // Keep the obstacle silhouette readable after the mobile canvas is
+      // downscaled over the bright synthwave grid.
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = theme.accentB;
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(gateX + 1, PLAY_TOP + 1, GATE_WIDTH - 2, Math.max(0, topH - 2));
+      ctx.strokeRect(gateX + 1, botY + 1, GATE_WIDTH - 2, Math.max(0, botH - 2));
+    }
     ctx.restore();
   }
 }
@@ -3292,6 +3303,22 @@ function drawShipTrailLocal(theme) {
   }
 }
 
+function mobileRenderAlpha() {
+  if (!MOBILE_PERFORMANCE_MODE || state !== 'playing' || !Number.isFinite(simAccumulatorMs)) return 1;
+  return Math.max(0, Math.min(1, simAccumulatorMs / SIM_STEP_MS));
+}
+
+function mobileRenderFrame() {
+  if (!MOBILE_PERFORMANCE_MODE || state !== 'playing') return frame;
+  return frame - (1 - mobileRenderAlpha());
+}
+
+function mobileWorldRenderOffsetX(theme) {
+  if (!MOBILE_PERFORMANCE_MODE || state !== 'playing') return 0;
+  const effScroll = SCROLL_SPEED * ((theme && theme.scrollMult) || 1);
+  return effScroll * (1 - mobileRenderAlpha());
+}
+
 function drawShip(theme) {
   const vanish = getShipVanishProgress();
   if (vanish >= 0.995) return; // fully consumed by the portal
@@ -3306,9 +3333,19 @@ function drawShip(theme) {
 
   drawShipTrailWorld(theme);
 
+  let renderShipY = ship.y;
+  let renderShipRotation = ship.rotation;
+  if (MOBILE_PERFORMANCE_MODE && state === 'playing'
+      && Number.isFinite(simPrevShipY) && Number.isFinite(simPrevShipRotation)
+      && Math.abs(ship.y - simPrevShipY) < 40) {
+    const alpha = mobileRenderAlpha();
+    renderShipY = simPrevShipY + (ship.y - simPrevShipY) * alpha;
+    renderShipRotation = simPrevShipRotation + (ship.rotation - simPrevShipRotation) * alpha;
+  }
+
   ctx.save();
-  ctx.translate(ship.x, ship.y);
-  ctx.rotate(ship.rotation * Math.PI / 180 + vanish * 8);
+  ctx.translate(ship.x, renderShipY);
+  ctx.rotate(renderShipRotation * Math.PI / 180 + vanish * 8);
   const shrink = 1 - vanish * 0.85;
   ctx.scale(shrink, shrink);
   ctx.globalAlpha = 1 - vanish;
@@ -3779,93 +3816,3 @@ function getBossShakeOffset() {
   return { x: 0, y: 0 };
 }
 
-function updateBgmForState() {
-  if (!audioUnlocked) return;
-  if (!audioSettings.bgmEnabled) {
-    stopBgm();
-    return;
-  }
-  const tester = document.getElementById('sfx-tester');
-  if (tester && tester.classList.contains('active') && previewLoopId) return;
-  if (state === 'playing' || state === 'paused' || state === 'respawn' || state === 'continue-prompt') {
-    const fileTrack = currentFileBgmTrack();
-    if (fileTrack) {
-      playFileBgm(fileTrack.id);
-      if (fileTrack.id === 'bgm-05-molten-core-boss') prefetchBgmTrack('bgm-05-molten-core');
-      if (fileTrack.id === 'bgm-10-reactor-core-p1') prefetchBgmTrack('bgm-10-reactor-core-p8');
-      if (fileTrack.id === 'bgm-13-the-signal-p1') prefetchBgmTrack('bgm-13-the-signal-p3');
-      if (fileTrack.id === 'bgm-13-the-signal-p3') prefetchBgmTrack('bgm-13-the-signal-p5');
-      return;
-    }
-    const th = currentTheme();
-    playBgm((th.isBossZone || th.isMiniBossZone) ? 'boss' : 'standard');
-  } else if (state === 'victory') {
-    playBgm('victory');
-  } else if (state === 'gameover') {
-    stopBgm();
-  } else {
-    playBgm('menu');
-  }
-}
-
-function draw() {
-  try {
-  updateBgmForState();
-  tickFileBgmLoop();
-  applyCanvasRenderScale();
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, H);
-
-  const shakeOffset = getBossShakeOffset();
-  ctx.save();
-  if (shakeOffset.x || shakeOffset.y) {
-    ctx.translate(Math.round(shakeOffset.x), Math.round(shakeOffset.y));
-  }
-
-  const theme = currentTheme();
-  if (state === 'home') {
-    drawHomeBackground();
-  } else if (state === 'options') {
-    drawMenuBackground();
-  } else {
-    drawBackground(theme);
-  }
-  drawBoss(theme);
-  drawMiniBoss(theme);
-  drawMiniBossBarrage(theme);
-  drawMiniBossFlameWall(theme);
-  drawReactorCoreAttacks(theme);
-  if (!warpActive && state !== 'home' && state !== 'options') {
-    if (theme.obstacleShape === 'terrain') {
-      drawTerrain(theme);
-    } else {
-      drawGates(theme);
-    }
-    drawPortalRing();
-  }
-  // drawn after gates/terrain so the wall/vignette actually occludes any
-  // hazard or projectile positioned within its darkened zone, rather than
-  // those rendering on top of it
-  if (theme.isBossZone) drawBossArenaBarrierWall(theme, boss);
-  if (theme.isMiniBossZone && miniBoss && theme.miniBossVariant !== 'core') {
-    drawBossArenaObsidianWall(theme, miniBoss);
-  }
-  if (state !== 'home' && state !== 'options') {
-    drawShip(theme);
-  }
-  if (warpActive) {
-    drawWarpEffect();
-  }
-  if (state !== 'home') {
-    drawBars(theme);
-  }
-  ctx.restore();
-  } finally {
-    maybeCaptureZoneScreenshot();
-    updateOverlay();
-  }
-}
-
-let lastRenderedOverlayState = null;
-const STATIC_OVERLAY_STATES = new Set(['zone-select', 'settings', 'achievements', 'paused', 'statistics', 'confirm-reset-stats', 'victory']);

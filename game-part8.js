@@ -1,5 +1,99 @@
+function updateBgmForState() {
+  if (!audioUnlocked) return;
+  if (!audioSettings.bgmEnabled) {
+    stopBgm();
+    return;
+  }
+  const tester = document.getElementById('sfx-tester');
+  if (tester && tester.classList.contains('active') && previewLoopId) return;
+  if (state === 'playing' || state === 'paused' || state === 'respawn' || state === 'continue-prompt') {
+    const fileTrack = currentFileBgmTrack();
+    if (fileTrack) {
+      playFileBgm(fileTrack.id);
+      if (fileTrack.id === 'bgm-05-molten-core-boss') prefetchBgmTrack('bgm-05-molten-core');
+      if (fileTrack.id === 'bgm-10-reactor-core-p1') prefetchBgmTrack('bgm-10-reactor-core-p8');
+      if (fileTrack.id === 'bgm-13-the-signal-p1') prefetchBgmTrack('bgm-13-the-signal-p3');
+      if (fileTrack.id === 'bgm-13-the-signal-p3') prefetchBgmTrack('bgm-13-the-signal-p5');
+      return;
+    }
+    const th = currentTheme();
+    playBgm((th.isBossZone || th.isMiniBossZone) ? 'boss' : 'standard');
+  } else if (state === 'victory') {
+    playBgm('victory');
+  } else if (state === 'gameover') {
+    stopBgm();
+  } else {
+    playBgm('menu');
+  }
+}
+
+function draw() {
+  try {
+  updateBgmForState();
+  tickFileBgmLoop();
+  applyCanvasRenderScale();
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  const shakeOffset = getBossShakeOffset();
+  ctx.save();
+  if (shakeOffset.x || shakeOffset.y) {
+    ctx.translate(Math.round(shakeOffset.x), Math.round(shakeOffset.y));
+  }
+
+  const theme = currentTheme();
+  if (state === 'home') {
+    drawHomeBackground();
+  } else if (state === 'options') {
+    drawMenuBackground();
+  } else {
+    drawBackground(theme);
+  }
+  drawBoss(theme);
+  drawMiniBoss(theme);
+  drawMiniBossBarrage(theme);
+  drawMiniBossFlameWall(theme);
+  drawReactorCoreAttacks(theme);
+  if (!warpActive && state !== 'home' && state !== 'options') {
+    ctx.save();
+    const worldRenderOffsetX = mobileWorldRenderOffsetX(theme);
+    if (worldRenderOffsetX) ctx.translate(worldRenderOffsetX, 0);
+    if (theme.obstacleShape === 'terrain') {
+      drawTerrain(theme);
+    } else {
+      drawGates(theme);
+    }
+    drawPortalRing();
+    ctx.restore();
+  }
+  // drawn after gates/terrain so the wall/vignette actually occludes any
+  // hazard or projectile positioned within its darkened zone, rather than
+  // those rendering on top of it
+  if (theme.isBossZone) drawBossArenaBarrierWall(theme, boss);
+  if (theme.isMiniBossZone && miniBoss && theme.miniBossVariant !== 'core') {
+    drawBossArenaObsidianWall(theme, miniBoss);
+  }
+  if (state !== 'home' && state !== 'options') {
+    drawShip(theme);
+  }
+  if (warpActive) {
+    drawWarpEffect();
+  }
+  if (state !== 'home') {
+    drawBars(theme);
+  }
+  ctx.restore();
+  } finally {
+    maybeCaptureZoneScreenshot();
+    updateOverlay();
+  }
+}
+
+let lastRenderedOverlayState = null;
+const STATIC_OVERLAY_STATES = new Set(['zone-select', 'settings', 'achievements', 'paused', 'statistics', 'confirm-reset-stats', 'victory']);
 function updateOverlay() {
-  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state;
+  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state === 'respawn' ? `respawn:${lastDeathDistance}` : state === 'playing' ? `playing:${showFlyControlsHint && !warpActive ? 'hint' : 'go'}` : state;
   if (__renderKey === lastRenderedOverlayState) return;
   overlay.classList.toggle('home-layout', state === 'home');
   pauseToggleBtn.style.display = (state === 'playing' || state === 'paused') ? 'block' : 'none';
@@ -27,6 +121,7 @@ function updateOverlay() {
       <div class="game-logo home-title options-title">SYNTH FLIGHT</div>
       <div class="options-panel-v2">
         <div class="panel-header">OPTIONS</div>
+        <div class="options-fly-hint">${MOBILE_PERFORMANCE_MODE ? 'HOLD TO FLY  ·  TAP AND HOLD, RELEASE TO FALL' : 'HOLD TO FLY  ·  LEFT CLICK OR SPACE, RELEASE TO FALL'}</div>
         <div class="menu-stack">
           <div class="options-diff-picker">
             <div class="settings-picker-label">DIFFICULTY</div>
@@ -119,7 +214,7 @@ function updateOverlay() {
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-hard">HARD</div>
             <div class="settings-diff-stats">
-              9 lives &middot; 3 continues<br>
+              9 lives &middot; 5 continues<br>
               No invincibility frames
             </div>
           </div>
@@ -207,7 +302,7 @@ function updateOverlay() {
         <div class="stats-cat stats-cat-done">COMPLETED</div>
         <div class="zone-grid">${completedZoneTilesHtml}${beatGameTilesHtml}</div>
         <div class="stats-cat stats-cat-deathless">DEATHLESS</div>
-        <div class="achievement-section-note">Clear a zone without dying, on Normal difficulty or higher.</div>
+        <div class="achievement-section-note">Clear a zone without dying on Hard, in campaign or Zone Select.</div>
         <div class="zone-grid">${deathlessTilesHtml}</div>
         <div class="stats-cat stats-cat-distance">DISTANCE MILESTONES</div>
         <div class="achievement-section-note">Lifetime distance flown, across every run.</div>
@@ -313,7 +408,7 @@ function updateOverlay() {
     overlay.innerHTML = `
       <div class="menu-panel zone-select-panel scrollable-overlay-list">
         <div id="title" style="font-size:26px;">ZONE SELECT</div>
-        <div class="zone-select-subtitle">WARP TO ANY UNLOCKED ZONE -- PRACTICE MODE, DOESN'T AFFECT BEST DISTANCE OR DEATH STATS</div>
+        <div class="zone-select-subtitle">WARP TO ANY UNLOCKED ZONE -- PRACTICE MODE, DOESN'T AFFECT BEST DISTANCE OR DEATH STATS. DEATHLESS CAN BE EARNED ON HARD.</div>
         <div class="zone-select-wrapper">
           <div class="zone-grid">${tilesHtml}</div>
           <div class="zone-preview-panel">
@@ -336,8 +431,8 @@ function updateOverlay() {
   } else if (state === 'ready') {
     const diffLabel = selectedDifficulty.toUpperCase();
     overlay.innerHTML = `
-      <div id="title">CLICK TO START</div>
-      <div id="subtitle">Difficulty: ${diffLabel}<br>Hold to rise, release to fall<br>Fly through the shifting gates<br>New world every 1000 distance<br>${MAX_LIVES} lives per run</div>
+      <div id="title">HOLD TO FLY</div>
+      <div id="subtitle">Difficulty: ${diffLabel}<br>${MOBILE_PERFORMANCE_MODE ? 'Tap and hold to rise, release to fall' : 'Hold left click or space to rise, release to fall'}<br>Fly through the shifting gates<br>New world every 1000 distance<br>${MAX_LIVES} lives per run</div>
     `;
   } else if (state === 'paused') {
     overlay.innerHTML = `
@@ -353,7 +448,7 @@ function updateOverlay() {
   } else if (state === 'respawn') {
     overlay.innerHTML = `
       <div id="title">LIFE LOST</div>
-      <div id="subtitle">${lives} ${lives === 1 ? 'life' : 'lives'} remaining<br>Restarting at the beginning of this zone<br>Click to continue</div>
+      <div id="subtitle">${lives} ${lives === 1 ? 'life' : 'lives'} remaining<br>Died at ${lastDeathDistance}${currentTheme().isBossZone || currentTheme().isMiniBossZone ? '' : ' / ' + THEME_DISTANCE}<br>Restarting at the beginning of this zone<br>Click to continue</div>
     `;
   } else if (state === 'continue-prompt') {
     overlay.innerHTML = `
@@ -425,6 +520,8 @@ function updateOverlay() {
         <button type="button" class="btn-continue">CLICK TO CONTINUE &#9654;</button>
       </div>
     `;
+  } else if (state === 'playing' && showFlyControlsHint && !warpActive) {
+    overlay.innerHTML = flyControlsHintHtml();
   } else {
     overlay.innerHTML = '';
   }

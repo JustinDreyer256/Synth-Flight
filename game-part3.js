@@ -511,7 +511,8 @@ function update() {
   syncMoltenSqueezeSound();
   syncMoltenDeathAshSound();
   syncCoreBulkheadHoldSound();
-  if (state === 'playing') {
+  if (state === 'playing' && holding) noteFlyHold();
+  if (state === 'playing' && !(awaitingFirstFlyHold && !warpActive)) {
     frame++;
     shipYHistory.push(ship.y);
     if (shipYHistory.length > SHIP_Y_HISTORY_MAX) shipYHistory.shift();
@@ -2191,6 +2192,7 @@ function endGame(mercyEligible, opts) {
     lifetimeDeathsByZone[themeIndex] = (lifetimeDeathsByZone[themeIndex] || 0) + 1;
     savePlayerProfile();
   }
+  lastDeathDistance = Math.max(0, Math.floor(distance - zoneStartDistance));
   lives--;
   diedInCurrentZone = true;
   if (lives > 0) {

@@ -4,6 +4,20 @@ let ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
 const overlay = document.getElementById('overlay');
 const rotateOverlay = document.getElementById('rotate-overlay');
 
+const MOBILE_PERFORMANCE_MODE = (() => {
+  const ua = navigator.userAgent || '';
+  const uaDataMobile = !!(navigator.userAgentData && navigator.userAgentData.mobile);
+  const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  const coarseTouch = navigator.maxTouchPoints > 0
+    && window.matchMedia
+    && window.matchMedia('(pointer: coarse)').matches;
+  return uaDataMobile || mobileUA || coarseTouch;
+})();
+window.SYNTH_FLIGHT_MOBILE_PERFORMANCE = MOBILE_PERFORMANCE_MODE;
+if (MOBILE_PERFORMANCE_MODE) {
+  document.documentElement.classList.add('mobile-performance');
+}
+
 const DEV_TOOLS_ENABLED = (() => {
   try {
     const params = new URLSearchParams(location.search);
@@ -70,6 +84,11 @@ function applyCanvasRenderScale() {
 }
 
 function currentDisplayScale() {
+  // Phone DPR values commonly reach 2-3. Rendering the 1280x720 playfield at
+  // that density creates millions of unnecessary pixels inside a small mobile
+  // browser view. Native game resolution is still sharp while being far less
+  // expensive to redraw, helping the browser maintain a steady display rate.
+  if (MOBILE_PERFORMANCE_MODE) return 1;
   const dpr = window.devicePixelRatio || 1;
   return Math.max(1, Math.min(2, dpr));
 }
@@ -77,7 +96,9 @@ function currentDisplayScale() {
 function sharpenCanvasContext(context) {
   if (!context) return;
   context.imageSmoothingEnabled = true;
-  if ('imageSmoothingQuality' in context) context.imageSmoothingQuality = 'high';
+  if ('imageSmoothingQuality' in context) {
+    context.imageSmoothingQuality = MOBILE_PERFORMANCE_MODE ? 'low' : 'high';
+  }
 }
 
 function resizeCanvas() {
@@ -128,11 +149,7 @@ function positionPauseButton() {
 }
 
 function checkOrientation() {
-  // Chromium (including Cursor's preview panel) often reports touch even on
-  // desktop. Only block portrait on real mobile browsers so we can play in a
-  // tall editor side panel.
-  const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-  const portrait = isMobileUA && window.innerHeight > window.innerWidth;
+  const portrait = MOBILE_PERFORMANCE_MODE && window.innerHeight > window.innerWidth;
   isPortraitBlocked = portrait;
   rotateOverlay.classList.toggle('active', portrait);
   if (!portrait) {
@@ -190,7 +207,7 @@ const SHIP_TRAILS = [
   { id: 'pulse', name: 'PULSE JET', hint: 'Complete any zone', unlocked: () => completedZones.size >= 1 },
   { id: 'echo', name: 'AFTERIMAGE', hint: 'Fly 10,000m', unlocked: () => totalDistanceTraveled >= 10000 },
   { id: 'twin', name: 'TWIN THRUST', hint: 'Complete 6 zones', unlocked: () => completedZones.size >= 6 },
-  { id: 'sparks', name: 'SPARK WAKE', hint: 'Clear a zone deathless', unlocked: () => deathlessZones.size >= 1 },
+  { id: 'sparks', name: 'SPARK WAKE', hint: 'Clear a zone deathless on Hard', unlocked: () => deathlessZones.size >= 1 },
   { id: 'ribbon', name: 'NEON RIBBON', hint: 'Fly 50,000m', unlocked: () => totalDistanceTraveled >= 50000 },
   { id: 'helix', name: 'ION HELIX', hint: 'Fly 100,000m', unlocked: () => totalDistanceTraveled >= 100000 },
   { id: 'glitch', name: 'SIGNAL GLITCH', hint: 'Beat the game', unlocked: () => beatenDifficulties.size >= 1 },
@@ -942,6 +959,14 @@ let selectedDifficulty = 'normal';
 // zone, unlocking Overdrive, or counting toward deaths-by-zone stats
 let isPracticeRun = false;
 let practiceZoneIndex = 0;
+// first launch of a campaign or Zone Select run waits for an actual hold
+// so a menu click cannot dump the ship into gravity with no on-screen
+// explanation of the controls
+let awaitingFirstFlyHold = false;
+let showFlyControlsHint = false;
+// one-shot for the in-play HOLD TO FLY prompt. Survives zone warps,
+// Zone Select, and resetGame(); only cleared when returning to the title.
+let flyControlsHintSeen = false;
 // true once any dev tool (Edit Zone jump, boss-phase skips, etc.) has
 // placed the player into a zone -- everything that follows this session
 // is dev testing, not real play, so it must not silently mark zones as
@@ -1438,9 +1463,8 @@ zoneScreenshots = loadZoneScreenshots();
 // from unlockedZones, which only requires having reached a zone's start.
 // Drives the per-zone "Completed Zone <name>" achievements.
 let completedZones = new Set(__loadedProfile.completedZones);
-// zone indices completed without dying even once, on a non-Easy
-// difficulty, during real sequential progression (not Zone Select
-// practice). Drives the "DEATHLESS: ZONE <name>" achievements.
+// zone indices completed without dying even once on Hard, in campaign
+// or Zone Select practice. Drives the "DEATHLESS: ZONE <name>" achievements.
 let deathlessZones = new Set(__loadedProfile.deathlessZones);
 // difficulty strings ('easy'/'normal'/'hard'/'extra') the game has been
 // beaten on at least once. Drives the "BEAT GAME: <difficulty>" achievements.
@@ -1498,7 +1522,7 @@ let clearTimeMs = 0;
 const DIFFICULTY_CONFIG = {
   easy: { lives: 9, continues: 3, invincibilityFrames: true, freeHitsPerLife: Infinity },
   normal: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 1 },
-  hard: { lives: 9, continues: 3, invincibilityFrames: false, freeHitsPerLife: 0 },
+  hard: { lives: 9, continues: 5, invincibilityFrames: false, freeHitsPerLife: 0 },
   extra: { lives: 3, continues: 0, invincibilityFrames: true, freeHitsPerLife: Infinity },
 };
 const INVINCIBILITY_DURATION_MS = 1500; // 1.5 seconds of play time -- how long a granted protection window lasts. Measured on the game clock so pause does not burn it down.
@@ -1532,6 +1556,7 @@ let freeHitCooldownEndTime = -1; // game-clock timestamp (ms) at which a hazard 
 let freeHitsUsedThisLife = 0; // forgiven hazard hits on the current life -- reset on respawn / new run
 let pendingRespawnMercyEligible = false; // true only when the death that caused the current respawn was a hazard death -- wall deaths are never eligible for the post-respawn mercy window
 let maxDistanceReached = 0;
+let lastDeathDistance = 0; // zone-local distance shown on the Life Lost screen
 let zoneStartDistance = 0;
 let zoneStartFrame = 0; // frame at which the current zone began -- used so frame-based oscillations (swinging gates, pulsing gaps, wind) always start at the same phase regardless of how long it took to reach this zone
 
@@ -1598,7 +1623,7 @@ const MINI_BOSS_DEATH_PATCH_COUNT = 7; // number of ash patches that spread acro
 // with the fork/branch sections stripped out
 const MINI_BOSS_ESCAPE_RUN_DISTANCE = 600;
 const MINI_BOSS_ESCAPE_RUN_PATTERN = [
-  { centerFrac: 0.56 }, { centerFrac: 0.24 }, { centerFrac: 0.4 }, { centerFrac: 0.46 }, { centerFrac: 0.59 }, { centerFrac: 0.74 }, { centerFrac: 0.74 }, { centerFrac: 0.64 }, { centerFrac: 0.75, gapMult: 0.55 }, { centerFrac: 0.61 }, { centerFrac: 0.82 }, { centerFrac: 0.73 }, { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 }, { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48 }, { centerFrac: 0.63 }, { centerFrac: 0.28 }, { centerFrac: 0.68 }, { centerFrac: 0.26 }, { centerFrac: 0.7 }, { centerFrac: 0.3 }, { centerFrac: 0.66, gapMult: 0.7 }, { centerFrac: 0.27 }, { centerFrac: 0.65 }, { centerFrac: 0.79 }, { centerFrac: 0.71 }, { centerFrac: 0.85, gapMult: 1.5 }, { centerFrac: 0.73 }, { centerFrac: 0.68 }, { centerFrac: 0.6, gapMult: 0.55 }, { centerFrac: 0.37 }, { centerFrac: 0.51 }, { centerFrac: 0.62 }, { centerFrac: 0.8 }, { centerFrac: 0.73 }, { centerFrac: 0.81, gapMult: 0.5 }, { centerFrac: 0.74, gapMult: 0.5 }, { centerFrac: 0.78 }, { centerFrac: 0.78 }, { centerFrac: 0.61 }, { centerFrac: 0.47 }, { centerFrac: 0.34 }, { centerFrac: 0.19 }, { centerFrac: 0.22 }, { centerFrac: 0.28 }, { centerFrac: 0.2, gapMult: 0.55 }, { centerFrac: 0.3 }, { centerFrac: 0.54 }, { centerFrac: 0.4 }, { centerFrac: 0.32 }, { centerFrac: 0.18 }, { centerFrac: 0.31 }, { centerFrac: 0.41 }, { centerFrac: 0.26 }, { centerFrac: 0.22 }, { centerFrac: 0.24 }, { centerFrac: 0.38 }, { centerFrac: 0.25 }
+  { centerFrac: 0.56 }, { centerFrac: 0.24 }, { centerFrac: 0.4 }, { centerFrac: 0.46 }, { centerFrac: 0.59 }, { centerFrac: 0.74 }, { centerFrac: 0.74 }, { centerFrac: 0.64 }, { centerFrac: 0.70, gapMult: 0.88 }, { centerFrac: 0.61 }, { centerFrac: 0.82 }, { centerFrac: 0.73 }, { centerFrac: 0.75 }, { centerFrac: 0.78 }, { centerFrac: 0.62 }, { centerFrac: 0.72 }, { centerFrac: 0.63 }, { centerFrac: 0.48, gapMult: 1.16 }, { centerFrac: 0.63, gapMult: 1.16 }, { centerFrac: 0.34, gapMult: 1.2 }, { centerFrac: 0.66, gapMult: 1.16 }, { centerFrac: 0.34, gapMult: 1.2 }, { centerFrac: 0.66, gapMult: 1.16 }, { centerFrac: 0.36, gapMult: 1.16 }, { centerFrac: 0.64, gapMult: 1.05 }, { centerFrac: 0.36, gapMult: 1.12 }, { centerFrac: 0.62 }, { centerFrac: 0.79 }, { centerFrac: 0.71 }, { centerFrac: 0.85, gapMult: 1.5 }, { centerFrac: 0.73 }, { centerFrac: 0.68 }, { centerFrac: 0.58, gapMult: 0.9 }, { centerFrac: 0.45 }, { centerFrac: 0.51 }, { centerFrac: 0.58 }, { centerFrac: 0.68 }, { centerFrac: 0.62 }, { centerFrac: 0.66, gapMult: 0.9 }, { centerFrac: 0.60, gapMult: 0.95 }, { centerFrac: 0.55, gapMult: 1.12 }, { centerFrac: 0.52, gapMult: 1.18 }, { centerFrac: 0.50, gapMult: 1.22 }, { centerFrac: 0.48, gapMult: 1.22 }, { centerFrac: 0.52, gapMult: 1.25 }, { centerFrac: 0.50, gapMult: 1.25 }, { centerFrac: 0.50, gapMult: 1.28 }
 ];
 
 // mini boss attack 1: exits off-screen right, waits off-screen, then
@@ -3487,7 +3512,7 @@ function spawnBossVolleyTelegraph() {
 function fireBossVolley(lockedY) {
   if (!boss) return;
   const numProjectiles = 3;
-  const speed = 6.5;
+  const speed = 5.85; // 10% slower than 6.5
   const dx = ship.x - boss.x, dy = lockedY - boss.y; // straight-line toward the locked target
   const dist = Math.hypot(dx, dy) || 1;
   for (let i = 0; i < numProjectiles; i++) {
@@ -3552,8 +3577,8 @@ function spawnBossChargeBeamTelegraph() {
   const isSuperBeam = bossChargeBeamCount === 8;
   let effThickness;
   if (isSuperBeam) {
-    // 56.4% of play height, then 3% more open gap on each side (6% thinner)
-    effThickness = (PLAY_BOTTOM - PLAY_TOP) * (0.6 * 0.94 - 0.06);
+    // 40.3% of the playable height.
+    effThickness = (PLAY_BOTTOM - PLAY_TOP) * 0.403;
   } else if (bossChargeBeamCount >= 6) {
     effThickness = BOSS_CHARGE_BEAM_THICKNESS * 4; // shots 6 and 7 -- same, quadruple size
   } else if (bossChargeBeamCount >= 4) {
@@ -4073,9 +4098,20 @@ function spawnExtraSparkHub() {
     ? PLAY_TOP + entry.towerLength
     : PLAY_BOTTOM - entry.towerLength;
 
+  let hubX = W + 60;
+  const nearbyDoor = gates
+    .filter(g => g.type === 'movingdoor' && Math.abs(g.x - hubX) < 120)
+    .sort((a, b) => Math.abs(a.x - hubX) - Math.abs(b.x - hubX))[0];
+  if (nearbyDoor) {
+    // Keep the tower clearly to the left of a nearby moving door. The hub's
+    // outer spikes reach about 17px from center; this leaves another 24px of
+    // visible air beyond the door's edge.
+    hubX = nearbyDoor.x - nearbyDoor.width / 2 - 17 - 24;
+  }
+
   gates.push({
     type: 'sparkhub',
-    x: W + 60,
+    x: hubX,
     y: y,
     mountSide: entry.mountSide,
     towerLength: entry.towerLength,
@@ -4998,8 +5034,21 @@ const RANK_TIER_HINTS = {
   C: '19+ deaths'
 };
 
+function tryAwardDeathless() {
+  // Hard only, no lives lost this zone visit, and not a DEV session.
+  // Zone Select practice is allowed so a true deathless clear can be earned
+  // one zone at a time.
+  if (devSessionActive) return false;
+  if (selectedDifficulty !== 'hard') return false;
+  if (diedInCurrentZone) return false;
+  if (deathlessZones.has(themeIndex)) return false;
+  deathlessZones.add(themeIndex);
+  return true;
+}
+
 function triggerVictory() {
   if (isPracticeRun) {
+    if (tryAwardDeathless()) savePlayerProfile();
     endPracticeRun();
     return;
   }
@@ -5023,10 +5072,7 @@ function triggerVictory() {
   }
   zoneCompletionCounts[themeIndex] = (zoneCompletionCounts[themeIndex] || 0) + 1;
   profileChanged = true;
-  if (selectedDifficulty !== 'easy' && !diedInCurrentZone && !deathlessZones.has(themeIndex)) {
-    deathlessZones.add(themeIndex);
-    profileChanged = true;
-  }
+  if (tryAwardDeathless()) profileChanged = true;
   if (!beatenDifficulties.has(selectedDifficulty)) {
     beatenDifficulties.add(selectedDifficulty);
     profileChanged = true;
@@ -5092,8 +5138,11 @@ function resetGame() {
   freeHitsUsedThisLife = 0;
   pendingRespawnMercyEligible = false;
   diedInCurrentZone = false;
+  awaitingFirstFlyHold = false;
+  showFlyControlsHint = false;
   lives = MAX_LIVES;
   maxDistanceReached = 0;
+  lastDeathDistance = 0;
   zoneStartDistance = 0;
   zoneStartFrame = 0;
   portalObject = null;
@@ -5148,8 +5197,38 @@ function respawnInZone(opts) {
   reseedZoneObstacles(ship.x + 420);
 }
 
+function armFlyControlsHint() {
+  if (flyControlsHintSeen) return;
+  flyControlsHintSeen = true;
+  awaitingFirstFlyHold = true;
+  showFlyControlsHint = true;
+  lastRenderedOverlayState = null;
+}
+
+function flyControlsHintHtml() {
+  const sub = MOBILE_PERFORMANCE_MODE
+    ? 'TAP AND HOLD  ·  RELEASE TO FALL'
+    : 'LEFT CLICK OR SPACE  ·  RELEASE TO FALL';
+  return `
+      <div class="fly-controls-hint" aria-live="polite">
+        <div class="fly-controls-hint-title">HOLD TO FLY</div>
+        <div class="fly-controls-hint-sub">${sub}</div>
+      </div>
+    `;
+}
+
+function noteFlyHold() {
+  if (!awaitingFirstFlyHold && !showFlyControlsHint) return;
+  awaitingFirstFlyHold = false;
+  if (showFlyControlsHint) {
+    showFlyControlsHint = false;
+    lastRenderedOverlayState = null;
+  }
+}
+
 function beginRunFromOptions() {
   resetGame(); // locks in MAX_LIVES/continuesRemaining for the chosen difficulty
+  armFlyControlsHint();
   sfxStart();
   holding = false;
   beginWarp(0);
@@ -5179,6 +5258,7 @@ function startPress() {
     pendingRespawnMercyEligible = false;
   } else if (state === 'gameover' || state === 'victory') {
     resetGame();
+    flyControlsHintSeen = false;
     state = 'home';
     return;
   }
@@ -5227,6 +5307,7 @@ function quitToHome() {
     return;
   }
   resetGame();
+  flyControlsHintSeen = false;
   state = 'home';
   savePlayerProfile();
 }
@@ -5250,6 +5331,7 @@ function startPracticeZone(zoneIndex) {
   themeLevelReached = 0;
   sfxStart();
   prefetchThemeBgm(zoneIndex);
+  armFlyControlsHint();
   beginWarp(zoneIndex);
   state = 'playing';
   updateBgmForState();
@@ -5536,6 +5618,7 @@ function beginWarp(targetIndex) {
   if (isPracticeRun && typeof targetIndex !== 'number') {
     // practice runs only ever play the one selected zone -- any attempt to
     // sequentially advance to "the next zone" ends the run instead
+    if (tryAwardDeathless()) savePlayerProfile();
     endPracticeRun();
     return;
   }
@@ -5552,13 +5635,7 @@ function beginWarp(targetIndex) {
     }
     zoneCompletionCounts[themeIndex] = (zoneCompletionCounts[themeIndex] || 0) + 1;
     profileChanged = true;
-    // deathless additionally requires a non-Easy difficulty and no death
-    // during this specific zone visit -- Easy mode's forgiveness mechanics
-    // would otherwise trivialize what's meant to be a real challenge
-    if (selectedDifficulty !== 'easy' && !diedInCurrentZone && !deathlessZones.has(themeIndex)) {
-      deathlessZones.add(themeIndex);
-      profileChanged = true;
-    }
+    if (tryAwardDeathless()) profileChanged = true;
     if (profileChanged) savePlayerProfile();
   }
   warpActive = true;
@@ -6185,7 +6262,8 @@ function update() {
   syncMoltenSqueezeSound();
   syncMoltenDeathAshSound();
   syncCoreBulkheadHoldSound();
-  if (state === 'playing') {
+  if (state === 'playing' && holding) noteFlyHold();
+  if (state === 'playing' && !(awaitingFirstFlyHold && !warpActive)) {
     frame++;
     shipYHistory.push(ship.y);
     if (shipYHistory.length > SHIP_Y_HISTORY_MAX) shipYHistory.shift();
@@ -7865,6 +7943,7 @@ function endGame(mercyEligible, opts) {
     lifetimeDeathsByZone[themeIndex] = (lifetimeDeathsByZone[themeIndex] || 0) + 1;
     savePlayerProfile();
   }
+  lastDeathDistance = Math.max(0, Math.floor(distance - zoneStartDistance));
   lives--;
   diedInCurrentZone = true;
   if (lives > 0) {
@@ -17435,9 +17514,9 @@ function drawBackground(theme) {
     ctx.lineWidth = 1;
     ctx.globalAlpha = bossGridFadeEnabled ? 1 - colorProgress : 1;
     const gridSpacing = 40;
-    const offset = Math.round((frame * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing);
+    const offset = (mobileRenderFrame() * SCROLL_SPEED * (theme.scrollMult || 1)) % gridSpacing;
     for (let x = -offset; x < W; x += gridSpacing) {
-      const px = Math.round(x) + 0.5;
+      const px = MOBILE_PERFORMANCE_MODE ? x + 0.5 : Math.round(x) + 0.5;
       ctx.beginPath();
       ctx.moveTo(px, PLAY_TOP);
       ctx.lineTo(px, PLAY_BOTTOM);
@@ -20234,15 +20313,26 @@ function drawGates(theme) {
     const botH = PLAY_BOTTOM - botY;
 
     ctx.save();
+    const gateX = MOBILE_PERFORMANCE_MODE ? Math.round(g.x) : g.x;
     ctx.shadowColor = theme.accentB;
-    ctx.shadowBlur = 14;
-    const grad = ctx.createLinearGradient(g.x, 0, g.x + GATE_WIDTH, 0);
+    ctx.shadowBlur = MOBILE_PERFORMANCE_MODE ? 6 : 14;
+    const grad = ctx.createLinearGradient(gateX, 0, gateX + GATE_WIDTH, 0);
     grad.addColorStop(0, theme.accentA);
     grad.addColorStop(1, theme.accentB);
     ctx.fillStyle = grad;
 
-    ctx.fillRect(g.x, PLAY_TOP, GATE_WIDTH, topH);
-    ctx.fillRect(g.x, botY, GATE_WIDTH, botH);
+    ctx.fillRect(gateX, PLAY_TOP, GATE_WIDTH, topH);
+    ctx.fillRect(gateX, botY, GATE_WIDTH, botH);
+    if (MOBILE_PERFORMANCE_MODE) {
+      // Keep the obstacle silhouette readable after the mobile canvas is
+      // downscaled over the bright synthwave grid.
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = theme.accentB;
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(gateX + 1, PLAY_TOP + 1, GATE_WIDTH - 2, Math.max(0, topH - 2));
+      ctx.strokeRect(gateX + 1, botY + 1, GATE_WIDTH - 2, Math.max(0, botH - 2));
+    }
     ctx.restore();
   }
 }
@@ -21149,6 +21239,22 @@ function drawShipTrailLocal(theme) {
   }
 }
 
+function mobileRenderAlpha() {
+  if (!MOBILE_PERFORMANCE_MODE || state !== 'playing' || !Number.isFinite(simAccumulatorMs)) return 1;
+  return Math.max(0, Math.min(1, simAccumulatorMs / SIM_STEP_MS));
+}
+
+function mobileRenderFrame() {
+  if (!MOBILE_PERFORMANCE_MODE || state !== 'playing') return frame;
+  return frame - (1 - mobileRenderAlpha());
+}
+
+function mobileWorldRenderOffsetX(theme) {
+  if (!MOBILE_PERFORMANCE_MODE || state !== 'playing') return 0;
+  const effScroll = SCROLL_SPEED * ((theme && theme.scrollMult) || 1);
+  return effScroll * (1 - mobileRenderAlpha());
+}
+
 function drawShip(theme) {
   const vanish = getShipVanishProgress();
   if (vanish >= 0.995) return; // fully consumed by the portal
@@ -21163,9 +21269,19 @@ function drawShip(theme) {
 
   drawShipTrailWorld(theme);
 
+  let renderShipY = ship.y;
+  let renderShipRotation = ship.rotation;
+  if (MOBILE_PERFORMANCE_MODE && state === 'playing'
+      && Number.isFinite(simPrevShipY) && Number.isFinite(simPrevShipRotation)
+      && Math.abs(ship.y - simPrevShipY) < 40) {
+    const alpha = mobileRenderAlpha();
+    renderShipY = simPrevShipY + (ship.y - simPrevShipY) * alpha;
+    renderShipRotation = simPrevShipRotation + (ship.rotation - simPrevShipRotation) * alpha;
+  }
+
   ctx.save();
-  ctx.translate(ship.x, ship.y);
-  ctx.rotate(ship.rotation * Math.PI / 180 + vanish * 8);
+  ctx.translate(ship.x, renderShipY);
+  ctx.rotate(renderShipRotation * Math.PI / 180 + vanish * 8);
   const shrink = 1 - vanish * 0.85;
   ctx.scale(shrink, shrink);
   ctx.globalAlpha = 1 - vanish;
@@ -21694,12 +21810,16 @@ function draw() {
   drawMiniBossFlameWall(theme);
   drawReactorCoreAttacks(theme);
   if (!warpActive && state !== 'home' && state !== 'options') {
+    ctx.save();
+    const worldRenderOffsetX = mobileWorldRenderOffsetX(theme);
+    if (worldRenderOffsetX) ctx.translate(worldRenderOffsetX, 0);
     if (theme.obstacleShape === 'terrain') {
       drawTerrain(theme);
     } else {
       drawGates(theme);
     }
     drawPortalRing();
+    ctx.restore();
   }
   // drawn after gates/terrain so the wall/vignette actually occludes any
   // hazard or projectile positioned within its darkened zone, rather than
@@ -21727,7 +21847,7 @@ function draw() {
 let lastRenderedOverlayState = null;
 const STATIC_OVERLAY_STATES = new Set(['zone-select', 'settings', 'achievements', 'paused', 'statistics', 'confirm-reset-stats', 'victory']);
 function updateOverlay() {
-  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state;
+  const __renderKey = state === 'zone-select' ? `zone-select:${zoneSelectPreviewIdx}:${unlockedZones.has(zoneSelectPreviewIdx) && zoneScreenshots[zoneSelectPreviewIdx] ? '1' : '0'}` : state === 'settings' ? `settings:${audioSettings.sfxEnabled}:${audioSettings.bgmEnabled}:${shipTrailStyle}:${shipSkinStyle}` : state === 'options' ? `options:${selectedDifficulty}` : state === 'respawn' ? `respawn:${lastDeathDistance}` : state === 'playing' ? `playing:${showFlyControlsHint && !warpActive ? 'hint' : 'go'}` : state;
   if (__renderKey === lastRenderedOverlayState) return;
   overlay.classList.toggle('home-layout', state === 'home');
   pauseToggleBtn.style.display = (state === 'playing' || state === 'paused') ? 'block' : 'none';
@@ -21755,6 +21875,7 @@ function updateOverlay() {
       <div class="game-logo home-title options-title">SYNTH FLIGHT</div>
       <div class="options-panel-v2">
         <div class="panel-header">OPTIONS</div>
+        <div class="options-fly-hint">${MOBILE_PERFORMANCE_MODE ? 'HOLD TO FLY  ·  TAP AND HOLD, RELEASE TO FALL' : 'HOLD TO FLY  ·  LEFT CLICK OR SPACE, RELEASE TO FALL'}</div>
         <div class="menu-stack">
           <div class="options-diff-picker">
             <div class="settings-picker-label">DIFFICULTY</div>
@@ -21847,7 +21968,7 @@ function updateOverlay() {
           <div class="settings-diff-card">
             <div class="settings-diff-name difficulty-hard">HARD</div>
             <div class="settings-diff-stats">
-              9 lives &middot; 3 continues<br>
+              9 lives &middot; 5 continues<br>
               No invincibility frames
             </div>
           </div>
@@ -21935,7 +22056,7 @@ function updateOverlay() {
         <div class="stats-cat stats-cat-done">COMPLETED</div>
         <div class="zone-grid">${completedZoneTilesHtml}${beatGameTilesHtml}</div>
         <div class="stats-cat stats-cat-deathless">DEATHLESS</div>
-        <div class="achievement-section-note">Clear a zone without dying, on Normal difficulty or higher.</div>
+        <div class="achievement-section-note">Clear a zone without dying on Hard, in campaign or Zone Select.</div>
         <div class="zone-grid">${deathlessTilesHtml}</div>
         <div class="stats-cat stats-cat-distance">DISTANCE MILESTONES</div>
         <div class="achievement-section-note">Lifetime distance flown, across every run.</div>
@@ -22041,7 +22162,7 @@ function updateOverlay() {
     overlay.innerHTML = `
       <div class="menu-panel zone-select-panel scrollable-overlay-list">
         <div id="title" style="font-size:26px;">ZONE SELECT</div>
-        <div class="zone-select-subtitle">WARP TO ANY UNLOCKED ZONE -- PRACTICE MODE, DOESN'T AFFECT BEST DISTANCE OR DEATH STATS</div>
+        <div class="zone-select-subtitle">WARP TO ANY UNLOCKED ZONE -- PRACTICE MODE, DOESN'T AFFECT BEST DISTANCE OR DEATH STATS. DEATHLESS CAN BE EARNED ON HARD.</div>
         <div class="zone-select-wrapper">
           <div class="zone-grid">${tilesHtml}</div>
           <div class="zone-preview-panel">
@@ -22064,8 +22185,8 @@ function updateOverlay() {
   } else if (state === 'ready') {
     const diffLabel = selectedDifficulty.toUpperCase();
     overlay.innerHTML = `
-      <div id="title">CLICK TO START</div>
-      <div id="subtitle">Difficulty: ${diffLabel}<br>Hold to rise, release to fall<br>Fly through the shifting gates<br>New world every 1000 distance<br>${MAX_LIVES} lives per run</div>
+      <div id="title">HOLD TO FLY</div>
+      <div id="subtitle">Difficulty: ${diffLabel}<br>${MOBILE_PERFORMANCE_MODE ? 'Tap and hold to rise, release to fall' : 'Hold left click or space to rise, release to fall'}<br>Fly through the shifting gates<br>New world every 1000 distance<br>${MAX_LIVES} lives per run</div>
     `;
   } else if (state === 'paused') {
     overlay.innerHTML = `
@@ -22081,7 +22202,7 @@ function updateOverlay() {
   } else if (state === 'respawn') {
     overlay.innerHTML = `
       <div id="title">LIFE LOST</div>
-      <div id="subtitle">${lives} ${lives === 1 ? 'life' : 'lives'} remaining<br>Restarting at the beginning of this zone<br>Click to continue</div>
+      <div id="subtitle">${lives} ${lives === 1 ? 'life' : 'lives'} remaining<br>Died at ${lastDeathDistance}${currentTheme().isBossZone || currentTheme().isMiniBossZone ? '' : ' / ' + THEME_DISTANCE}<br>Restarting at the beginning of this zone<br>Click to continue</div>
     `;
   } else if (state === 'continue-prompt') {
     overlay.innerHTML = `
@@ -22153,6 +22274,8 @@ function updateOverlay() {
         <button type="button" class="btn-continue">CLICK TO CONTINUE &#9654;</button>
       </div>
     `;
+  } else if (state === 'playing' && showFlyControlsHint && !warpActive) {
+    overlay.innerHTML = flyControlsHintHtml();
   } else {
     overlay.innerHTML = '';
   }
@@ -25728,6 +25851,8 @@ const SIM_STEP_MS = 1000 / SIM_HZ;
 const MAX_SIM_STEPS = 8;
 let simLastNow = 0;
 let simAccumulatorMs = 0;
+let simPrevShipY = NaN;
+let simPrevShipRotation = NaN;
 
 function loop() {
   const now = performance.now();
@@ -25746,6 +25871,8 @@ function loop() {
         simAccumulatorMs += elapsed;
         let steps = 0;
         while (simAccumulatorMs >= SIM_STEP_MS && steps < MAX_SIM_STEPS) {
+          simPrevShipY = ship.y;
+          simPrevShipRotation = ship.rotation;
           update();
           simAccumulatorMs -= SIM_STEP_MS;
           steps++;
@@ -25757,6 +25884,8 @@ function loop() {
         }
       } else {
         simAccumulatorMs = 0;
+        simPrevShipY = ship.y;
+        simPrevShipRotation = ship.rotation;
         update();
       }
       draw();
